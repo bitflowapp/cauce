@@ -1,10 +1,9 @@
-﻿name: Deploy CAUCE to GitHub Pages
+name: Deploy CAUCE to GitHub Pages
 
 on:
   push:
     branches:
       - main
-      - feat/cauce-commercial-prototype
   workflow_dispatch:
 
 permissions:
