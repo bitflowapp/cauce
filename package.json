@@ -1,0 +1,17 @@
+{
+  "name": "cauce-alumine",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node scripts/server.mjs",
+    "check": "node scripts/check.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "build": "node scripts/build.mjs",
+    "verify": "npm run check && npm test && npm run build && npm run build:offline",
+    "build:offline": "node scripts/offline-bundle.mjs"
+  }
+}
