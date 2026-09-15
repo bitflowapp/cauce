@@ -287,6 +287,22 @@ footer span, footer p { font-size: 12px; color: var(--muted); }
 footer p { margin: 0 0 0 auto; }
 .stack { display: grid; gap: 10px; }
 
+/* Línea de estado unificada (portada de La Taba con paleta patagónica) */
+.track-steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 16px 0 20px; }
+.track-steps.operational { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.track-step { position: relative; display: grid; justify-items: center; gap: 6px; color: var(--muted); text-align: center; font-size: 12px; font-weight: 500; }
+.track-step::before { position: absolute; z-index: 0; top: 11px; right: 50%; width: 100%; height: 3px; background: var(--line); content: ""; }
+.track-step:first-child::before { display: none; }
+.track-dot { position: relative; z-index: 1; display: grid; width: 24px; height: 24px; place-items: center; border: 2px solid #b7bdb2; border-radius: 50%; background: var(--white); }
+.track-step.done::before, .track-step.current::before { background: var(--green); }
+.track-step.done .track-dot, .track-step.current .track-dot { border-color: var(--green); background: var(--green); color: white; }
+.track-step.done .track-dot::after { content: "✓"; font-size: 12px; font-weight: 900; }
+.track-step.current .track-dot { box-shadow: 0 0 0 4px var(--soft); background: var(--green); }
+.track-step.current small { color: var(--ink); font-weight: 700; }
+
+.delivery-code-badge { display: inline-flex; align-items: center; gap: 10px; background: var(--clay-soft); color: var(--clay); padding: 10px 16px; border-radius: 12px; font-weight: 600; margin: 12px 0; border: 1px dashed var(--clay); }
+.delivery-code-badge strong { font-size: 18px; letter-spacing: 2px; }
+
 /* Responsiveness */
 @media (max-width: 900px) {
   .hero { grid-template-columns: 1fr; }

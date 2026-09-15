@@ -8,6 +8,10 @@ import { createBusinessSoundService } from './business/sound-service.js';
 import { calculateBusinessMetrics } from './core/business-metrics.js';
 import { buildKitchenTicket } from './core/kitchen-ticket.js';
 import { getProductSvg, getAlumineMapSvg } from './data/food-assets.js';
+import { renderPublicOrderTimeline, renderOrderTimeline } from './core/order-timeline.js';
+import { formatDeliveryCode } from './core/delivery-code.js';
+import { getRiderQueueOrder, getRiderStateLabel, getRouteProgress, isAwaitingPreparation } from './core/rider.js';
+import { isValidArgentinePhone, formatArgentinePhone } from './core/validators.js';
 
 const main = document.querySelector('#main');
 const modalContainer = document.querySelector('#modal-container');
@@ -377,11 +381,17 @@ function tracking(orderId) {
     fulfillment: order.fulfillment,
   });
 
+  const deliveryCodeMarkup = (order.fulfillment === 'delivery' && order.deliveryCode?.code)
+    ? `<div class="delivery-code-badge"><span>🔑 Código de entrega al recibir:</span><strong>${esc(formatDeliveryCode(order.deliveryCode.code))}</strong></div>`
+    : '';
+
   return `${back('#orders', 'Volver a mis pedidos')}
   <div class="narrow">
     <span class="eyebrow">SEGUIMIENTO DE DEMOSTRACIÓN</span>
     <h1 class="page-title">${esc(STATUS_LABELS[order.status] || order.status)}</h1>
     <p class="quiet">${esc(order.code)} · ${esc(b.name)}</p>
+    ${renderPublicOrderTimeline(order.status)}
+    ${deliveryCodeMarkup}
     ${orderCard(order, customerActor)}
     ${mapSvg}
     <section class="card">
@@ -422,11 +432,18 @@ function orderCard(order, actor) {
     canceled: 'Cancelar pedido',
   };
 
+  const isRiderAwaiting = actor.kind === 'rider' && isAwaitingPreparation(order);
+  const formattedPhone = order.customer?.phone ? formatArgentinePhone(order.customer.phone) : '';
+  const deliveryCodeBadge = (order.fulfillment === 'delivery' && order.deliveryCode?.code)
+    ? `<div style="margin:6px 0;font-size:12px;color:var(--clay);font-weight:600;">🔑 Código de entrega: <strong>${esc(formatDeliveryCode(order.deliveryCode.code))}</strong></div>`
+    : '';
+
   return `<article class="card order-card"><div class="row"><div>
     <span class="order-code">${esc(order.code)} · PEDIDO DE PRUEBA</span>
     <h3>${esc(b.name)}</h3>
     <span class="microcopy">${order.fulfillment === 'pickup' ? 'Retiro por el local' : 'Delivery del comercio'}</span></div>
     <span class="status">${esc(STATUS_LABELS[order.status] || order.status)}</span></div>
+    ${actor.kind !== 'customer' ? renderOrderTimeline(order.status) : ''}
     <p class="order-items">${order.lines.map(l => `${l.quantity} × ${esc(l.name)}`).join(' · ')}</p>
     <div class="row"><strong>${money(order.total)}</strong>
       <div style="display:flex;gap:10px;align-items:center;">
@@ -434,11 +451,14 @@ function orderCard(order, actor) {
         <a class="link-button" href="#order/${esc(order.id)}">Ver seguimiento</a>
       </div>
     </div>
-    ${actor.kind !== 'customer' ? `
-      <p class="microcopy below-note">${esc(order.customer?.name)} · ${esc(order.customer?.phone)}
-      ${order.customer?.address ? `<br>${esc(order.customer.address)}` : ''}
-      ${order.customer?.notes ? `<br>Nota: ${esc(order.customer.notes)}` : ''}</p>
-    ` : ''}
+    ${deliveryCodeBadge}
+    ${actor.kind !== 'customer' ? (
+      isRiderAwaiting
+        ? `<p class="microcopy below-note" style="color:var(--clay);">⏳ Pedido en cocina. Los datos de contacto y entrega se activan al retirar del local.</p>`
+        : `<p class="microcopy below-note">${esc(order.customer?.name)} · ${esc(formattedPhone || order.customer?.phone)}
+          ${order.customer?.address ? `<br>${esc(order.customer.address)}` : ''}
+          ${order.customer?.notes ? `<br>Nota: ${esc(order.customer.notes)}` : ''}</p>`
+    ) : ''}
     ${actions.length > 0 ? `
       <div class="order-actions">
         ${actions.map(status => `<button type="button" class="button ${status === 'canceled' ? 'danger' : ''}" data-action="transition" data-order="${esc(order.id)}" data-version="${order.version}" data-status="${esc(status)}" data-business="${esc(order.businessId)}" data-actor="${esc(actor.kind)}" data-rider="${esc(actor.kind === 'rider' ? actor.id : '')}">${esc(actionLabels[status] || status)}</button>`).join('')}
@@ -540,9 +560,23 @@ function riderPanel(businessId) {
 
   const actor = { ...rider, kind: 'rider' };
   const all = repository.orders(actor);
+  const activeOrder = getRiderQueueOrder(all);
+  const riderStatusLabel = getRiderStateLabel(activeOrder);
+  const progress = Math.round(getRouteProgress(activeOrder) * 100);
+
   return `${back(`#business/${b.id}`, 'Volver al panel del comercio')}
   <span class="eyebrow">REPARTO DEL COMERCIO · DEMO</span><h1 class="page-title">${esc(b.name)}</h1>
   ${demoNotice()}
+  <div class="card" style="margin-bottom:20px;border-left:4px solid var(--green);">
+    <div class="row">
+      <div>
+        <span class="eyebrow" style="color:var(--green);">ESTADO DE RUTA (${esc(rider.name)})</span>
+        <h3 style="margin:4px 0;">${esc(riderStatusLabel)}</h3>
+        <p class="microcopy">Progreso estimado del circuito: <strong>${progress}%</strong></p>
+      </div>
+      ${activeOrder ? `<a class="button secondary" href="#order/${esc(activeOrder.id)}">Ver en mapa</a>` : ''}
+    </div>
+  </div>
   <p class="quiet">Solo aparecen los pedidos asignados a ${esc(rider.name)}. No se comparte una flota entre comercios.</p>
   ${all.length ? all.map(o => orderCard(o, actor)).join('') : empty('Todavía no hay pedidos asignados', 'Prepará un pedido con delivery y asignalo desde el panel de este comercio.', `#business/${b.id}`, 'Ir al panel del comercio')}`;
 }
