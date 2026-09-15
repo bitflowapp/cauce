@@ -1,0 +1,29 @@
+{
+  "repository": "bitflowapp/la-taba-pages-preview",
+  "completeReadRef": "a4d54dea45c8822a2c50956fad86ac90c1610292",
+  "latestObservedRef": "6319e690472b1041edda90ea54832d09641b023e",
+  "latestObservedBranch": "feat/taba-commerce-v3",
+  "fullRepositoryCloned": false,
+  "files": [
+    {
+      "path": "js/core/order-workflow.js",
+      "sourcePath": "js/core/order-workflow.js",
+      "sourceBlob": "da853c6a66cdd293372a42f5a80081c3119afc7e",
+      "mode": "exact_copy",
+      "alsoMatchesLatestObservedRef": true
+    },
+    {
+      "path": "tests/order-workflow.test.mjs",
+      "sourcePath": "tests/order-workflow.test.mjs",
+      "sourceBlob": "b2576b6bfb919d3d16be83011d853f565e084f85",
+      "mode": "exact_copy"
+    },
+    {
+      "path": "js/core/commercial.js",
+      "sourcePath": "js/core/pricing.js",
+      "sourceBlob": "0bd75dfe0b9e92f34e4b5f4c7f1fbaacb0f3af11",
+      "mode": "adapted_subset",
+      "alsoMatchesLatestObservedRef": true
+    }
+  ]
+}
