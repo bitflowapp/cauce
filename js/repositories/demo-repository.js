@@ -157,6 +157,21 @@ export function createDemoRepository({ storage, locks = globalThis.navigator?.lo
       const business = businessFrom(state, businessId); merchantCheck(actor, business);
       requireValue(typeof open === 'boolean', 'INVALID_VALUE', 'Estado inválido.'); business.open = open; return business;
     }),
+    updateBusinessConfig: (businessId, patch, actor) => mutate(state => {
+      const business = businessFrom(state, businessId); merchantCheck(actor, business);
+      if (patch.eta) business.eta = String(patch.eta).slice(0, 40);
+      if (patch.hoursLabel) business.hoursLabel = String(patch.hoursLabel).slice(0, 60);
+      if (typeof patch.deliveryFee === 'number') business.deliveryFee = Math.max(0, Math.floor(patch.deliveryFee));
+      if (typeof patch.deliveryEnabled === 'boolean') business.deliveryEnabled = patch.deliveryEnabled;
+      if (typeof patch.pickupEnabled === 'boolean') business.pickupEnabled = patch.pickupEnabled;
+      return business;
+    }),
+    addMerchantLead: lead => mutate(state => {
+      state.merchantLeads ||= [];
+      state.merchantLeads.push({ ...lead, id: uuid(), at: clock() });
+      return true;
+    }),
+    merchantLeads: () => clone(read().merchantLeads || []),
     updateProduct: (businessId, productId, patch, actor) => mutate(state => {
       const business = businessFrom(state, businessId); merchantCheck(actor, business);
       const product = state.products.find(p => p.id === productId);

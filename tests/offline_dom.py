@@ -11,9 +11,9 @@ from playwright.sync_api import sync_playwright, expect
 
 ROOT=Path(__file__).resolve().parent.parent
 EVIDENCE=ROOT/'evidence'
-html=(ROOT/'index.html').read_text()
-css=(ROOT/'styles/cauce.css').read_text()
-bundle=(EVIDENCE/'offline.bundle.js').read_text()
+html=(ROOT/'index.html').read_text(encoding='utf-8')
+css=(ROOT/'styles/cauce.css').read_text(encoding='utf-8')
+bundle=(EVIDENCE/'offline.bundle.js').read_text(encoding='utf-8')
 hash_css=base64.b64encode(hashlib.sha256(css.encode()).digest()).decode()
 html=re.sub(r'<link[^>]+rel="(?:stylesheet|icon)"[^>]*>','',html)
 html=html.replace('<script type="module" src="js/app.js"></script>','')
@@ -49,7 +49,7 @@ with sync_playwright() as p:
     page=context.new_page()
     try:
         init(page)
-        expect(page.locator('[data-testid="store-card"]')).to_have_count(3)
+        expect(page.locator('[data-testid="store-card"]')).to_have_count(7)
         page.screenshot(path=str(EVIDENCE/'home-desktop.png'),full_page=True)
         passed('render desktop offline de home')
         page.get_by_label('Buscar comercio o comida').fill('pizza')
@@ -113,6 +113,6 @@ with sync_playwright() as p:
         page.screenshot(path=str(EVIDENCE/'offline-failure.png'),full_page=True)
         raise
     finally:
-        (EVIDENCE/'offline-dom-results.json').write_text(json.dumps({'scope':'OFFLINE_DOM_WITH_IN_MEMORY_STORAGE_NOT_HTTP_E2E','results':results,'js_errors':errors},ensure_ascii=False,indent=2))
+        (EVIDENCE/'offline-dom-results.json').write_text(json.dumps({'scope':'OFFLINE_DOM_WITH_IN_MEMORY_STORAGE_NOT_HTTP_E2E','results':results,'js_errors':errors},ensure_ascii=False,indent=2),encoding='utf-8')
         print(json.dumps(results,ensure_ascii=False,indent=2))
         browser.close()

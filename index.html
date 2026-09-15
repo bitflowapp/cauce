@@ -1,10 +1,10 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="es-AR">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#204940">
-  <meta name="description" content="CAUCE · Aluminé. Demostración local de pedidos a comercios gastronómicos.">
+  <meta name="description" content="CAUCE · Aluminé. Demostración comercial de pedidos a comercios gastronómicos locales.">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'">
   <title>CAUCE · Aluminé</title>
   <link rel="icon" href="styles/favicon.svg" type="image/svg+xml">
@@ -13,11 +13,16 @@
 </head>
 <body>
   <a class="skip" href="#main">Saltar al contenido</a>
-  <div class="demo-banner">DEMOSTRACIÓN LOCAL <span>Comercios ficticios. Sin pedidos ni cobros reales.</span></div>
+  <div class="demo-banner">
+    <span>DEMOSTRACIÓN COMERCIAL · ALUMINÉ</span>
+    <span>Comercios locales ficticios. Circuito completo de pedidos y paneles.</span>
+    <button class="demo-reset-pill" id="banner-reset-demo" type="button">Reiniciar demo</button>
+  </div>
   <header class="header">
     <a class="brand" href="#home" aria-label="CAUCE, inicio">cauce<span class="brand-dot">.</span></a>
     <a class="locality" href="#home"><span class="locality-dot"></span> Aluminé <span class="province">/ Neuquén</span></a>
     <nav aria-label="Navegación principal">
+      <a href="#home">Comercios</a>
       <a href="#orders" id="orders-link">Mis pedidos</a>
       <a href="#manage" class="nav-secondary">Panel demo</a>
       <a href="#carts" class="cart-nav" id="cart-nav">Carritos <span id="cart-count">0</span></a>
@@ -25,10 +30,18 @@
   </header>
   <main id="main" tabindex="-1"></main>
   <footer>
-    <div><strong>cauce.</strong> <span>Lo de acá, más cerca.</span></div>
-    <p>Primera implementación técnica · Aluminé</p><a class="link-button" href="#manage">Paneles demo</a>
+    <div><strong>cauce.</strong> <span>Lo rico de acá, a un toque · Aluminé</span></div>
+    <p>Demostración comercial · Aluminé, Neuquén</p>
+    <a class="link-button" href="#manage">Paneles demo</a>
     <button class="link-button" id="reset-demo" type="button">Reiniciar datos de demostración</button>
   </footer>
+  <nav class="bottom-nav" aria-label="Navegación móvil">
+    <a href="#home" class="bottom-nav-item" id="bnav-home"><span class="bottom-nav-icon">🏠</span>Inicio</a>
+    <a href="#home" class="bottom-nav-item" id="bnav-stores"><span class="bottom-nav-icon">🍽️</span>Comercios</a>
+    <a href="#orders" class="bottom-nav-item" id="bnav-orders"><span class="bottom-nav-icon">📦</span>Pedidos</a>
+    <a href="#carts" class="bottom-nav-item" id="bnav-carts"><span class="bottom-nav-icon">🛒</span>Carritos</a>
+  </nav>
+  <div id="modal-container"></div>
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
   <noscript>Esta demostración necesita JavaScript para funcionar.</noscript>
 </body>

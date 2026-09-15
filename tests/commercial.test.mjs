@@ -1,0 +1,131 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { initialDemoState } from '../js/data/demo.js';
+import { createDemoRepository } from '../js/repositories/demo-repository.js';
+import { calculateBusinessMetrics } from '../js/core/business-metrics.js';
+import { buildKitchenTicket } from '../js/core/kitchen-ticket.js';
+import { createBusinessSoundService } from '../js/business/sound-service.js';
+import { scopeOf } from '../js/core/scope.js';
+
+function setupRepo() {
+  const values = new Map();
+  const storage = { getItem: k => values.get(k) ?? null, setItem: (k, v) => values.set(k, v) };
+  let counter = 0;
+  const uuid = () => `00000000-0000-4000-8000-${String(++counter).padStart(12, '0')}`;
+  const repo = createDemoRepository({ storage, uuid, locks: null, seed: initialDemoState, clock: () => new Date().toISOString() });
+  return { repo, storage, values };
+}
+
+test('catálogo comercial contiene 7 comercios patagónicos ficticios y plausibles', () => {
+  const state = initialDemoState();
+  assert.equal(state.businesses.length, 7);
+  const ids = state.businesses.map(b => b.id);
+  assert.deepEqual(ids, ['orilla', 'horno', 'pehuen', 'plaza', 'rioarriba', 'ronda', 'union']);
+  for (const b of state.businesses) {
+    assert.equal(b.localityId, 'alumine');
+    assert.ok(b.name.length >= 4);
+    assert.ok(b.description.length >= 10);
+    assert.ok(b.address.length >= 5);
+  }
+});
+
+test('catálogo cuenta con más de 50 productos con asignación de categoría y tipo visual', () => {
+  const state = initialDemoState();
+  assert.ok(state.products.length >= 50, `Se esperaban >= 50 productos, hay ${state.products.length}`);
+  for (const p of state.products) {
+    assert.ok(p.price > 0, `Precio inválido en ${p.id}`);
+    assert.ok(['burger', 'fries', 'pizza', 'empanadas', 'milanesa', 'pasta', 'cafe', 'medialuna', 'sandwich', 'picada', 'torta', 'beer', 'lemonade'].includes(p.dishType));
+  }
+});
+
+test('cálculo de métricas del comercio computa totales, ticket promedio y activos', () => {
+  const orders = [
+    {
+      id: 'o1',
+      total: 10000,
+      fulfillment: 'delivery',
+      status: 'preparing',
+      lines: [{ name: 'La clásica', quantity: 1 }],
+      history: [{ status: 'received', at: new Date().toISOString() }],
+    },
+    {
+      id: 'o2',
+      total: 20000,
+      fulfillment: 'pickup',
+      status: 'delivered',
+      lines: [{ name: 'La clásica', quantity: 2 }, { name: 'Papas', quantity: 1 }],
+      history: [{ status: 'received', at: new Date().toISOString() }],
+    },
+    {
+      id: 'o3',
+      total: 5000,
+      fulfillment: 'pickup',
+      status: 'canceled',
+      lines: [{ name: 'Limonada', quantity: 1 }],
+      history: [{ status: 'received', at: new Date().toISOString() }],
+    },
+  ];
+  const products = [
+    { id: 'p1', available: true, stock: 3 },
+    { id: 'p2', available: true, stock: 20 },
+  ];
+  const metrics = calculateBusinessMetrics(orders, products);
+  assert.equal(metrics.todayOrderCount, 2); // cancelado no suma a ventas
+  assert.equal(metrics.todayRevenue, 30000);
+  assert.equal(metrics.averageTicket, 15000);
+  assert.equal(metrics.activeCount, 1); // solo preparing
+  assert.equal(metrics.lowStockCount, 1); // stock <= 5
+  assert.equal(metrics.topProducts[0].name, 'La clásica');
+  assert.equal(metrics.topProducts[0].quantity, 3);
+});
+
+test('comanda de cocina genera formato legible con ítems y modalidad', () => {
+  const sampleOrder = {
+    code: 'CA-0042',
+    fulfillment: 'delivery',
+    total: 14500,
+    customer: { name: 'Juan Carlos', phone: '2942-123456', address: 'Av. 4 de Febrero 250', notes: 'Sin hielo' },
+    lines: [{ name: 'Doble de la casa', quantity: 2 }, { name: 'Papas rústicas', quantity: 1 }],
+    history: [{ status: 'received', at: '2026-09-15T12:00:00Z' }],
+  };
+  const ticket = buildKitchenTicket(sampleOrder, 'La Orilla');
+  assert.match(ticket, /LA ORILLA/);
+  assert.match(ticket, /CA-0042/);
+  assert.match(ticket, /DELIVERY A DOMICILIO/);
+  assert.match(ticket, /2 x Doble de la casa/);
+  assert.match(ticket, /Av\. 4 de Febrero 250/);
+});
+
+test('servicio sonoro Web Audio respeta silenciado y muting', async () => {
+  const service = createBusinessSoundService();
+  assert.equal(service.muted, false);
+  service.setMuted(true);
+  assert.equal(service.muted, true);
+  const playedWhileMuted = await service.playNewOrder();
+  assert.equal(playedWhileMuted, false);
+});
+
+test('actualización de configuración del comercio modifica horario y demora', async () => {
+  const { repo } = setupRepo();
+  const actor = { kind: 'merchant', ...scopeOf(repo.business('orilla')) };
+  await repo.updateBusinessConfig('orilla', { eta: '45–60 min', deliveryFee: 2000 }, actor);
+  const updated = repo.business('orilla');
+  assert.equal(updated.eta, '45–60 min');
+  assert.equal(updated.deliveryFee, 2000);
+});
+
+test('registro de interesados comerciales (leads) se persiste con UUID y fecha', async () => {
+  const { repo } = setupRepo();
+  await repo.addMerchantLead({
+    name: 'Ana Rossi',
+    businessName: 'Dulces del Río',
+    category: 'Repostería',
+    phone: '2942-889900',
+    notes: 'Quiero sumarme al catálogo digital',
+  });
+  const leads = repo.merchantLeads();
+  assert.equal(leads.length, 1);
+  assert.equal(leads[0].businessName, 'Dulces del Río');
+  assert.ok(leads[0].id);
+  assert.ok(leads[0].at);
+});

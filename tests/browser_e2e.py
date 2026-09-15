@@ -18,8 +18,9 @@ def passed(name):
     results.append({'test':name,'status':'PASS'})
 
 def navigate(page, path):
+    page.wait_for_timeout(250)
     page.goto(BASE + '/#' + path)
-    page.wait_for_timeout(100)
+    page.wait_for_timeout(250)
 
 with sync_playwright() as playwright:
     executable = os.environ.get('CAUCE_CHROMIUM_PATH')
@@ -32,14 +33,14 @@ with sync_playwright() as playwright:
     page=context.new_page()
     try:
         navigate(page,'home')
-        expect(page.locator('[data-testid="store-card"]')).to_have_count(3)
+        expect(page.locator('[data-testid="store-card"]')).to_have_count(7)
         page.screenshot(path=str(EVIDENCE/'home-desktop.png'),full_page=True)
-        passed('home desktop: tres comercios ficticios')
+        passed('home desktop: siete comercios ficticios')
         page.get_by_label('Buscar comercio o comida').fill('pizza')
         expect(page.locator('[data-testid="store-card"]')).to_have_count(1)
         page.get_by_label('Buscar comercio o comida').fill('')
         page.get_by_label('Solo abiertos').check()
-        expect(page.locator('[data-testid="store-card"]')).to_have_count(2)
+        expect(page.locator('[data-testid="store-card"]')).to_have_count(6)
         page.get_by_label('Solo abiertos').uncheck()
         passed('búsqueda y filtro de apertura')
         navigate(page,'shop/orilla')
@@ -47,6 +48,7 @@ with sync_playwright() as playwright:
         expect(page.locator('#cart-count')).to_have_text('1')
         navigate(page,'shop/horno')
         page.get_by_role('button',name='Agregar Muzzarella',exact=True).click()
+        expect(page.locator('#cart-count')).to_have_text('2')
         navigate(page,'carts')
         expect(page.get_by_role('link',name='Revisar carrito')).to_have_count(2)
         page.reload()
@@ -81,6 +83,7 @@ with sync_playwright() as playwright:
         passed('delivery completo y nueve eventos de seguimiento')
         navigate(page,'cart/horno')
         page.get_by_role('button',name='Crear pedido de prueba',exact=True).click()
+        expect(page.get_by_role('heading',name='Recibido',exact=True)).to_be_visible()
         pickup_path=page.url.split('#',1)[1]
         navigate(page,'business/horno')
         for action in ['Confirmar','Preparar','Marcar listo','Confirmar entrega']:
@@ -134,6 +137,6 @@ with sync_playwright() as playwright:
         page.screenshot(path=str(EVIDENCE/'failure.png'),full_page=True)
         raise
     finally:
-        (EVIDENCE/'browser-results.json').write_text(json.dumps({'scope':'DEMO_LOCAL_ONLY','results':results,'js_errors':errors,'external_requests':external},ensure_ascii=False,indent=2))
+        (EVIDENCE/'browser-results.json').write_text(json.dumps({'scope':'DEMO_LOCAL_ONLY','results':results,'js_errors':errors,'external_requests':external},ensure_ascii=False,indent=2),encoding='utf-8')
         print(json.dumps(results,ensure_ascii=False,indent=2))
         browser.close()
