@@ -15,25 +15,53 @@
   <a class="skip" href="#main">Saltar al contenido</a>
   <header class="header">
     <div class="brand-group">
-      <a class="brand" href="#home" aria-label="CAUCE, inicio">cauce<span class="brand-dot">.</span></a>
-      <a class="locality" href="#home"><span class="locality-dot"></span> Aluminé <span class="province">/ Neuquén</span></a>
+      <a class="brand" href="#home" aria-label="CAUCE · Aluminé, inicio">
+        <svg class="brand-wave" viewBox="0 0 32 32" width="22" height="22" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M4 11C8 7 12 15 16 11C20 7 24 15 28 11"/>
+          <path d="M4 21C8 17 12 25 16 21C20 17 24 25 28 21"/>
+        </svg>
+        <span class="brand-title">CAUCE <span class="brand-sep">·</span> Aluminé</span>
+      </a>
       <button class="demo-pill" id="header-demo-pill" type="button" data-action="open-demo-modal" aria-label="Información de la demostración">DEMO</button>
     </div>
     <nav aria-label="Navegación principal">
-      <a href="#home">Comercios</a>
+      <a href="#home">Inicio</a>
+      <a href="#home" data-action="scroll-to" data-target="stores-section">Comercios</a>
+      <a href="#presentacion" class="nav-institutional">Impacto</a>
       <a href="#orders" id="orders-link">Mis pedidos</a>
-      <a href="#presentacion" class="nav-institutional">Presentación</a>
       <a href="#manage" class="nav-secondary">Panel demo</a>
       <a href="#carts" class="cart-nav" id="cart-nav">Carrito <span id="cart-count">0</span></a>
     </nav>
   </header>
   <main id="main" tabindex="-1"></main>
-  <footer>
-    <div><strong>cauce.</strong> <span>Lo rico de acá, a un toque · Aluminé</span></div>
-    <p>Demostración comercial · Aluminé, Neuquén</p>
-    <a class="link-button" href="#presentacion">Presentación institucional</a>
-    <a class="link-button" href="#manage">Paneles demo</a>
-    <button class="link-button" id="reset-demo" type="button">Reiniciar datos de demostración</button>
+  <footer class="footer">
+    <div class="footer-top">
+      <div class="footer-brand">
+        <svg class="footer-wave" viewBox="0 0 32 32" width="26" height="26" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M4 11C8 7 12 15 16 11C20 7 24 15 28 11"/>
+          <path d="M4 21C8 17 12 25 16 21C20 17 24 25 28 21"/>
+        </svg>
+        <div>
+          <strong class="footer-name">CAUCE · Aluminé</strong>
+          <span class="footer-sub">Comida local. Comunidad que avanza.</span>
+        </div>
+      </div>
+      <div class="footer-territory">
+        <span>NEUQUÉN</span>
+        <span class="sep">|</span>
+        <span>PATAGONIA</span>
+        <span class="sep">|</span>
+        <span>ARGENTINA</span>
+      </div>
+    </div>
+    <div class="footer-actions">
+      <p class="footer-note">Demostración comercial · Aluminé, Neuquén</p>
+      <div class="footer-links">
+        <a class="link-button" href="#presentacion">Presentación institucional</a>
+        <a class="link-button" href="#manage">Paneles demo</a>
+        <button class="link-button" id="reset-demo" type="button">Reiniciar datos de demostración</button>
+      </div>
+    </div>
   </footer>
   <nav class="bottom-nav" aria-label="Navegación móvil">
     <a href="#home" class="bottom-nav-item" id="bnav-home">
