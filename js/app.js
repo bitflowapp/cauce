@@ -76,6 +76,26 @@ function renderIcon(name, size = 16, className = '') {
   }
 }
 
+function renderSticker(name, size = 48, className = '') {
+  const cls = className ? `sticker ${className}` : 'sticker';
+  switch (name) {
+    case 'wave':
+      return `<svg class="${cls} sticker-wave" width="${size}" height="${size}" viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M4 11C8 7 12 15 16 11C20 7 24 15 28 11" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 21C8 17 12 25 16 21C20 17 24 25 28 21" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+    case 'coffee':
+      return `<svg class="${cls} sticker-coffee" width="${size}" height="${size}" viewBox="0 0 64 64" fill="none" aria-hidden="true"><path d="M12 24H44V42C44 49.7 37.7 56 30 56H26C18.3 56 12 49.7 12 42V24Z" fill="#ffffff" stroke="#111817" stroke-width="4" stroke-linejoin="round"/><path d="M44 28H48C52.4 28 56 31.6 56 36C56 40.4 52.4 44 48 44H44" fill="#ffffff" stroke="#111817" stroke-width="4" stroke-linecap="round"/><ellipse cx="28" cy="24" rx="14" ry="4" fill="#0f3b37"/><path d="M22 16C20 12 24 9 22 5" stroke="#111817" stroke-width="3" stroke-linecap="round"/><path d="M30 15C28 11 32 8 30 4" stroke="#111817" stroke-width="3" stroke-linecap="round"/><path d="M38 16C36 12 40 9 38 5" stroke="#111817" stroke-width="3" stroke-linecap="round"/></svg>`;
+    case 'scooter':
+      return `<svg class="${cls} sticker-scooter" width="${size}" height="${size}" viewBox="0 0 80 80" fill="none" aria-hidden="true"><circle cx="20" cy="58" r="10" fill="#ffffff" stroke="#111817" stroke-width="4"/><circle cx="20" cy="58" r="4" fill="#0f3b37"/><circle cx="62" cy="58" r="10" fill="#ffffff" stroke="#111817" stroke-width="4"/><circle cx="62" cy="58" r="4" fill="#0f3b37"/><path d="M20 58H36L44 48H56L62 58" stroke="#111817" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M48 48L52 28H44" stroke="#111817" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><rect x="12" y="30" width="18" height="18" rx="3" fill="#ffffff" stroke="#111817" stroke-width="4"/><path d="M12 37H30" stroke="#111817" stroke-width="2.5"/><circle cx="21" cy="34" r="1.5" fill="#0284c7"/><circle cx="42" cy="20" r="7" fill="#ffffff" stroke="#111817" stroke-width="4"/><path d="M38 27L42 42L48 46" stroke="#111817" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M40 33L50 31" stroke="#111817" stroke-width="4" stroke-linecap="round"/><path d="M4 42H8M2 48H7M5 54H9" stroke="#111817" stroke-width="3" stroke-linecap="round"/></svg>`;
+    case 'runner':
+      return `<svg class="${cls} sticker-runner" width="${size}" height="${size}" viewBox="0 0 80 80" fill="none" aria-hidden="true"><circle cx="48" cy="20" r="8" fill="#ffffff" stroke="#111817" stroke-width="4"/><path d="M40 18C44 14 54 14 58 17L64 19" stroke="#111817" stroke-width="3.5" stroke-linecap="round"/><circle cx="52" cy="19" r="1.5" fill="#111817"/><path d="M46 28L40 46" stroke="#111817" stroke-width="4" stroke-linecap="round"/><rect x="28" y="27" width="12" height="16" rx="3" fill="#ffffff" stroke="#111817" stroke-width="3.5"/><path d="M34 27V43" stroke="#0f3b37" stroke-width="2"/><path d="M44 32L54 36L60 30" stroke="#111817" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><rect x="58" y="24" width="6" height="10" rx="1.5" fill="#ffffff" stroke="#111817" stroke-width="2"/><path d="M40 46L26 56L18 52" stroke="#111817" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M40 46L52 54L64 66" stroke="#111817" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><ellipse cx="16" cy="52" rx="4" ry="2.5" fill="#111817"/><ellipse cx="66" cy="67" rx="4" ry="2.5" fill="#111817"/><path d="M64 12L68 8M68 16L73 14" stroke="#111817" stroke-width="2.5" stroke-linecap="round"/></svg>`;
+    case 'burger':
+      return `<svg class="${cls} sticker-burger" width="${size}" height="${size}" viewBox="0 0 64 64" fill="none" aria-hidden="true"><path d="M12 28C12 18 20 12 32 12C44 12 52 18 52 28H12Z" fill="#ffffff" stroke="#111817" stroke-width="4" stroke-linejoin="round"/><circle cx="24" cy="18" r="1.5" fill="#0f3b37"/><circle cx="32" cy="16" r="1.5" fill="#0f3b37"/><circle cx="40" cy="20" r="1.5" fill="#0f3b37"/><path d="M8 32C12 30 16 34 20 32C24 30 28 34 32 32C36 30 40 34 44 32C48 30 52 34 56 32" stroke="#16a34a" stroke-width="4" stroke-linecap="round"/><rect x="10" y="36" width="44" height="8" rx="4" fill="#ffffff" stroke="#111817" stroke-width="3.5"/><path d="M12 46H52C52 52 46 54 32 54C18 54 12 52 12 46Z" fill="#ffffff" stroke="#111817" stroke-width="4" stroke-linejoin="round"/></svg>`;
+    case 'actionLines':
+      return `<svg class="${cls} sticker-lines" width="${size}" height="${size}" viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M4 16H12M6 8L14 12M6 24L14 20" stroke="#111817" stroke-width="3" stroke-linecap="round"/></svg>`;
+    default:
+      return '';
+  }
+}
+
 function updateNavigation() {
   if (!repository) return;
   const state = repository.snapshot();
@@ -145,27 +165,67 @@ function home() {
   const businesses = repository.snapshot().businesses.filter(b => b.localityId === CONFIG.defaultLocality && b.active);
   const categories = ['Todos', ...new Set(businesses.map(b => b.category))];
 
-  return `<section class="hero compact-hero">
-    <div class="hero-text">
-      <span class="eyebrow">GASTRONOMÍA LOCAL · ALUMINÉ</span>
-      <h1>Lo rico de acá,<br><em>a un toque.</em></h1>
-      <p>Pedí comida en comercios de Aluminé desde un solo lugar. Elegí retiro en el local o delivery directo a tu puerta.</p>
-      <div class="hero-stats">
-        <span class="hero-stat">${renderIcon('store', 13)} ${businesses.length} locales</span>
-        <span class="hero-stat">${renderIcon('delivery', 13)} Retiro y delivery</span>
-        <span class="hero-stat">${renderIcon('clock', 13)} 20–45 min</span>
+  return `<section class="hero-editorial">
+    <div class="hero-territory-backdrop" style="background-image: url('assets/images/territory/alumine-hero-panoramica.webp');" role="img" aria-label="Valle y río de Aluminé, Neuquén">
+      <div class="hero-backdrop-overlay"></div>
+      <div class="hero-container">
+        <div class="hero-copy">
+          <span class="eyebrow eyebrow-light">ALUMINÉ</span>
+          <h1 class="display-title">PEDÍ FÁCIL.<br>RECIBÍ SIMPLE.</h1>
+          <p class="hero-lead">Comida local, directo de tu comunidad.</p>
+          <div class="hero-stats">
+            <span class="hero-stat">${renderIcon('store', 13)} ${businesses.length} locales</span>
+            <span class="hero-stat">${renderIcon('delivery', 13)} Retiro y delivery</span>
+            <span class="hero-stat">${renderIcon('clock', 13)} 20–45 min</span>
+          </div>
+          <div class="hero-cta-group">
+            <button class="button button-hero" type="button" data-action="scroll-to" data-target="stores-section">Explorá comercios ↓</button>
+            <button class="button button-hero-outline" type="button" data-action="open-join-modal">Sumá tu comercio →</button>
+          </div>
+        </div>
+        <div class="hero-mockup-wrapper" aria-hidden="true">
+          <div class="sticker-float sticker-float-top">${renderSticker('coffee', 52)}</div>
+          <div class="sticker-float sticker-float-bottom">${renderSticker('runner', 68)}</div>
+          <div class="sticker-float sticker-float-lines">${renderSticker('actionLines', 32)}</div>
+          <div class="device-mockup">
+            <div class="device-mockup-island"></div>
+            <div class="device-mockup-screen">
+              <div class="mockup-app-header">
+                <span class="mockup-brand"><svg class="brand-wave" viewBox="0 0 32 32" width="13" height="13" fill="none" stroke="currentColor" stroke-width="3"><path d="M4 11C8 7 12 15 16 11C20 7 24 15 28 11"/><path d="M4 21C8 17 12 25 16 21C20 17 24 25 28 21"/></svg> CAUCE</span>
+                <span class="mockup-badge">Aluminé</span>
+              </div>
+              <div class="mockup-search-preview">🔍 ¿Qué querés comer hoy?</div>
+              <div class="mockup-store-card">
+                <img src="assets/images/merchants/orilla-cover.webp" alt="" class="mockup-img">
+                <div class="mockup-store-info">
+                  <strong>La Orilla</strong>
+                  <span>Hamburguesas caseras</span>
+                  <span class="mockup-open">● Abierto · 30–45 min</span>
+                </div>
+              </div>
+              <div class="mockup-store-card">
+                <img src="assets/images/merchants/horno-cover.webp" alt="" class="mockup-img">
+                <div class="mockup-store-info">
+                  <strong>Horno del Sur</strong>
+                  <span>Pizzas a la leña</span>
+                  <span class="mockup-open">● Abierto · 25–40 min</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
-    </div>
-    <div class="river-art" aria-hidden="true">
-      <span class="art-marker">c.</span>
-      <span class="art-copy">Comercios de Aluminé.<br>En un solo lugar.</span>
+      <svg class="hero-curve-divider" viewBox="0 0 1440 64" preserveAspectRatio="none" aria-hidden="true">
+        <path d="M0,24 C320,64 720,4 1120,44 L1440,20 L1440,64 L0,64 Z" fill="var(--paper)"/>
+      </svg>
     </div>
   </section>
 
-  <section aria-labelledby="stores-title">
+  <section id="stores-section" aria-labelledby="stores-title">
     <div class="section-heading">
       <div>
-        <h2 id="stores-title">Comercios en Aluminé</h2>
+        <span class="eyebrow">CATÁLOGO LOCAL</span>
+        <h2 id="stores-title" class="section-display-title">COMERCIOS EN ALUMINÉ</h2>
         <p>Explorá la oferta gastronómica y hacé tu pedido en simples pasos.</p>
       </div>
       <span class="quiet">${businesses.length} locales disponibles</span>
@@ -185,12 +245,94 @@ function home() {
     <div id="stores-results" aria-live="polite">${storesMarkup()}</div>
   </section>
 
-  <section class="join-banner">
-    <div>
-      <h3>¿Tenés un comercio o emprendimiento en Aluminé?</h3>
-      <p>Sumate a CAUCE: publicá tu menú digital, recibí pedidos ordenados para retiro o delivery y administrá tu cocina con panel propio.</p>
+  <section class="how-it-works-section" aria-labelledby="how-it-works-title">
+    <div class="section-center-heading">
+      <span class="eyebrow">PASO A PASO</span>
+      <h2 id="how-it-works-title" class="section-display-title">CÓMO FUNCIONA CAUCE</h2>
+      <p class="section-lead">Comida local, directo de tu comunidad.</p>
     </div>
-    <button class="join-btn" type="button" data-action="open-join-modal">Quiero sumar mi comercio →</button>
+    <div class="steps-grid">
+      <div class="step-card">
+        <div class="step-num-badge">1</div>
+        <h3>El cliente elige un comercio.</h3>
+        <p>Explorá los locales de Aluminé, descubrí platos con fotos reales y revisá cartas actualizadas.</p>
+        <div class="step-illustration" aria-hidden="true">${renderSticker('burger', 48)}</div>
+      </div>
+      <div class="step-card">
+        <div class="step-num-badge">2</div>
+        <h3>Hace el pedido.</h3>
+        <p>Armá tu pedido sin intermediarios, seleccioná retiro en local o delivery y confirmá en un toque.</p>
+        <div class="step-illustration" aria-hidden="true">${renderSticker('coffee', 48)}</div>
+      </div>
+      <div class="step-card">
+        <div class="step-num-badge">3</div>
+        <h3>Retira o sigue el delivery del propio comercio.</h3>
+        <p>El local cocina tu comida y la entrega en mostrador o la despacha con código de 4 dígitos seguro.</p>
+        <div class="step-illustration" aria-hidden="true">${renderSticker('scooter', 56)}</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="merchant-growth-section">
+    <div class="growth-container">
+      <div class="growth-text">
+        <span class="eyebrow">PARA NEGOCIOS</span>
+        <h2 class="display-title">TU COMERCIO TAMBIÉN CRECE EN CAUCE</h2>
+        <p class="growth-lead">Gestioná tu negocio de forma simple y vendé más en tu comunidad.</p>
+        <ul class="growth-features">
+          <li>${renderIcon('check', 16)} <strong>Cargan productos:</strong> fotos, precios y disponibilidad en tiempo real.</li>
+          <li>${renderIcon('check', 16)} <strong>Reciben pedidos:</strong> comandas claras listas para cocina y mostrador.</li>
+          <li>${renderIcon('check', 16)} <strong>Gestionan retiros:</strong> entregas ordenadas en el local.</li>
+          <li>${renderIcon('check', 16)} <strong>Administran delivery propio:</strong> repartidores propios con código de seguridad.</li>
+          <li>${renderIcon('check', 16)} <strong>Ven métricas simples:</strong> ventas del día, ticket promedio y platos más pedidos.</li>
+        </ul>
+        <div class="growth-actions">
+          <button class="button button-primary" type="button" data-action="open-join-modal">Sumá tu negocio →</button>
+          <a class="button secondary" href="#manage">Ver panel demo</a>
+        </div>
+      </div>
+      <div class="growth-preview">
+        <div class="growth-badge">DATOS DE DEMOSTRACIÓN</div>
+        <div class="growth-card">
+          <div class="growth-card-header">
+            <strong>Tu negocio hoy · La Orilla</strong>
+            <span class="availability">Abierto</span>
+          </div>
+          <div class="growth-metrics-row">
+            <div class="growth-metric">
+              <span class="gm-num">24</span>
+              <span class="gm-lbl">Pedidos demo</span>
+            </div>
+            <div class="growth-metric">
+              <span class="gm-num">$ 284.500</span>
+              <span class="gm-lbl">Ventas demo</span>
+            </div>
+            <div class="growth-metric">
+              <span class="gm-num">96</span>
+              <span class="gm-lbl">Clientes demo</span>
+            </div>
+          </div>
+          <div class="growth-comanda-snippet">
+            <span class="gcs-title">Última comanda cocina:</span>
+            <code>#1284 · 2x Doble de la casa · Delivery propio</code>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="territory-quote-section">
+    <div class="territory-quote-card" style="background-image: url('assets/images/territory/alumine-pehuenes.webp');" role="img" aria-label="Pehuenes milenarios en Aluminé">
+      <div class="territory-quote-overlay"></div>
+      <div class="territory-quote-content">
+        <svg class="brand-wave" viewBox="0 0 32 32" width="36" height="36" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true">
+          <path d="M4 11C8 7 12 15 16 11C20 7 24 15 28 11"/>
+          <path d="M4 21C8 17 12 25 16 21C20 17 24 25 28 21"/>
+        </svg>
+        <blockquote>“No venimos a reemplazar lo local. Venimos a darle cauce.”</blockquote>
+        <cite>ALUMINÉ · NEUQUÉN · PATAGONIA ARGENTINA</cite>
+      </div>
+    </div>
   </section>`;
 }
 
@@ -684,93 +826,173 @@ function riderPanel(businessId) {
 function presentacion() {
   return `${back('#home', 'Volver a los comercios')}
   <div class="pres-container">
-    <div class="pres-hero">
-      <span class="eyebrow">PROPUESTA DE INFRAESTRUCTURA DIGITAL COMPARTIDA</span>
-      <h1>CAUCE · Plataforma Local para Aluminé</h1>
-      <p class="pres-lead">Una propuesta tecnológica orientada a facilitar la digitalización de la gastronomía local, conectar a vecinos y visitantes con los comercios de Aluminé y brindar herramientas operativas sencillas y compartidas.</p>
-    </div>
+    <header class="pres-hero-card">
+      <div class="pres-hero-inner">
+        <span class="eyebrow" style="color:var(--teal-light, #14b8a6);">PROPUESTA DE INFRAESTRUCTURA DIGITAL COMPARTIDA</span>
+        <h1 class="display-title" style="color:#ffffff;margin:12px 0 16px;">CAUCE · ALUMINÉ</h1>
+        <p class="pres-lead" style="color:rgba(255,255,255,0.9);max-width:680px;font-size:18px;line-height:1.6;margin-bottom:20px;">
+          Una propuesta tecnológica orientada a facilitar la digitalización de la gastronomía local, conectar a vecinos y visitantes con los comercios de Aluminé y brindar herramientas operativas sencillas y compartidas.
+        </p>
+        <div class="pres-meta-tags">
+          <span class="territory-tag">ALUMINÉ</span>
+          <span class="territory-tag">NEUQUÉN</span>
+          <span class="territory-tag">PATAGONIA</span>
+          <span class="territory-tag">PILOTO 90 DÍAS</span>
+        </div>
+      </div>
+    </header>
 
-    <section class="pres-section">
-      <h2>1. El Desafío: Dinámica y Digitalización Local</h2>
+    <section class="pres-slide-card">
+      <div class="pres-slide-header">
+        <span class="eyebrow">DIRECCIÓN OPERATIVA</span>
+        <h2 class="section-display-title">PILOTO INTENSIVO DE 90 DÍAS</h2>
+        <p class="quiet" style="margin-top:6px;">Los tiempos dependerán del alcance acordado, cantidad de comercios y modelo operativo.</p>
+      </div>
+
+      <div class="pres-phases-grid">
+        <div class="pres-phase-item">
+          <span class="pres-phase-num">01</span>
+          <span class="pres-stage-tag">Etapa 1</span>
+          <strong>Preparación &amp; Relevamiento</strong>
+          <span class="pres-phase-dur">15 días</span>
+          <p>Validación con comercios interesados, relevamiento de modalidades de venta, cartas y horarios reales.</p>
+        </div>
+        <div class="pres-phase-item">
+          <span class="pres-phase-num">02</span>
+          <span class="pres-stage-tag">Etapa 2</span>
+          <strong>Lanzamiento Piloto</strong>
+          <span class="pres-phase-dur">15 días</span>
+          <p>Puesta en marcha con un grupo inicial de locales para validar circuitos de retiro y entrega de cercanía.</p>
+        </div>
+        <div class="pres-phase-item">
+          <span class="pres-phase-num">03</span>
+          <span class="pres-stage-tag">Etapa 3</span>
+          <strong>Ajuste Operativo</strong>
+          <span class="pres-phase-dur">30 días</span>
+          <p>Análisis conjunto de la experiencia con comerciantes, clientes y repartidores para optimizar herramientas.</p>
+        </div>
+        <div class="pres-phase-item">
+          <span class="pres-phase-num">04</span>
+          <span class="pres-stage-tag">Etapa 4</span>
+          <strong>Expansión Gradual</strong>
+          <span class="pres-phase-dur">20 días</span>
+          <p>Incorporación progresiva de nuevos comercios y evaluación de extensión a otros rubros locales.</p>
+        </div>
+        <div class="pres-phase-item">
+          <span class="pres-phase-num">05</span>
+          <span class="pres-stage-tag">Etapa 5</span>
+          <strong>Balance &amp; Continuidad</strong>
+          <span class="pres-phase-dur">10 días</span>
+          <p>Evaluación de indicadores, retroalimentación comunitaria y definición del esquema operativo permanente.</p>
+        </div>
+      </div>
+
+      <div class="pres-metrics-row">
+        <div class="pres-metric-box">
+          <span class="pres-metric-val">6 a 12</span>
+          <span class="pres-metric-lbl">Comercios gastronómicos activos</span>
+        </div>
+        <div class="pres-metric-box">
+          <span class="pres-metric-val">500+</span>
+          <span class="pres-metric-lbl">Pedidos de prueba completados</span>
+        </div>
+        <div class="pres-metric-box">
+          <span class="pres-metric-val">&lt;35 min</span>
+          <span class="pres-metric-lbl">Tiempo estimado de entrega</span>
+        </div>
+        <div class="pres-metric-box">
+          <span class="pres-metric-val">Alto</span>
+          <span class="pres-metric-lbl">Índice de satisfacción local</span>
+        </div>
+      </div>
+
+      <div class="pres-callout-quote">
+        <p>“No venimos a reemplazar lo local. Venimos a darle cauce.”</p>
+      </div>
+    </section>
+
+    <section class="pres-slide-card">
+      <div class="pres-slide-header">
+        <span class="eyebrow">DIAGNÓSTICO TERRITORIAL</span>
+        <h2 class="section-display-title">LA OFERTA LOCAL EXISTE, PERO ESTÁ DISPERSA.</h2>
+      </div>
+
       <div class="pres-grid-3">
         <div class="pres-card">
+          <div class="pres-card-icon">${renderSticker('coffee', 36)}</div>
           <h3>Canales digitales fragmentados</h3>
-          <p>Muchos comercios pequeños gestionan consultas, cartas y pedidos a través de distintos canales. CAUCE propone concentrar descubrimiento, pedidos y operación en una experiencia digital local común.</p>
+          <p>Muchos comercios pequeños gestionan consultas, cartas y pedidos a través de distintos canales (mensajería instantánea, redes y llamadas). CAUCE propone concentrar descubrimiento, pedidos y operación en una experiencia digital local común.</p>
         </div>
         <div class="pres-card">
+          <div class="pres-card-icon">${renderSticker('burger', 36)}</div>
           <h3>Barreras de digitalización</h3>
-          <p>Para un comercio pequeño, implementar por cuenta propia catálogo, pedidos, seguimiento y herramientas de gestión puede requerir tiempo y recursos técnicos considerables.</p>
+          <p>Para un comercio pequeño, implementar por cuenta propia catálogo digital, pedidos en línea, seguimiento y herramientas de gestión requiere tiempo y recursos técnicos considerables.</p>
         </div>
         <div class="pres-card">
+          <div class="pres-card-icon">${renderSticker('scooter', 36)}</div>
           <h3>Una experiencia pensada para la localidad</h3>
-          <p>CAUCE puede adaptarse a la escala, los horarios, la estacionalidad y las modalidades de entrega propias de Aluminé, respetando la cercanía característica de la comunidad.</p>
+          <p>CAUCE puede adaptarse a la escala, los horarios de montaña, la estacionalidad turística y las modalidades de entrega propias de Aluminé, respetando la cercanía característica de la comunidad.</p>
         </div>
+      </div>
+
+      <div class="pres-callout-quote" style="background:var(--forest-tint, #e6f4f1);color:var(--forest, #0f3b37);border-left-color:var(--forest, #0f3b37);">
+        <p>“El salto no es tecnológico: es organizativo. Lo local tiene futuro cuando se organiza con su propia gente.”</p>
       </div>
     </section>
 
-    <section class="pres-section">
-      <h2>2. La Solución: CAUCE como Infraestructura Digital Compartida</h2>
+    <section class="pres-slide-card">
+      <div class="pres-slide-header">
+        <span class="eyebrow">VALOR PARA ALUMINÉ</span>
+        <h2 class="section-display-title">MÁS MOVIMIENTO LOCAL.</h2>
+      </div>
+
       <div class="pres-grid-3">
-        <div class="pres-card">
-          <h3>Plataforma común de gestión</h3>
-          <p>CAUCE propone una plataforma común donde comercios gastronómicos puedan publicar su oferta, recibir pedidos y administrar retiro o delivery desde herramientas simples e integradas.</p>
+        <div class="pres-pillar-card">
+          <div class="pres-pillar-badge social">IMPACTO SOCIAL</div>
+          <h3>Cercanía &amp; Trabajo Local</h3>
+          <p>Fomenta el reparto de proximidad organizado por los propios locales, dinamiza el empleo barrial y preserva el trato humano y directo entre vecinos.</p>
         </div>
-        <div class="pres-card">
-          <h3>Diseñada para crecer</h3>
-          <p>La arquitectura permite comenzar en Aluminé y, si el modelo resulta satisfactorio, incorporar nuevas localidades o sectores productivos sin duplicar el sistema.</p>
+        <div class="pres-pillar-card">
+          <div class="pres-pillar-badge economic">IMPACTO ECONÓMICO</div>
+          <h3>Circulación en el Pueblo</h3>
+          <p>El valor económico de las ventas y la logística de entrega queda íntegramente en la comunidad, fortaleciendo el ecosistema gastronómico de Aluminé.</p>
         </div>
-        <div class="pres-card">
-          <h3>Arquitectura independiente del proveedor</h3>
-          <p>El software está diseñado para poder separar la experiencia de usuario, la lógica de negocio y la infraestructura de datos, facilitando futuras decisiones sobre alojamiento y operación.</p>
+        <div class="pres-pillar-card">
+          <div class="pres-pillar-badge strategic">IMPACTO ESTRATÉGICO</div>
+          <h3>Autonomía Comunitaria</h3>
+          <p>Infraestructura digital concebida para la escala cordillerana, con posibilidad de acompañamiento institucional y articulación asociativa con entidades locales.</p>
         </div>
       </div>
     </section>
 
-    <section class="pres-section">
-      <h2>3. Beneficios por Actor de la Comunidad</h2>
+    <section class="pres-slide-card">
+      <div class="pres-slide-header">
+        <span class="eyebrow">HERRAMIENTAS OPERATIVAS</span>
+        <h2 class="section-display-title">CAUCE como Infraestructura Digital Compartida</h2>
+        <p class="pres-lead" style="margin-top:8px;">Una vidriera digital integrada con herramientas de mostrador, cocina y reparto de cercanía.</p>
+      </div>
+
       <div class="pres-grid-2">
         <div class="pres-card">
-          <h3>Para el Vecino y Turista</h3>
-          <p>
-            • Descubrir la oferta gastronómica de Aluminé en un catálogo unificado.<br>
-            • Consultar cartas actualizadas y precios de manera clara.<br>
-            • Elegir entre retiro en mostrador o delivery según su conveniencia.<br>
-            • Realizar pedidos y seguir su evolución con verificación transparente.
-          </p>
+          <h3>1. Vidriera &amp; Catálogo Público</h3>
+          <p>Diseño ágil y responsive adaptado a celulares para que vecinos y turistas descubran qué pedir, fotos de platos reales, precios claros y horarios actualizados sin intermediación.</p>
         </div>
         <div class="pres-card">
-          <h3>Para el Comercio Local</h3>
-          <p>
-            • Catálogo autogestionable con actualización ágil de precios y disponibilidad.<br>
-            • Pedidos organizados en bandejas de trabajo para mostrador y cocina.<br>
-            • Herramientas operativas simples y comanda clara para agilizar la preparación.<br>
-            • Flexibilidad para operar con reparto propio o retiro en local.
-          </p>
+          <h3>2. Panel Operativo de Pedidos</h3>
+          <p>Bandejas de trabajo para mostrador y cocina. Permite confirmar, preparar y despachar comandas sin perder pedidos en chats dispersos ni recurrir a hojas sueltas.</p>
         </div>
         <div class="pres-card">
-          <h3>Para el Repartidor</h3>
-          <p>
-            • Asignación operativa de pedidos coordinada directamente con el local.<br>
-            • Hoja de ruta para retiro, trayecto y confirmación de llegada.<br>
-            • Verificación segura en mano mediante código de 4 dígitos.<br>
-            • Protección de datos del cliente hasta el retiro efectivo del pedido.
-          </p>
+          <h3>3. Hoja de Ruta para Repartidores</h3>
+          <p>Panel simple para el repartidor del comercio con datos de entrega, mapa de referencia y confirmación con código de seguridad de 4 dígitos al entregar en mano.</p>
         </div>
         <div class="pres-card">
-          <h3>Para la Comunidad y Entidades Locales</h3>
-          <p>
-            • Concentrar la oferta gastronómica de Aluminé en una referencia digital común.<br>
-            • Facilitar presencia y herramientas digitales accesibles a pequeños emprendimientos.<br>
-            • Disponer de una plataforma compartida con posibilidad de acompañamiento institucional.<br>
-            • Generar información operativa agregada en una futura fase, respetando la privacidad.
-          </p>
+          <h3>4. Arquitectura Modular &amp; Independiente</h3>
+          <p>El software está diseñado para separar la experiencia de usuario, la lógica de negocio y la infraestructura de datos, facilitando futuras decisiones sobre alojamiento y operación.</p>
         </div>
       </div>
-    </section>
 
-    <section class="pres-section">
-      <h2>4. Un Modelo Adaptable a la Realidad Local</h2>
-      <div class="pres-card">
+      <div class="pres-slide-subbox">
+        <h3 style="margin-top:0;">Un Modelo Adaptable a la Realidad Local</h3>
         <p style="font-size:15px;line-height:1.6;color:var(--ink);margin-bottom:12px;">
           CAUCE puede implementarse con diferentes esquemas de sostenibilidad según las necesidades de los comercios y de las instituciones participantes. El modelo económico definitivo debe definirse junto a los actores del piloto.
         </p>
@@ -780,77 +1002,42 @@ function presentacion() {
       </div>
     </section>
 
-    <section class="pres-section">
-      <h2>5. Modelo Multi-Localidad Modular</h2>
-      <div class="pres-grid-2">
-        <div class="pres-card">
-          <h3>Aislamiento por localidad</h3>
-          <p>Cada comunidad opera bajo su propio ámbito delimitado (<code style="background:var(--soft);padding:2px 6px;border-radius:4px;">localityId</code>), asegurando que catálogos, pedidos y repartos no se superpongan entre distintas áreas.</p>
-        </div>
-        <div class="pres-card">
-          <h3>Capacidad de extensión regional</h3>
-          <p>La base modular permite proyectar futuras instancias para otras localidades cordilleranas interesadas, compartiendo la base técnica con plena autonomía operativa de cada comunidad.</p>
-        </div>
+    <section class="pres-slide-card">
+      <div class="pres-slide-header">
+        <span class="eyebrow">DEMOSTRACIÓN INTERACTIVA</span>
+        <h2 class="section-display-title">CIRCUITO DE PRUEBA SIMULADO</h2>
+        <p class="quiet">Recorré las tres perspectivas del sistema con datos de muestra de Aluminé:</p>
       </div>
-    </section>
-
-    <section class="pres-section">
-      <h2>6. Demostración Interactiva Guiada (Circuito de Prueba)</h2>
-      <p class="quiet">Esta demostración permite recorrer el funcionamiento propuesto para cada rol de forma simulada:</p>
       <div class="pres-demo-links">
         <div class="pres-demo-card">
           <div>
-            <strong>1. Rol Vecino / Cliente</strong>
+            <strong>1. Rol Vecino / Turista</strong>
             <span>Elegí un comercio de ejemplo, armá tu pedido y probalo con retiro o envío.</span>
           </div>
-          <a href="#shop/orilla">Ver catálogo de La Orilla →</a>
+          <a class="button secondary small" href="#shop/orilla">Ver catálogo de La Orilla →</a>
         </div>
         <div class="pres-demo-card">
           <div>
             <strong>2. Rol Cocina / Mostrador</strong>
             <span>Recibí el pedido simulado, organizá la comanda y pasalo a preparación.</span>
           </div>
-          <a href="#business/orilla">Ver panel de comercio →</a>
+          <a class="button secondary small" href="#business/orilla">Ver panel de comercio →</a>
         </div>
         <div class="pres-demo-card">
           <div>
             <strong>3. Rol Repartidor</strong>
             <span>Visualizá el pedido asignado y completá la entrega con el código de verificación.</span>
           </div>
-          <a href="#rider/orilla">Ver panel de reparto →</a>
+          <a class="button secondary small" href="#rider/orilla">Ver panel de reparto →</a>
         </div>
       </div>
     </section>
 
-    <section class="pres-section">
-      <h2>7. Etapas de Implementación Sugeridas</h2>
-      <p class="quiet" style="margin-bottom:14px;">Los tiempos dependerán del alcance acordado, cantidad de comercios y modelo operativo:</p>
-      <div class="pres-stages">
-        <div class="pres-stage-card">
-          <span class="pres-stage-tag">Etapa 1</span>
-          <h3>Validación con comercios</h3>
-          <p>Reuniones con comerciantes interesados, relevamiento de modalidades de venta, cartas y horarios reales.</p>
-        </div>
-        <div class="pres-stage-card">
-          <span class="pres-stage-tag">Etapa 2</span>
-          <h3>Piloto controlado</h3>
-          <p>Puesta en funcionamiento inicial con un grupo acotado de locales para validar circuitos de retiro y delivery.</p>
-        </div>
-        <div class="pres-stage-card">
-          <span class="pres-stage-tag">Etapa 3</span>
-          <h3>Evaluación y ajustes</h3>
-          <p>Análisis conjunto de la experiencia con comerciantes, clientes y repartidores para optimizar herramientas.</p>
-        </div>
-        <div class="pres-stage-card">
-          <span class="pres-stage-tag">Etapa 4</span>
-          <h3>Posible ampliación</h3>
-          <p>Incorporación progresiva de nuevos comercios y evaluación de extensión a otros rubros locales.</p>
-        </div>
+    <section class="pres-slide-card">
+      <div class="pres-slide-header">
+        <span class="eyebrow">CONSIDERACIONES GENERALES</span>
+        <h2 class="section-display-title">PREGUNTAS FRECUENTES</h2>
       </div>
-    </section>
-
-    <section class="pres-section">
-      <h2>8. Preguntas Frecuentes y Consideraciones</h2>
       <div class="pres-grid-2">
         <div class="pres-card">
           <h3>¿Qué equipamiento requiere un comercio?</h3>

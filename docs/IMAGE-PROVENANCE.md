@@ -1,11 +1,11 @@
-# PROVENANCE Y LICENCIAS DE FOTOGRAFÍA GASTRONÓMICA — CAUCE v0.3.2
+# PROVENANCE Y LICENCIAS DE FOTOGRAFÍA GASTRONÓMICA Y TERRITORIAL — CAUCE v0.3.2
 
-Todas las imágenes utilizadas en **CAUCE v0.3.2** se encuentran almacenadas **LOCALMENTE** dentro del repositorio en `assets/images/`.
+Todas las imágenes utilizadas en **CAUCE** se encuentran almacenadas **LOCALMENTE** dentro del repositorio en `assets/images/`.
 
 - **Cero dependencias externas en tiempo de ejecución**: No se realizan solicitudes de red a servidores de imágenes externos durante el uso.
-- **Formato optimizado**: WebP local con dimensiones estandarizadas (16:9 para portadas de comercio: 1200×675 px; 4:3 para platos: 600×450 px).
-- **Mecanismo de Fallback**: Cada imagen cuenta con respaldo SVG vectorial inline (`renderIcon` / `getProductSvg`) en caso de falla de carga.
-- **Total de imágenes**: 59 archivos locales (7 portadas de comercio + 52 platos del catálogo gastronómico de Aluminé).
+- **Formato optimizado**: WebP local con dimensiones estandarizadas.
+- **Mecanismo de Fallback**: Cada imagen de plato y comercio cuenta con respaldo SVG vectorial inline en caso de falla de carga.
+- **Total de imágenes**: 62 archivos locales (7 portadas de comercio + 52 platos del catálogo gastronómico + 3 paisajes territoriales de Aluminé).
 
 ---
 
@@ -353,3 +353,26 @@ Todas las imágenes utilizadas en **CAUCE v0.3.2** se encuentran almacenadas **L
     - Autor / Contribuidor: W.carter
 
 ---
+
+## 8. Fotografía Territorial de Aluminé y Paisaje Patagónico
+- **Proveedor**: Wikimedia Commons.
+- **Territorio**: Departamento Aluminé, Provincia del Neuquén, Patagonia Argentina.
+- **Detalle de archivos y fuentes**:
+  - `assets/images/territory/alumine-hero-panoramica.webp`
+    - Descripción territorial: Vista aérea del río Aluminé, la cordillera y el valle patagónico
+    - Archivo fuente: Aluminé vista aérea del río y la ciudad
+    - URL origen: https://upload.wikimedia.org/wikipedia/commons/4/4d/Alumin%C3%A9_vista_a%C3%A9rea_del_r%C3%ADo_y_la_ciudad.jpg
+    - Licencia exacta: CC0
+    - Autor / Fotógrafo: Matías Cordero
+  - `assets/images/territory/alumine-pehuenes.webp`
+    - Descripción territorial: Bosque nativo de Pehuenes milenarios (Araucaria araucana) con fondo andino
+    - Archivo fuente: Araucaria araucana, Zainuco, Neuquén
+    - URL origen: https://upload.wikimedia.org/wikipedia/commons/2/20/Araucaria_araucana%2C_Zainuco%2C_Neuquen%2C_Argentina.jpg
+    - Licencia exacta: CC BY-SA 4.0
+    - Autor / Fotógrafo: Dangelin5
+  - `assets/images/territory/alumine-rio-valle.webp`
+    - Descripción territorial: Aguas cristalinas del Río Aluminé corriendo por el lecho de roca cordillerano
+    - Archivo fuente: Río Aluminé
+    - URL origen: https://upload.wikimedia.org/wikipedia/commons/8/89/Rio_Alumin%C3%A9_%286326632415%29.jpg
+    - Licencia exacta: CC BY 2.0
+    - Autor / Fotógrafo: Daniel P. Gauer
