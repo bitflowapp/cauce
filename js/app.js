@@ -46,7 +46,7 @@ const empty = (title, message, href = '#home', label = 'Ver comercios') => `<sec
 const demoNotice = () => `<div class="notice"><strong>Estás probando una demostración comercial local de CAUCE · Aluminé.</strong>Los comercios y los datos son de prueba. Los paneles permiten demostrar la experiencia real de un restaurante, un cliente y un repartidor.</div>`;
 const merchantActor = business => ({ kind:'merchant', ...scopeOf(business) });
 const countCart = cart => (cart?.lines || []).reduce((total, line) => total + line.quantity, 0);
-const availability = b => `<span class="availability ${b.open ? '' : 'closed'}">${b.open ? 'Abierto en demo' : 'Cerrado en demo'}</span>`;
+const availability = b => `<span class="availability ${b.open ? '' : 'closed'}">${b.open ? 'Abierto' : 'Cerrado'}</span>`;
 
 function updateNavigation() {
   if (!repository) return;
@@ -58,10 +58,12 @@ function updateNavigation() {
   const [currentPage = 'home'] = route();
   document.querySelectorAll('.bottom-nav-item').forEach(item => {
     const id = item.id;
-    const isHome = (id === 'bnav-home' || id === 'bnav-stores') && (currentPage === 'home' || currentPage === 'shop');
+    const isHome = id === 'bnav-home' && (currentPage === 'home' || currentPage === 'shop');
+    const isSearch = id === 'bnav-search' && currentPage === 'home';
     const isOrders = id === 'bnav-orders' && (currentPage === 'orders' || currentPage === 'order');
     const isCarts = id === 'bnav-carts' && (currentPage === 'carts' || currentPage === 'cart');
-    item.classList.toggle('active', isHome || isOrders || isCarts);
+    const isPres = id === 'bnav-pres' && currentPage === 'presentacion';
+    item.classList.toggle('active', isHome || isSearch || isOrders || isCarts || isPres);
   });
 }
 
@@ -83,8 +85,6 @@ function storesMarkup() {
     const previewSvg = getProductSvg(sampleProduct?.dishType || 'burger');
     return `<a class="store-card" href="#shop/${esc(b.id)}" data-testid="store-card">
       <div class="store-art theme-${theme(b)}" aria-hidden="true">
-        <span class="demo-tag">COMERCIO FICTICIO</span>
-        <span class="store-rating-tag"><span class="star">★</span> ${esc(b.ratingDemo || '4.9')}</span>
         <div class="store-art-preview">${previewSvg}</div>
         ${b.badge ? `<span class="badge-pill">${esc(b.badge)}</span>` : ''}
       </div>
@@ -110,13 +110,13 @@ function home() {
   const businesses = repository.snapshot().businesses.filter(b => b.localityId === CONFIG.defaultLocality && b.active);
   const categories = ['Todos', ...new Set(businesses.map(b => b.category))];
 
-  return `<section class="hero">
+  return `<section class="hero compact-hero">
     <div class="hero-text">
-      <span class="eyebrow">PLATAFORMA GASTRONÓMICA LOCAL · ALUMINÉ</span>
+      <span class="eyebrow">GASTRONOMÍA LOCAL · ALUMINÉ</span>
       <h1>Lo rico de acá,<br><em>a un toque.</em></h1>
       <p>Pedí comida en comercios de Aluminé desde un solo lugar. Elegí retiro en el local o delivery directo a tu puerta.</p>
       <div class="hero-stats">
-        <span class="hero-stat">🌱 ${businesses.length} comercios locales</span>
+        <span class="hero-stat">🌱 ${businesses.length} locales</span>
         <span class="hero-stat">🛵 Retiro y delivery</span>
         <span class="hero-stat">⏱️ 20–45 min</span>
       </div>
@@ -127,34 +127,35 @@ function home() {
     </div>
   </section>
 
-  <section class="join-banner">
-    <div>
-      <h3>¿Tenés un comercio o emprendimiento en Aluminé?</h3>
-      <p>Sumate a CAUCE: publicá tu menú digital, recibí pedidos ordenados para retiro o delivery y administrá tu cocina con panel propio.</p>
-    </div>
-    <button class="join-btn" type="button" data-action="open-join-modal">Quiero sumarme a CAUCE →</button>
-  </section>
-
   <section aria-labelledby="stores-title">
     <div class="section-heading">
       <div>
         <h2 id="stores-title">Comercios en Aluminé</h2>
         <p>Explorá la oferta gastronómica y hacé tu pedido en simples pasos.</p>
       </div>
-      <span class="quiet">${businesses.length} locales en demostración</span>
+      <span class="quiet">${businesses.length} locales disponibles</span>
     </div>
     <div class="filters">
       <div class="search-box">
         <label class="sr-only" for="search">Buscar comercio o comida</label>
         <input id="search" type="search" aria-label="Buscar comercio o comida" value="${esc(searchState.query)}" placeholder="Buscar un comercio o algo rico…">
       </div>
-      <div class="chips" aria-label="Categorías">
-        ${categories.map(c => `<button type="button" class="chip ${c === searchState.category ? 'active' : ''}" data-action="filter" data-category="${esc(c)}" aria-pressed="${c === searchState.category}">${esc(c)}</button>`).join('')}
+      <div class="chips-row">
+        <div class="chips" aria-label="Categorías">
+          ${categories.map(c => `<button type="button" class="chip ${c === searchState.category ? 'active' : ''}" data-action="filter" data-category="${esc(c)}" aria-pressed="${c === searchState.category}">${esc(c)}</button>`).join('')}
+        </div>
+        <label class="check-label"><input id="only-open" type="checkbox" ${searchState.onlyOpen ? 'checked' : ''}> Solo abiertos</label>
       </div>
-      <label class="check-label"><input id="only-open" type="checkbox" ${searchState.onlyOpen ? 'checked' : ''}> Solo abiertos</label>
     </div>
     <div id="stores-results" aria-live="polite">${storesMarkup()}</div>
-    <p class="microcopy below-note">Demostración comercial con comercios ficticios de Aluminé. Precios y disponibilidad de ejemplo.</p>
+  </section>
+
+  <section class="join-banner">
+    <div>
+      <h3>¿Tenés un comercio o emprendimiento en Aluminé?</h3>
+      <p>Sumate a CAUCE: publicá tu menú digital, recibí pedidos ordenados para retiro o delivery y administrá tu cocina con panel propio.</p>
+    </div>
+    <button class="join-btn" type="button" data-action="open-join-modal">Quiero sumar mi comercio →</button>
   </section>`;
 }
 
@@ -173,7 +174,7 @@ function shop(businessId) {
   <section class="shop-hero">
     <div class="shop-initials theme-${theme(b)}" aria-hidden="true">${previewSvg}</div>
     <div>
-      <span class="eyebrow">${esc(b.category)} · COMERCIO LOCAL DEMO</span>
+      <span class="eyebrow">${esc(b.category)} · COMERCIO LOCAL</span>
       <h1>${esc(b.name)}</h1>
       ${b.subtitle ? `<div class="store-subtitle" style="font-size:15px;margin-bottom:6px;">${esc(b.subtitle)}</div>` : ''}
       <p>${esc(b.description)}</p>
@@ -188,7 +189,7 @@ function shop(businessId) {
     </div>
   </section>
 
-  ${!b.open ? '<div class="notice">Este local figura cerrado en la demo. Podés revisar su carta completa o abrirlo desde el panel demo del comercio.</div>' : ''}
+  ${!b.open ? `<div class="notice closed-notice"><strong>Este local está cerrado en este momento.</strong>Horario de atención: ${esc(b.hoursLabel)}. Podés recorrer la carta completa y conocer los platos.</div>` : ''}
 
   <div class="shop-layout">
     <div>
@@ -207,9 +208,17 @@ function shop(businessId) {
                 <span class="product-price">${price === null ? 'No disponible' : money(price)}</span>
               </div>
               <div class="product-action">
-                <button class="add-btn add" type="button" data-action="add" data-business="${esc(b.id)}" data-product="${esc(p.id)}" aria-label="Agregar ${esc(p.name)}" ${!b.open || !isCommerciallyPurchasable(p) || quantity >= p.stock ? 'disabled' : ''}>
-                  + Agregar
-                </button>
+                ${quantity > 0 ? `
+                  <div class="product-qty-stepper">
+                    <button type="button" data-action="quantity" data-business="${esc(b.id)}" data-product="${esc(p.id)}" data-quantity="${quantity - 1}" aria-label="Quitar una unidad de ${esc(p.name)}">−</button>
+                    <span>${quantity}</span>
+                    <button type="button" data-action="quantity" data-business="${esc(b.id)}" data-product="${esc(p.id)}" data-quantity="${quantity + 1}" aria-label="Agregar una unidad de ${esc(p.name)}" ${quantity >= p.stock || quantity >= 99 ? 'disabled' : ''}>+</button>
+                  </div>
+                ` : `
+                  <button class="add-btn add" type="button" data-action="add" data-business="${esc(b.id)}" data-product="${esc(p.id)}" aria-label="Agregar ${esc(p.name)}" ${!b.open || !isCommerciallyPurchasable(p) || quantity >= p.stock ? 'disabled' : ''}>
+                    + Agregar
+                  </button>
+                `}
                 <span class="product-qty">${quantity ? `${quantity} en tu pedido` : (!isCommerciallyPurchasable(p) ? 'Agotado' : '')}</span>
               </div>
             </article>`;
@@ -336,18 +345,21 @@ function cartPage(businessId) {
         </div>
         <div class="form-grid">
           <label class="field">Nombre de ejemplo
-            <input name="name" required minlength="2" maxlength="80" value="${esc(values.name)}" autocomplete="off">
+            <input name="name" required minlength="2" maxlength="80" value="${esc(values.name)}" autocomplete="off" placeholder="Ej: Marcela González">
           </label>
           <label class="field">Teléfono de ejemplo
-            <input name="phone" type="tel" required minlength="8" maxlength="24" value="${esc(values.phone)}" autocomplete="off">
+            <input name="phone" type="tel" inputmode="tel" required minlength="8" maxlength="24" value="${esc(values.phone)}" autocomplete="off" placeholder="Ej: 2942-556677">
           </label>
           ${values.fulfillment === 'delivery' ? `
             <label class="field wide">Dirección de ejemplo
-              <input name="address" required minlength="5" maxlength="200" value="${esc(values.address)}" autocomplete="off">
+              <input name="address" required minlength="5" maxlength="200" value="${esc(values.address)}" autocomplete="off" placeholder="Ej: Av. 4 de Febrero 450">
+            </label>
+            <label class="field wide">Indicaciones para la entrega (opcional)
+              <input name="reference" maxlength="150" value="${esc(values.reference || '')}" autocomplete="off" placeholder="Ej: Casa con reja verde, timbre al fondo">
             </label>
           ` : ''}
-          <label class="field wide">Notas para el comercio
-            <textarea name="notes" maxlength="300">${esc(values.notes)}</textarea>
+          <label class="field wide">Notas para la cocina (opcional)
+            <textarea name="notes" maxlength="300" placeholder="Aclaraciones para la preparación (sin sal, aderezos aparte, etc.)">${esc(values.notes)}</textarea>
           </label>
         </div>
       </form>
@@ -382,7 +394,11 @@ function tracking(orderId) {
   });
 
   const deliveryCodeMarkup = (order.fulfillment === 'delivery' && order.deliveryCode?.code)
-    ? `<div class="delivery-code-badge"><span>🔑 Código de entrega al recibir:</span><strong>${esc(formatDeliveryCode(order.deliveryCode.code))}</strong></div>`
+    ? `<div class="delivery-code-box">
+        <div class="code-title">🔑 Código de verificación de entrega</div>
+        <div class="code-digits">${esc(formatDeliveryCode(order.deliveryCode.code))}</div>
+        <p class="code-desc">Cuando recibas el pedido, decile este código al repartidor: <strong>${esc(formatDeliveryCode(order.deliveryCode.code))}</strong></p>
+      </div>`
     : '';
 
   return `${back('#orders', 'Volver a mis pedidos')}
@@ -435,11 +451,11 @@ function orderCard(order, actor) {
   const isRiderAwaiting = actor.kind === 'rider' && isAwaitingPreparation(order);
   const formattedPhone = order.customer?.phone ? formatArgentinePhone(order.customer.phone) : '';
   const deliveryCodeBadge = (order.fulfillment === 'delivery' && order.deliveryCode?.code)
-    ? `<div style="margin:6px 0;font-size:12px;color:var(--clay);font-weight:600;">🔑 Código de entrega: <strong>${esc(formatDeliveryCode(order.deliveryCode.code))}</strong></div>`
+    ? `<div class="delivery-code-badge"><span>🔑 Código de entrega:</span><strong>${esc(formatDeliveryCode(order.deliveryCode.code))}</strong></div>`
     : '';
 
   return `<article class="card order-card"><div class="row"><div>
-    <span class="order-code">${esc(order.code)} · PEDIDO DE PRUEBA</span>
+    <span class="order-code">${esc(order.code)}</span>
     <h3>${esc(b.name)}</h3>
     <span class="microcopy">${order.fulfillment === 'pickup' ? 'Retiro por el local' : 'Delivery del comercio'}</span></div>
     <span class="status">${esc(STATUS_LABELS[order.status] || order.status)}</span></div>
@@ -483,12 +499,26 @@ function businessPanel(businessId) {
   const products = repository.products(b.id);
   const metrics = calculateBusinessMetrics(allOrders, products);
 
+  const incomingOrders = allOrders.filter(o => o.status === 'submitted');
+  const prepOrders = allOrders.filter(o => ['accepted', 'preparing'].includes(o.status));
+  const readyOrders = allOrders.filter(o => ['ready', 'assigned'].includes(o.status));
+  const transitOrders = allOrders.filter(o => ['picked_up', 'on_the_way', 'arrived'].includes(o.status));
+  const closedOrders = allOrders.filter(o => ['delivered', 'canceled'].includes(o.status));
+
+  function renderOrderSection(title, list, className = '') {
+    if (!list.length) return '';
+    return `<div class="order-tray">
+      <div class="order-tray-title ${className}"><span>${title}</span> <span class="order-tray-badge"><span>${list.length}</span></span></div>
+      ${list.map(o => orderCard(o, actor)).join('')}
+    </div>`;
+  }
+
   return `${back('#manage', 'Todos los paneles demo')}
   <div class="manage-header">
     <div><span class="eyebrow">PANEL DE COMERCIO · DEMO</span><h1 class="page-title">${esc(b.name)}</h1>${availability(b)}</div>
     <div class="manage-controls">
       <button class="sound-toggle ${!soundService.muted ? 'on' : ''}" type="button" data-action="toggle-sound">
-        ${!soundService.muted ? '🔔 Aviso sonoro: ACTIVO' : '🔕 Aviso sonoro: SILENCIADO'}
+        ${!soundService.muted ? '🔔 Aviso sonoro: ACTIVO (tocar para probar)' : '🔕 Aviso sonoro: SILENCIADO (tocar para activar)'}
       </button>
       <a class="button secondary" href="#shop/${esc(b.id)}">Ver mi carta</a>
       <button class="button" type="button" data-action="toggle-open" data-business="${esc(b.id)}">${b.open ? 'Cerrar' : 'Abrir'} comercio demo</button>
@@ -505,14 +535,38 @@ function businessPanel(businessId) {
   </div>
 
   ${activeBusinessTab === 'all' || activeBusinessTab === 'orders' ? `
-    <div class="section-heading"><div><h2>Pedidos del comercio</h2><p>${allOrders.length} pedidos de prueba. No se muestran los de otros comercios en esta vista.</p></div>
-    ${b.deliveryEnabled ? `<a class="link-button" href="#rider/${esc(b.id)}">Ir a reparto demo →</a>` : ''}</div>
-    ${allOrders.length ? allOrders.map(o => orderCard(o, actor)).join('') : empty('La bandeja está vacía', 'Creá un pedido de prueba desde la carta de este comercio.', `#shop/${b.id}`, 'Abrir la carta')}
+    <div class="section-heading">
+      <div>
+        <h2>Pedidos del comercio</h2>
+        <p>${allOrders.length} pedidos. Priorizados por urgencia de atención en cocina.</p>
+      </div>
+      ${b.deliveryEnabled ? `<a class="link-button" href="#rider/${esc(b.id)}">Ir a reparto demo →</a>` : ''}
+    </div>
+    ${allOrders.length ? `
+      ${renderOrderSection('⚡ Nuevos pedidos entrantes — ¡Atender ahora!', incomingOrders, 'incoming')}
+      ${renderOrderSection('🍳 En cocina y preparación', prepOrders, 'prep')}
+      ${renderOrderSection('✅ Listos para entrega / despacho', readyOrders, 'ready')}
+      ${renderOrderSection('🛵 En reparto a domicilio', transitOrders, 'transit')}
+      ${renderOrderSection('📦 Historial de pedidos finalizados', closedOrders, 'closed')}
+    ` : empty('La bandeja está vacía', 'Creá un pedido de prueba desde la carta de este comercio.', `#shop/${b.id}`, 'Abrir la carta')}
   ` : ''}
 
   ${activeBusinessTab === 'all' || activeBusinessTab === 'products' ? `
-    <section class="product-group"><h2>Productos</h2><p class="quiet">Modificá precios, stock y disponibilidad de esta demostración.</p><div class="edit-products">
-      ${products.map(p => `<form class="card edit-product" data-form="product" data-business="${esc(b.id)}" data-product="${esc(p.id)}"><h3>${esc(p.name)}</h3><div class="edit-fields"><label class="field">Precio de ejemplo<input name="price" type="number" min="1" max="10000000" step="1" required value="${p.price}"></label><label class="field">Stock de ejemplo<input name="stock" type="number" min="0" max="10000" step="1" required value="${p.stock}"></label></div><label class="check-label"><input name="available" type="checkbox" ${p.available ? 'checked' : ''}> Disponible</label><button class="button secondary full" type="submit">Guardar cambios demo</button></form>`).join('')}
+    <section class="product-group"><h2>Gestión de Carta</h2><p class="quiet">Modificá precios, stock y disponibilidad de platos al instante.</p><div class="edit-products">
+      ${products.map(p => `<div class="card edit-product">
+        <button type="button" class="product-toggle-btn ${p.available ? 'active' : 'paused'}" data-action="quick-toggle-product" data-business="${esc(b.id)}" data-product="${esc(p.id)}">
+          ${p.available ? '🟢 Disponible en carta (tocar para pausar)' : '🔴 Pausado (agotado, tocar para activar)'}
+        </button>
+        <form data-form="product" data-business="${esc(b.id)}" data-product="${esc(p.id)}">
+          <h3>${esc(p.name)}</h3>
+          <div class="edit-fields">
+            <label class="field">Precio de ejemplo<input name="price" type="number" min="1" max="10000000" step="1" required value="${p.price}"></label>
+            <label class="field">Stock de ejemplo<input name="stock" type="number" min="0" max="10000" step="1" required value="${p.stock}"></label>
+          </div>
+          <label class="check-label" style="margin: 8px 0;"><input name="available" type="checkbox" ${p.available ? 'checked' : ''}> Disponible</label>
+          <button class="button secondary full" type="submit">Guardar cambios demo</button>
+        </form>
+      </div>`).join('')}
     </div></section>
   ` : ''}
 
@@ -581,6 +635,143 @@ function riderPanel(businessId) {
   ${all.length ? all.map(o => orderCard(o, actor)).join('') : empty('Todavía no hay pedidos asignados', 'Prepará un pedido con delivery y asignalo desde el panel de este comercio.', `#business/${b.id}`, 'Ir al panel del comercio')}`;
 }
 
+function presentacion() {
+  return `${back('#home', 'Volver a los comercios')}
+  <div class="pres-container">
+    <div class="pres-hero">
+      <span class="eyebrow">PROPUESTA DE INFRAESTRUCTURA DIGITAL COMUNITARIA</span>
+      <h1>CAUCE · Plataforma Local para Aluminé</h1>
+      <p class="pres-lead">Una solución tecnológica diseñada para dinamizar el comercio local, retener el valor económico dentro de la comunidad y conectar vecinos y visitantes con la gastronomía de Aluminé sin intermediación extractiva.</p>
+    </div>
+
+    <section class="pres-section">
+      <h2>1. El Desafío Actual: Dependencia y Fuga Económica</h2>
+      <div class="pres-grid-3">
+        <div class="pres-card">
+          <h3>Fuga de Valor Local</h3>
+          <p>Las aplicaciones comerciales centralizadas retienen entre un <strong class="pres-highlight">25% y 35% de comisión</strong> por cada pedido, sustrayendo recursos genuinos del circuito económico de Aluminé.</p>
+        </div>
+        <div class="pres-card">
+          <h3>Exclusión de Pequeños Comercios</h3>
+          <p>Rotiserías, casas de empanadas y cocinas familiares quedan marginadas por costos inaccesibles, burocracia y exigencias inviables para localidades cordilleranas.</p>
+        </div>
+        <div class="pres-card">
+          <h3>Desconexión Territorial</h3>
+          <p>Los algoritmos estándar de las grandes ciudades ignoran la estacionalidad turística, las distancias reales y el trato directo característico de nuestra comunidad.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="pres-section">
+      <h2>2. La Solución: CAUCE como Infraestructura Digital Local</h2>
+      <div class="pres-grid-2">
+        <div class="pres-card">
+          <h3>Infraestructura Soberana y Ágil</h3>
+          <p>CAUCE funciona como un canal digital comunitario de acceso universal, sin descargas pesadas ni comisiones confiscatorias. Opera como una herramienta compartida de servicio local.</p>
+        </div>
+        <div class="pres-card">
+          <h3>Diseño Orientado a la Cordillera</h3>
+          <p>Construida con autonomía técnica, capacidad de funcionamiento offline y optimizada para conexiones móviles reales en zonas de montaña.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="pres-section">
+      <h2>3. Beneficios por Actor de la Comunidad</h2>
+      <div class="pres-grid-3">
+        <div class="pres-card">
+          <h3>👤 Para el Vecino y Turista</h3>
+          <p>• Catálogo unificado de comercios de Aluminé en un solo enlace.<br>• Elección clara entre retiro en mostrador o delivery.<br>• Seguimiento del pedido paso a paso con código seguro de entrega de 4 dígitos.</p>
+        </div>
+        <div class="pres-card">
+          <h3>🏪 Para el Comercio Local</h3>
+          <p>• Menú digital autogestionable: pausar platos o ajustar demoras al instante.<br>• Comanda térmica estándar (32 columnas) para cocina o mostrador.<br>• Ahorro directo: elimina comisiones abusivas y cuida el margen del negocio.</p>
+        </div>
+        <div class="pres-card">
+          <h3>🛵 Para el Repartidor</h3>
+          <p>• Circuitos coordinados directamente con el local.<br>• Protección de datos del cliente hasta el momento del retiro del pedido.<br>• Verificación en mano mediante código para evitar confusiones en la entrega.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="pres-section">
+      <h2>4. Capacidad y Retención de Valor para Aluminé</h2>
+      <div class="pres-card">
+        <p style="font-size:15px;line-height:1.6;color:var(--ink);">
+          La arquitectura de CAUCE <strong>permite a municipios, cámaras de comercio y asociaciones locales</strong> articular una estrategia digital propia sin delegar soberanía de datos ni presupuesto en intermediarios externos. Diseñada para <strong>retener el 100% del valor económico dentro de Aluminé</strong>, fortalece la economía barrial, el empleo local y la promoción de la gastronomía cordillerana.
+        </p>
+      </div>
+    </section>
+
+    <section class="pres-section">
+      <h2>5. Modelo Multi-Localidad Modular</h2>
+      <div class="pres-grid-2">
+        <div class="pres-card">
+          <h3>Aislamiento Estricto por Territorio</h3>
+          <p>Cada localidad opera con su propio ámbito (<code style="background:var(--soft);padding:2px 6px;border-radius:4px;">localityId</code>), garantizando que los catálogos, pedidos y repartos de Aluminé no se mezclen con otras regiones.</p>
+        </div>
+        <div class="pres-card">
+          <h3>Escalabilidad Regional</h3>
+          <p>La misma base técnica puede extenderse a localidades vecinas de la cuenca (Villa Pehuenia - Moquehue, Junín de los Andes, San Martín de los Andes) compartiendo costos de infraestructura sin perder autonomía.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="pres-section">
+      <h2>6. Demostración Interactiva Guiada (Circuito en 3 Minutos)</h2>
+      <p class="quiet">Probá el recorrido completo de extremo a extremo en esta misma demostración interactiva:</p>
+      <div class="pres-demo-links">
+        <div class="pres-demo-card">
+          <div>
+            <strong>1. Rol Vecino / Turista</strong>
+            <span>Elegí un comercio, armá tu pedido y probalo con retiro o envío.</span>
+          </div>
+          <a href="#shop/orilla">Entrar a La Orilla Burger →</a>
+        </div>
+        <div class="pres-demo-card">
+          <div>
+            <strong>2. Rol Cocina / Comercio</strong>
+            <span>Recibí el pedido, imprimí la comanda térmica y despachalo.</span>
+          </div>
+          <a href="#business/orilla">Abrir Panel La Orilla →</a>
+        </div>
+        <div class="pres-demo-card">
+          <div>
+            <strong>3. Rol Repartidor</strong>
+            <span>Retirá el pedido y confirmá la entrega con el código de 4 dígitos.</span>
+          </div>
+          <a href="#rider/orilla">Abrir Reparto La Orilla →</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="pres-section">
+      <h2>7. Etapas de Implementación Recomendadas</h2>
+      <div class="pres-stages">
+        <div class="pres-stage-card">
+          <span class="pres-stage-tag">Fase 1 · Semanas 1 a 4</span>
+          <h3>Piloto Cerrado</h3>
+          <p>Convocatoria a 3-5 comercios referentes de Aluminé. Validación operativa de cartas, circuitos de retiro en mostrador y pruebas controladas con vecinos.</p>
+        </div>
+        <div class="pres-stage-card">
+          <span class="pres-stage-tag">Fase 2 · Semanas 5 a 10</span>
+          <h3>Lanzamiento Comunitario</h3>
+          <p>Apertura a la totalidad de la gastronomía local, incorporación de repartidores locales coordinados y difusión en comercios, redes y oficinas de turismo.</p>
+        </div>
+        <div class="pres-stage-card">
+          <span class="pres-stage-tag">Fase 3 · Mes 3 en adelante</span>
+          <h3>Autonomía y Consolidación</h3>
+          <p>Gobernanza participativa junto a comerciantes y referentes locales, estadísticas de impacto económico y evaluación de réplica en localidades de la región.</p>
+        </div>
+      </div>
+    </section>
+
+    <div style="margin-top:32px;text-align:center;">
+      <a class="button" href="#home">Volver al inicio y explorar comercios →</a>
+    </div>
+  </div>`;
+}
+
 function render({ focus = false } = {}) {
   if (!repository) return;
   try {
@@ -594,7 +785,8 @@ function render({ focus = false } = {}) {
       order: () => tracking(id),
       manage,
       business: () => businessPanel(id),
-      rider: () => riderPanel(id)
+      rider: () => riderPanel(id),
+      presentacion
     };
     main.innerHTML = Object.hasOwn(pages, page) ? pages[page]() : empty('Página no encontrada', 'Volvé al inicio para seguir explorando.');
     updateNavigation();
@@ -616,37 +808,82 @@ function rememberForm(form) {
   }
 }
 
+function openDemoModal() {
+  if (!modalContainer) return;
+  modalContainer.innerHTML = `<div class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="demo-modal-title">
+    <div class="modal-card">
+      <button class="modal-close" type="button" data-action="close-modal" aria-label="Cerrar modal">×</button>
+      <span class="eyebrow" style="color:var(--clay);">DEMOSTRACIÓN COMERCIAL · ALUMINÉ</span>
+      <h2 id="demo-modal-title">Acerca de esta demostración</h2>
+      <p style="font-size:14px;line-height:1.5;margin-bottom:14px;">
+        Estás interactuando con la versión de demostración comercial de <strong>CAUCE · Aluminé</strong>.
+      </p>
+      <div style="background:var(--soft);padding:14px 16px;border-radius:12px;font-size:12px;line-height:1.6;margin-bottom:18px;">
+        <div>• <strong>Comercios y productos ficticios</strong>: representan locales y platos típicos de Aluminé con fines ilustrativos.</div>
+        <div>• <strong>Cobros reales desactivados</strong>: simula pagos contra entrega (efectivo demo). Ninguna transacción genera cargos reales.</div>
+        <div>• <strong>Aislamiento en navegador</strong>: los pedidos y carritos se guardan exclusivamente en este dispositivo (localStorage).</div>
+        <div>• <strong>Circuito completo</strong>: podés alternar entre cliente, cocina con comanda térmica y repartidor con código de seguridad.</div>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <button class="button danger" type="button" data-action="reset-demo">Reiniciar datos demo</button>
+        <a class="button secondary" href="#presentacion" data-action="close-modal">Ver presentación institucional</a>
+        <button class="button secondary" type="button" data-action="close-modal" style="margin-left:auto;">Cerrar</button>
+      </div>
+    </div>
+  </div>`;
+}
+
 function openJoinModal() {
   if (!modalContainer) return;
   modalContainer.innerHTML = `<div class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="join-modal-title">
     <div class="modal-card">
       <button class="modal-close" type="button" data-action="close-modal" aria-label="Cerrar modal">×</button>
       <span class="eyebrow">SUMATE A CAUCE · ALUMINÉ</span>
-      <h2 id="join-modal-title">Tu comercio en la plataforma local</h2>
-      <p class="quiet">Sumá tu restaurante, pizzería, cafetería o rotisería a la red gastronómica de Aluminé.</p>
-      <div style="background:var(--soft);padding:14px;border-radius:12px;font-size:12px;margin-bottom:18px;">
-        <div>✓ <strong>Catálogo digital</strong> listo para compartir con vecinos y turistas.</div>
-        <div>✓ <strong>Control directo de pedidos</strong> con tiempos de espera y stock.</div>
-        <div>✓ <strong>Retiro y delivery</strong> gestionados desde tu propio panel en celular o PC.</div>
+      <h2 id="join-modal-title">Sumá tu comercio a la red local</h2>
+      <p class="quiet" style="font-size:13px;margin-bottom:14px;">Publicá tu carta digital, recibí pedidos para retiro o delivery y administrá tu cocina desde tu celular o PC.</p>
+      <div style="background:var(--soft);padding:12px 14px;border-radius:12px;font-size:12px;margin-bottom:16px;line-height:1.5;">
+        <div>✓ <strong>Sin comisiones extractivas</strong>: preservá el margen genuino de tu trabajo.</div>
+        <div>✓ <strong>Menú digital y comanda térmica</strong>: controlá disponibilidad de platos y tiempos de espera.</div>
+        <div>✓ <strong>Retiro en mostrador o delivery propio</strong>: adaptado a tus horarios y dinámica.</div>
       </div>
       <form id="join-form">
         <div class="form-grid">
-          <label class="field">Tu nombre y apellido<input name="name" required minlength="2" placeholder="Ej: Patricia Morales"></label>
-          <label class="field">Nombre de tu comercio<input name="businessName" required minlength="2" placeholder="Ej: Pizzería del Valle"></label>
-          <label class="field">Rubro gastronómico<select name="category">
-            <option value="Hamburguesería">Hamburguesería</option>
-            <option value="Pizzería / Empanadas">Pizzería / Empanadas</option>
-            <option value="Rotisería / Minutas">Rotisería / Minutas</option>
-            <option value="Cafetería / Pastelería">Cafetería / Pastelería</option>
-            <option value="Cervecería / Cocina">Cervecería / Cocina</option>
-            <option value="Comida casera / Pastas">Comida casera / Pastas</option>
-            <option value="Panadería">Panadería / Confitería</option>
-          </select></label>
-          <label class="field">Teléfono o WhatsApp<input name="phone" type="tel" required minlength="8" placeholder="Ej: 2942-556677"></label>
-          <label class="field wide">Comentario o consulta<textarea name="notes" placeholder="Contanos sobre tu local o tus horarios…"></textarea></label>
+          <label class="field">Tu nombre y apellido
+            <input name="name" required minlength="2" placeholder="Ej: Patricia Morales">
+          </label>
+          <label class="field">Nombre de tu comercio
+            <input name="businessName" required minlength="2" placeholder="Ej: Pizzería del Valle">
+          </label>
+          <label class="field">Rubro gastronómico
+            <select name="category">
+              <option value="Hamburguesería">Hamburguesería</option>
+              <option value="Pizzería / Empanadas">Pizzería / Empanadas</option>
+              <option value="Rotisería / Minutas">Rotisería / Minutas</option>
+              <option value="Cafetería / Pastelería">Cafetería / Pastelería</option>
+              <option value="Cervecería / Cocina">Cervecería / Cocina</option>
+              <option value="Comida casera / Pastas">Comida casera / Pastas</option>
+              <option value="Panadería">Panadería / Confitería</option>
+            </select>
+          </label>
+          <label class="field">Teléfono o WhatsApp
+            <input name="phone" type="tel" inputmode="tel" required minlength="8" placeholder="Ej: 2942-556677">
+          </label>
+          <label class="field">Dirección en Aluminé
+            <input name="address" placeholder="Ej: Av. 4 de Febrero 320">
+          </label>
+          <label class="field">Cantidad aprox. de platos
+            <select name="productCount">
+              <option value="1 a 15 platos">Hasta 15 platos</option>
+              <option value="15 a 40 platos">De 15 a 40 platos</option>
+              <option value="Más de 40 platos">Más de 40 platos</option>
+            </select>
+          </label>
+          <label class="field wide">Comentario o consulta adicional
+            <textarea name="notes" placeholder="Contanos sobre tu local o tus horarios…"></textarea>
+          </label>
         </div>
         <div style="display:flex;gap:12px;margin-top:20px;">
-          <button class="button full" type="submit">Enviar solicitud de incorporación demo</button>
+          <button class="button full" type="submit">Enviar solicitud de incorporación</button>
           <button class="button secondary" type="button" data-action="close-modal">Cancelar</button>
         </div>
       </form>
@@ -706,6 +943,29 @@ async function doAction(button) {
     return;
   }
 
+  if (action === 'open-demo-modal') {
+    openDemoModal();
+    return;
+  }
+
+  if (action === 'reset-demo') {
+    closeModal();
+    await resetDemonstration();
+    return;
+  }
+
+  if (action === 'focus-search') {
+    if (!location.hash.startsWith('#home')) go('home');
+    setTimeout(() => {
+      const searchInput = document.querySelector('#search');
+      if (searchInput) {
+        searchInput.focus();
+        searchInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 80);
+    return;
+  }
+
   if (action === 'open-join-modal') {
     openJoinModal();
     return;
@@ -731,6 +991,26 @@ async function doAction(button) {
   if (action === 'set-biz-tab') {
     activeBusinessTab = button.dataset.tab;
     render();
+    return;
+  }
+
+  if (action === 'quick-toggle-product') {
+    const b = repository.business(businessId);
+    const p = repository.products(b.id).find(item => item.id === productId);
+    if (p) {
+      await repository.updateProduct(
+        b.id,
+        p.id,
+        {
+          price: p.price,
+          stock: p.stock,
+          available: !p.available,
+        },
+        merchantActor(b)
+      );
+      render();
+      toast(p.available ? `🔴 ${p.name} pausado (agotado).` : `🟢 ${p.name} disponible en carta.`);
+    }
     return;
   }
 
@@ -814,40 +1094,39 @@ async function doAction(button) {
   }
 }
 
-main.addEventListener('click', async event => {
-  const button = event.target.closest('button[data-action]');
+document.addEventListener('click', async event => {
+  const button = event.target.closest('button[data-action], a[data-action]');
   if (!button || button.disabled) return;
   const currentHash = location.hash;
-  button.disabled = true;
+  if (button.tagName === 'BUTTON') button.disabled = true;
   try {
     await doAction(button);
     if (location.hash === currentHash) render();
   } catch (error) {
     toast(error.message);
-    button.disabled = false;
+  } finally {
+    if (button.tagName === 'BUTTON') button.disabled = false;
   }
 });
 
 if (modalContainer) {
-  modalContainer.addEventListener('click', async event => {
-    const button = event.target.closest('button[data-action]');
-    if (!button || button.disabled) return;
-    button.disabled = true;
-    try {
-      await doAction(button);
-    } catch (error) {
-      toast(error.message);
-      button.disabled = false;
-    }
-  });
-
   modalContainer.addEventListener('submit', async event => {
     if (event.target.id === 'join-form') {
       event.preventDefault();
       const data = Object.fromEntries(new FormData(event.target));
       await repository.addMerchantLead(data);
-      closeModal();
-      toast('¡Solicitud demo registrada! En un piloto real te contactaremos en 24 hs.');
+      modalContainer.innerHTML = `<div class="modal-overlay" role="dialog" aria-modal="true">
+        <div class="modal-card" style="text-align:center;padding:32px 24px;">
+          <div style="font-size:38px;margin-bottom:12px;">🎉</div>
+          <span class="eyebrow" style="color:var(--green);">SOLICITUD REGISTRADA</span>
+          <h2>¡Gracias ${esc(data.name || '')}!</h2>
+          <p style="font-size:14px;color:var(--muted);max-width:440px;margin:10px auto 20px;line-height:1.5;">
+            Registramos la solicitud para incorporar a <strong>${esc(data.businessName || 'tu comercio')}</strong> en CAUCE · Aluminé. En una implementación operativa real, el equipo local se contactará por WhatsApp al <strong>${esc(data.phone || '')}</strong> para dar de alta la carta y entregarte tu panel.
+          </p>
+          <button class="button" type="button" data-action="close-modal">Entendido</button>
+        </div>
+      </div>`;
+      toast('¡Solicitud demo registrada con éxito!');
     }
   });
 }
