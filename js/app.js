@@ -99,6 +99,7 @@ function renderSticker(name, size = 48, className = '') {
 function updateNavigation() {
   if (!repository) return;
   const state = repository.snapshot();
+  const nonempty = state.businesses.filter(b => repository.cart(b.id).lines.length);
   const totalItems = state.businesses.reduce((total, b) => total + countCart(repository.cart(b.id)), 0);
   const badge = document.querySelector('#cart-count');
   if (badge) badge.textContent = String(totalItems);
@@ -107,6 +108,12 @@ function updateNavigation() {
     mobileBadge.textContent = String(totalItems);
     mobileBadge.hidden = totalItems <= 0;
   }
+
+  const cartNav = document.querySelector('#cart-nav');
+  const bnavCarts = document.querySelector('#bnav-carts');
+  const cartHref = nonempty.length === 1 ? `#cart/${nonempty[0].id}` : '#carts';
+  if (cartNav) cartNav.setAttribute('href', cartHref);
+  if (bnavCarts) bnavCarts.setAttribute('href', cartHref);
 
   const [currentPage = 'home'] = route();
   document.querySelectorAll('.bottom-nav-item').forEach(item => {
@@ -453,26 +460,107 @@ function shop(businessId) {
 
 function carts() {
   const nonempty = repository.snapshot().businesses.filter(b => repository.cart(b.id).lines.length);
-  return `${back()}
-  <h1 class="page-title">Tus pedidos en curso</h1>
-  <p class="quiet">Cada pedido se procesa de forma independiente en su comercio correspondiente.</p>
-  ${nonempty.length ? nonempty.map(b => {
+  if (!nonempty.length) {
+    return `${back()}
+    <h1 class="page-title">Tu carrito</h1>
+    ${empty('Todavía no elegiste nada', 'Entrá a un comercio y agregá algo rico.', '#home', 'Explorar comercios')}`;
+  }
+
+  const [primary, ...secondary] = nonempty;
+
+  function renderPrimaryMerchantCard(b) {
     const cart = repository.cart(b.id);
     const count = countCart(cart);
+    const products = repository.products(b.id);
     let q = null;
     try { q = repository.quote(b.id, b.pickupEnabled ? 'pickup' : 'delivery'); } catch (_) {}
-    return `<article class="card row">
-      <div>
-        <span class="eyebrow">${esc(b.category)}</span>
-        <h3>${esc(b.name)}</h3>
-        <p class="quiet">${count} producto${count === 1 ? '' : 's'} · Subtotal ${q ? money(q.subtotal) : '—'}</p>
+    const itemsSummary = cart.lines.map(l => {
+      const p = products.find(item => item.id === l.productId);
+      return `${l.quantity} × ${esc(p?.name || 'Producto')}`;
+    }).join(' · ');
+
+    return `<article class="card cart-primary-card">
+      <div class="cart-primary-main">
+        <div class="cart-merchant-media">
+          <img src="${esc(b.coverImage)}" alt="" class="cart-merchant-img" onerror="this.style.display='none'">
+          <span class="store-badge-mini">${esc(b.initials || 'C')}</span>
+        </div>
+        <div class="cart-merchant-details">
+          <div class="cart-merchant-tags">
+            <span class="category-pill">${esc(b.category)}</span>
+            <span class="cart-merchant-address">${esc(b.address || 'Aluminé')}</span>
+          </div>
+          <h2 class="cart-merchant-name">${esc(b.name)}</h2>
+          <p class="cart-merchant-items-summary">${count} producto${count === 1 ? '' : 's'}: ${esc(itemsSummary)}</p>
+        </div>
       </div>
-      <div style="display:flex;gap:10px;">
-        <button class="button secondary" type="button" data-action="clear-cart" data-business="${esc(b.id)}">Vaciar</button>
-        <a class="button" href="#cart/${esc(b.id)}">Revisar carrito</a>
+      <div class="cart-primary-action-block">
+        <div class="cart-primary-subtotal">
+          <span class="subtotal-label">Subtotal estimado</span>
+          <strong class="subtotal-amount">${q ? money(q.subtotal) : '—'}</strong>
+        </div>
+        <div class="cart-primary-buttons">
+          <a class="button button-continue-order" href="#cart/${esc(b.id)}" aria-label="Revisar carrito">Continuar pedido <span aria-hidden="true">→</span></a>
+          <button class="link-button cart-clear-link" type="button" data-action="clear-cart" data-business="${esc(b.id)}">Vaciar este carrito</button>
+        </div>
       </div>
     </article>`;
-  }).join('') : empty('Todavía no elegiste nada', 'Entrá a un comercio y agregá algo rico.')}`;
+  }
+
+  function renderSecondaryMerchantCard(b) {
+    const cart = repository.cart(b.id);
+    const count = countCart(cart);
+    const products = repository.products(b.id);
+    let q = null;
+    try { q = repository.quote(b.id, b.pickupEnabled ? 'pickup' : 'delivery'); } catch (_) {}
+    const itemsSummary = cart.lines.map(l => {
+      const p = products.find(item => item.id === l.productId);
+      return `${l.quantity} × ${esc(p?.name || 'Producto')}`;
+    }).join(' · ');
+
+    return `<article class="card cart-secondary-card">
+      <div class="cart-secondary-main">
+        <div class="cart-merchant-media-sm">
+          <img src="${esc(b.coverImage)}" alt="" class="cart-merchant-img-sm" onerror="this.style.display='none'">
+          <span class="store-badge-mini">${esc(b.initials || 'C')}</span>
+        </div>
+        <div class="cart-secondary-details">
+          <div class="cart-merchant-tags">
+            <span class="category-pill">${esc(b.category)}</span>
+          </div>
+          <h3>${esc(b.name)}</h3>
+          <p class="quiet" style="font-size:12px;margin:2px 0 0;">${count} producto${count === 1 ? '' : 's'} · Subtotal ${q ? money(q.subtotal) : '—'}</p>
+        </div>
+      </div>
+      <div class="cart-secondary-action-block">
+        <a class="button secondary" href="#cart/${esc(b.id)}" aria-label="Revisar carrito">Continuar pedido <span aria-hidden="true">→</span></a>
+        <button class="link-button cart-clear-link" type="button" data-action="clear-cart" data-business="${esc(b.id)}">Vaciar</button>
+      </div>
+    </article>`;
+  }
+
+  return `${back()}
+  <div class="carts-view">
+    <div class="carts-view-header">
+      <h1 class="page-title">Tu carrito</h1>
+      <p class="quiet">Cada pedido se procesa de forma independiente en su comercio correspondiente.</p>
+    </div>
+    <div class="cart-primary-section">
+      ${secondary.length > 0 ? '<span class="eyebrow cart-section-eyebrow">TU PEDIDO PRINCIPAL</span>' : ''}
+      ${renderPrimaryMerchantCard(primary)}
+    </div>
+    ${secondary.length > 0 ? `
+      <div class="cart-secondary-section">
+        <div class="cart-secondary-header">
+          <h2 class="cart-secondary-title">Otros carritos guardados</h2>
+          <p class="quiet" style="font-size:13px;">Comercios donde tenés productos guardados para continuar más tarde.</p>
+        </div>
+        <div class="cart-secondary-list">
+          ${secondary.map(renderSecondaryMerchantCard).join('')}
+        </div>
+      </div>
+    ` : ''}
+  </div>`;
 }
 
 function cartPage(businessId) {
@@ -499,71 +587,143 @@ function cartPage(businessId) {
   try { quote = repository.quote(b.id, values.fulfillment); } catch (error) { quoteError = error.message; }
 
   return `${back(`#shop/${b.id}`, `Seguir eligiendo en ${b.name}`)}
-  <h1 class="page-title">Tu pedido en ${esc(b.name)}</h1>
-  <p class="quiet">Revisá todo antes de probar el circuito.</p>
+  <div class="checkout-page-header">
+    <span class="eyebrow">FINALIZAR PEDIDO</span>
+    <h1 class="page-title">Tu pedido en ${esc(b.name)}</h1>
+    <p class="quiet">Revisá tu selección y completá los datos para simular el circuito.</p>
+  </div>
   <div class="cart-layout">
-    <div>
-      <section class="card">
-        ${cart.lines.map(line => {
-          const p = products.find(item => item.id === line.productId);
-          const price = confirmedPrice(p);
-          return `<div class="cart-line">
-            <div>
-              <h3>${esc(p?.name || 'Producto no disponible')}</h3>
-              <span class="microcopy">${price === null ? 'Precio no disponible' : `${money(price)} cada uno`}</span>
-            </div>
-            <div class="quantity">
-              <button type="button" data-action="quantity" data-business="${esc(b.id)}" data-product="${esc(line.productId)}" data-quantity="${line.quantity - 1}" aria-label="Quitar una unidad de ${esc(p?.name)}">−</button>
-              <span>${line.quantity}</span>
-              <button type="button" data-action="quantity" data-business="${esc(b.id)}" data-product="${esc(line.productId)}" data-quantity="${line.quantity + 1}" aria-label="Agregar una unidad de ${esc(p?.name)}" ${!p || line.quantity >= p.stock || line.quantity >= 99 ? 'disabled' : ''}>+</button>
-            </div>
-          </div>`;
-        }).join('')}
-        <button class="link-button" type="button" data-action="clear-cart" data-business="${esc(b.id)}">Vaciar este carrito</button>
+    <div class="checkout-main-col">
+      <section class="card checkout-section">
+        <div class="checkout-section-header">
+          <span class="eyebrow">1. PRODUCTOS</span>
+          <h2 class="checkout-section-title">Tu pedido</h2>
+        </div>
+        <div class="cart-lines-list">
+          ${cart.lines.map(line => {
+            const p = products.find(item => item.id === line.productId);
+            const price = confirmedPrice(p);
+            const lineTotal = price !== null ? price * line.quantity : null;
+            const foodSvg = getProductSvg(p?.dishType || 'burger');
+            return `<div class="cart-line">
+              <div class="cart-line-product">
+                <div class="cart-product-thumb" aria-hidden="true">
+                  ${p?.image ? `<img src="${esc(p.image)}" alt="" onerror="this.style.display='none'">` : ''}
+                  ${foodSvg}
+                </div>
+                <div class="cart-line-info">
+                  <h3 class="cart-line-title">${esc(p?.name || 'Producto no disponible')}</h3>
+                  <span class="cart-line-unit-price">${price === null ? 'Precio no disponible' : `${money(price)} cada uno`}</span>
+                </div>
+              </div>
+              <div class="cart-line-controls">
+                <div class="quantity">
+                  <button type="button" data-action="quantity" data-business="${esc(b.id)}" data-product="${esc(line.productId)}" data-quantity="${line.quantity - 1}" aria-label="Quitar una unidad de ${esc(p?.name)}">−</button>
+                  <span>${line.quantity}</span>
+                  <button type="button" data-action="quantity" data-business="${esc(b.id)}" data-product="${esc(line.productId)}" data-quantity="${line.quantity + 1}" aria-label="Agregar una unidad de ${esc(p?.name)}" ${!p || line.quantity >= p.stock || line.quantity >= 99 ? 'disabled' : ''}>+</button>
+                </div>
+                <strong class="cart-line-total">${lineTotal !== null ? money(lineTotal) : '—'}</strong>
+              </div>
+            </div>`;
+          }).join('')}
+        </div>
+        <div class="cart-lines-footer">
+          <button class="link-button" type="button" data-action="clear-cart" data-business="${esc(b.id)}">Vaciar este carrito</button>
+        </div>
       </section>
 
-      <form id="checkout-form" data-form="checkout" data-business="${esc(b.id)}" class="card">
-        <h2>¿Cómo lo recibís?</h2>
-        <p class="microcopy">Usá datos ficticios. Se guardan únicamente en este navegador.</p>
-        <div class="field"><label for="fulfillment">Modalidad de entrega</label>
-          <select id="fulfillment" name="fulfillment">
-            ${b.pickupEnabled ? `<option value="pickup" ${values.fulfillment === 'pickup' ? 'selected' : ''}>Retiro por el comercio · sin costo</option>` : ''}
-            ${b.deliveryEnabled ? `<option value="delivery" ${values.fulfillment === 'delivery' ? 'selected' : ''}>Delivery del comercio · ${money(b.deliveryFee)}</option>` : ''}
-          </select>
-        </div>
-        <div class="form-grid">
-          <label class="field">Nombre de ejemplo
-            <input name="name" required minlength="2" maxlength="80" value="${esc(values.name)}" autocomplete="off" placeholder="Ej: Marcela González">
-          </label>
-          <label class="field">Teléfono de ejemplo
-            <input name="phone" type="tel" inputmode="tel" required minlength="8" maxlength="24" value="${esc(values.phone)}" autocomplete="off" placeholder="Ej: 2942-556677">
-          </label>
-          ${values.fulfillment === 'delivery' ? `
-            <label class="field wide">Dirección de ejemplo
-              <input name="address" required minlength="5" maxlength="200" value="${esc(values.address)}" autocomplete="off" placeholder="Ej: Av. 4 de Febrero 450">
+      <form id="checkout-form" data-form="checkout" data-business="${esc(b.id)}" class="card checkout-form">
+        <section class="checkout-sub-section">
+          <div class="checkout-section-header">
+            <span class="eyebrow">2. MODALIDAD</span>
+            <h2 class="checkout-section-title">¿Cómo recibís tu pedido?</h2>
+          </div>
+          <div class="fulfillment-picker">
+            <label for="fulfillment" class="sr-only">Modalidad de entrega</label>
+            <select id="fulfillment" name="fulfillment" class="sr-only-focusable" tabindex="-1">
+              ${b.pickupEnabled ? `<option value="pickup" ${values.fulfillment === 'pickup' ? 'selected' : ''}>Retiro por el comercio · sin costo</option>` : ''}
+              ${b.deliveryEnabled ? `<option value="delivery" ${values.fulfillment === 'delivery' ? 'selected' : ''}>Delivery del comercio · ${money(b.deliveryFee)}</option>` : ''}
+            </select>
+            <div class="fulfillment-options">
+              ${b.pickupEnabled ? `
+                <button type="button" class="fulfillment-card ${values.fulfillment === 'pickup' ? 'active' : ''}" data-action="set-fulfillment" data-value="pickup">
+                  <div class="fulfillment-card-top">
+                    <span class="fulfillment-card-title">${renderIcon('bag', 15)} Retiro en local</span>
+                    <span class="fulfillment-badge free">Sin costo</span>
+                  </div>
+                  <p class="fulfillment-card-meta">Retiro en mostrador · ${esc(b.address || 'Aluminé')}</p>
+                </button>
+              ` : ''}
+              ${b.deliveryEnabled ? `
+                <button type="button" class="fulfillment-card ${values.fulfillment === 'delivery' ? 'active' : ''}" data-action="set-fulfillment" data-value="delivery">
+                  <div class="fulfillment-card-top">
+                    <span class="fulfillment-card-title">${renderIcon('delivery', 15)} Delivery del comercio</span>
+                    <span class="fulfillment-badge fee">${money(b.deliveryFee)}</span>
+                  </div>
+                  <p class="fulfillment-card-meta">Reparto directo · Demora aprox. ${esc(b.eta)}</p>
+                </button>
+              ` : ''}
+            </div>
+          </div>
+        </section>
+
+        <section class="checkout-sub-section">
+          <div class="checkout-section-header">
+            <span class="eyebrow">3. TUS DATOS</span>
+            <h2 class="checkout-section-title">Datos de contacto</h2>
+          </div>
+          <div class="form-grid">
+            <label class="field" for="checkout-name">
+              <span>Nombre <span class="sr-only">de ejemplo</span></span>
+              <input id="checkout-name" name="name" aria-label="Nombre de ejemplo" required minlength="2" maxlength="80" value="${esc(values.name)}" autocomplete="off" placeholder="Ej: Marcela González">
             </label>
-            <label class="field wide">Indicaciones para la entrega (opcional)
-              <input name="reference" maxlength="150" value="${esc(values.reference || '')}" autocomplete="off" placeholder="Ej: Casa con reja verde, timbre al fondo">
+            <label class="field" for="checkout-phone">
+              <span>Teléfono de contacto <span class="sr-only">de ejemplo</span></span>
+              <input id="checkout-phone" name="phone" type="tel" inputmode="tel" aria-label="Teléfono de ejemplo" required minlength="8" maxlength="24" value="${esc(values.phone)}" autocomplete="off" placeholder="Ej: 2942-556677">
             </label>
-          ` : ''}
-          <label class="field wide">Notas para la cocina (opcional)
-            <textarea name="notes" maxlength="300" placeholder="Aclaraciones para la preparación (sin sal, aderezos aparte, etc.)">${esc(values.notes)}</textarea>
-          </label>
-        </div>
+            ${values.fulfillment === 'delivery' ? `
+              <label class="field wide" for="checkout-address">
+                <span>Dirección de entrega <span class="sr-only">de ejemplo</span></span>
+                <input id="checkout-address" name="address" aria-label="Dirección de ejemplo" required minlength="5" maxlength="200" value="${esc(values.address)}" autocomplete="off" placeholder="Ej: Av. 4 de Febrero 450">
+              </label>
+              <label class="field wide" for="checkout-reference">
+                <span>Indicaciones para la entrega (opcional)</span>
+                <input id="checkout-reference" name="reference" maxlength="150" value="${esc(values.reference || '')}" autocomplete="off" placeholder="Ej: Casa con reja verde, timbre al fondo">
+              </label>
+            ` : ''}
+          </div>
+        </section>
+
+        <section class="checkout-sub-section">
+          <div class="checkout-section-header">
+            <span class="eyebrow">4. INDICACIONES</span>
+            <h2 class="checkout-section-title">Notas para la cocina (opcional)</h2>
+          </div>
+          <label class="sr-only" for="checkout-notes">Notas para la cocina (opcional)</label>
+          <textarea id="checkout-notes" name="notes" maxlength="300" placeholder="Aclaraciones para la preparación (sin sal, aderezos aparte, etc.)">${esc(values.notes)}</textarea>
+        </section>
       </form>
     </div>
 
-    <aside class="sidebox">
-      <h3>Resumen</h3>
+    <aside class="sidebox checkout-sidebox">
+      <div class="sidebox-header">
+        <span class="eyebrow">RESUMEN</span>
+        <h3 class="sidebox-title">Detalle a pagar</h3>
+      </div>
       <div class="totals">
         <div class="row"><span>Productos</span><strong>${quote ? money(quote.subtotal) : '—'}</strong></div>
-        <div class="row"><span>${values.fulfillment === 'pickup' ? 'Retiro' : 'Envío'}</span><strong>${values.fulfillment === 'pickup' ? 'Gratis' : money(b.deliveryFee)}</strong></div>
-        <div class="row total"><span>Total demo</span><strong>${quote ? money(quote.total) : '—'}</strong></div>
+        <div class="row"><span>${values.fulfillment === 'pickup' ? 'Retiro en mostrador' : 'Costo de envío'}</span><strong>${values.fulfillment === 'pickup' ? 'Sin costo' : money(b.deliveryFee)}</strong></div>
+        <div class="row total"><span>Total a pagar</span><strong class="total-display">${quote ? money(quote.total) : '—'}</strong></div>
       </div>
       ${quoteError ? `<div class="notice error">${esc(quoteError)}</div>` : ''}
-      <p class="microcopy">Pago simulado contra entrega. Mercado Pago y cualquier cobro real están deshabilitados.</p>
-      <button class="button full" type="submit" form="checkout-form" ${quote ? '' : 'disabled'}>Crear pedido de prueba</button>
-      <p class="microcopy below-note">Ningún comercio recibirá este pedido.</p>
+      <div class="checkout-sticky-bar">
+        <div class="checkout-sticky-meta">
+          <span class="checkout-sticky-label">Total</span>
+          <strong class="checkout-sticky-amount">${quote ? money(quote.total) : '—'}</strong>
+        </div>
+        <button class="button full button-confirm-order" type="submit" form="checkout-form" aria-label="Crear pedido de prueba" ${quote ? '' : 'disabled'}>Confirmar pedido</button>
+      </div>
+      <p class="microcopy below-note">Demostración comercial · Pago simulado contra entrega</p>
     </aside>
   </div>`;
 }
@@ -590,24 +750,26 @@ function tracking(orderId) {
     : '';
 
   return `${back('#orders', 'Volver a mis pedidos')}
-  <div class="narrow">
-    <span class="eyebrow">SEGUIMIENTO DE PEDIDO</span>
-    <h1 class="page-title">${esc(STATUS_LABELS[order.status] || order.status)}</h1>
-    <p class="quiet">${esc(order.code)} · ${esc(b.name)}</p>
+  <div class="narrow tracking-view">
+    <div class="tracking-header">
+      <span class="eyebrow">SEGUIMIENTO EN TIEMPO REAL</span>
+      <h1 class="page-title">${esc(STATUS_LABELS[order.status] || order.status)}</h1>
+      <p class="quiet tracking-order-meta"><span class="order-code-badge">${esc(order.code)}</span> · <strong>${esc(b.name)}</strong> · ${order.fulfillment === 'pickup' ? 'Retiro en mostrador' : 'Delivery del comercio'}</p>
+    </div>
     ${renderPublicOrderTimeline(order.status)}
     ${deliveryCodeMarkup}
     ${orderCard(order, customerActor)}
     ${mapSvg}
-    <section class="card">
+    <section class="card tracking-history-card">
       <h2>Así va tu pedido</h2>
       <ol class="timeline">
         ${order.history.map(event => `<li>${esc(STATUS_LABELS[event.status] || event.status)}<small>${esc(new Date(event.at).toLocaleString('es-AR'))}</small></li>`).join('')}
       </ol>
       <p class="microcopy">Los estados cambian desde los paneles demo. No hay GPS ni seguimiento de repartidores reales.</p>
     </section>
-    <div class="notice"><strong>Probá el otro lado del mostrador.</strong>Abrí el panel demo para confirmar y preparar este pedido.</div>
+    <div class="notice"><strong>Probá el otro lado del mostrador.</strong> Podés avanzar y preparar este pedido desde los paneles de demostración.</div>
     <div class="order-actions">
-      <a class="button" href="#business/${esc(b.id)}">Abrir panel demo de ${esc(b.name)}</a>
+      <a class="button" href="#business/${esc(b.id)}">Abrir panel de ${esc(b.name)}</a>
       ${order.fulfillment === 'delivery' ? `<a class="button secondary" href="#rider/${esc(b.id)}">Abrir reparto demo</a>` : ''}
     </div>
   </div>`;
@@ -656,16 +818,33 @@ function orderCard(order, actor) {
       </div>
     </div>
     ${deliveryCodeBadge}
-    ${actor.kind !== 'customer' ? (
-      isRiderAwaiting
-        ? `<p class="microcopy below-note" style="color:var(--clay);">Pedido en cocina. Los datos de contacto y entrega se activan al retirar del local.</p>`
-        : `<p class="microcopy below-note">${esc(order.customer?.name)} · ${esc(formattedPhone || order.customer?.phone)}
-          ${order.customer?.address ? `<br>${esc(order.customer.address)}` : ''}
-          ${order.customer?.notes ? `<br>Nota: ${esc(order.customer.notes)}` : ''}</p>`
+    ${actor.kind === 'rider' ? `
+      <div class="rider-mission-card">
+        <div class="rider-mission-step origin">
+          <span class="rider-mission-badge">RETIRAR EN</span>
+          <strong>${esc(b.name)}</strong>
+          <span class="quiet" style="font-size:12px;">${esc(b.address || 'Aluminé')}</span>
+        </div>
+        <div class="rider-mission-step destination">
+          <span class="rider-mission-badge">ENTREGAR EN</span>
+          ${isRiderAwaiting
+            ? `<p class="quiet" style="margin:2px 0 0;font-size:12px;color:var(--clay);">Pedido en cocina. Los datos de contacto y entrega se activan al retirar del local.</p>`
+            : `<strong>${esc(order.customer?.name)}</strong>
+               <span class="rider-address">${esc(order.customer?.address || 'Dirección de entrega')}</span>
+               ${order.customer?.phone ? `<a href="tel:${esc(order.customer.phone)}" class="rider-phone-link">${renderIcon('phone', 12)} ${esc(formattedPhone || order.customer.phone)}</a>` : ''}
+               ${order.customer?.notes ? `<span class="rider-notes">Nota: ${esc(order.customer.notes)}</span>` : ''}`
+          }
+        </div>
+      </div>
+    ` : ''}
+    ${actor.kind === 'merchant' ? (
+      `<p class="microcopy below-note">${esc(order.customer?.name)} · ${esc(formattedPhone || order.customer?.phone)}
+        ${order.customer?.address ? `<br>${esc(order.customer.address)}` : ''}
+        ${order.customer?.notes ? `<br>Nota: ${esc(order.customer.notes)}` : ''}</p>`
     ) : ''}
     ${actions.length > 0 ? `
       <div class="order-actions">
-        ${actions.map(status => `<button type="button" class="button ${status === 'canceled' ? 'danger' : ''}" data-action="transition" data-order="${esc(order.id)}" data-version="${order.version}" data-status="${esc(status)}" data-business="${esc(order.businessId)}" data-actor="${esc(actor.kind)}" data-rider="${esc(actor.kind === 'rider' ? actor.id : '')}">${esc(actionLabels[status] || status)}</button>`).join('')}
+        ${actions.map(status => `<button type="button" class="button ${actor.kind === 'rider' ? 'button-rider-dominant full' : (status === 'canceled' ? 'danger' : '')}" data-action="transition" data-order="${esc(order.id)}" data-version="${order.version}" data-status="${esc(status)}" data-business="${esc(order.businessId)}" data-actor="${esc(actor.kind)}" data-rider="${esc(actor.kind === 'rider' ? actor.id : '')}">${esc(actionLabels[status] || status)}</button>`).join('')}
       </div>
     ` : ''}
   </article>`;
@@ -748,8 +927,14 @@ function businessPanel(businessId) {
         <form data-form="product" data-business="${esc(b.id)}" data-product="${esc(p.id)}">
           <h3>${esc(p.name)}</h3>
           <div class="edit-fields">
-            <label class="field">Precio de ejemplo<input name="price" type="number" min="1" max="10000000" step="1" required value="${p.price}"></label>
-            <label class="field">Stock de ejemplo<input name="stock" type="number" min="0" max="10000" step="1" required value="${p.stock}"></label>
+            <label class="field" for="edit-price-${p.id}">
+              <span>Precio <span class="sr-only">de ejemplo</span></span>
+              <input id="edit-price-${p.id}" name="price" aria-label="Precio de ejemplo" type="number" min="1" max="10000000" step="1" required value="${p.price}">
+            </label>
+            <label class="field" for="edit-stock-${p.id}">
+              <span>Stock disponible <span class="sr-only">de ejemplo</span></span>
+              <input id="edit-stock-${p.id}" name="stock" aria-label="Stock de ejemplo" type="number" min="0" max="10000" step="1" required value="${p.stock}">
+            </label>
           </div>
           <label class="check-label" style="margin: 8px 0;"><input name="available" type="checkbox" ${p.available ? 'checked' : ''}> Disponible</label>
           <button class="button secondary full" type="submit">Guardar cambios demo</button>
@@ -807,20 +992,22 @@ function riderPanel(businessId) {
   const progress = Math.round(getRouteProgress(activeOrder) * 100);
 
   return `${back(`#business/${b.id}`, 'Volver al panel del comercio')}
-  <span class="eyebrow">REPARTO DEL COMERCIO · DEMO</span><h1 class="page-title">${esc(b.name)}</h1>
-  ${demoNotice()}
-  <div class="card" style="margin-bottom:20px;border-left:4px solid var(--green);">
-    <div class="row">
+  <div class="rider-panel-view">
+    <div class="rider-header">
       <div>
-        <span class="eyebrow" style="color:var(--green);">ESTADO DE RUTA (${esc(rider.name)})</span>
-        <h3 style="margin:4px 0;">${esc(riderStatusLabel)}</h3>
-        <p class="microcopy">Progreso estimado del circuito: <strong>${progress}%</strong></p>
+        <span class="eyebrow">REPARTO DEL COMERCIO · DESPACHO LOCAL</span>
+        <h1 class="page-title">${esc(b.name)}</h1>
       </div>
-      ${activeOrder ? `<a class="button secondary" href="#order/${esc(activeOrder.id)}">Ver en mapa</a>` : ''}
+      <div class="rider-status-bar">
+        <span class="rider-name-tag">${renderIcon('delivery', 14)} ${esc(rider.name)}</span>
+        <span class="rider-state-tag">${esc(riderStatusLabel)}</span>
+        <span class="rider-progress-tag">${progress}%</span>
+      </div>
     </div>
-  </div>
-  <p class="quiet">Solo aparecen los pedidos asignados a ${esc(rider.name)}. No se comparte una flota entre comercios.</p>
-  ${all.length ? all.map(o => orderCard(o, actor)).join('') : empty('Todavía no hay pedidos asignados', 'Prepará un pedido con delivery y asignalo desde el panel de este comercio.', `#business/${b.id}`, 'Ir al panel del comercio')}`;
+    ${demoNotice()}
+    <p class="quiet" style="margin-bottom:16px;">Solo aparecen los pedidos asignados a ${esc(rider.name)}. No se comparte una flota entre comercios.</p>
+    ${all.length ? all.map(o => orderCard(o, actor)).join('') : empty('Todavía no hay pedidos asignados', 'Prepará un pedido con delivery y asignalo desde el panel de este comercio.', `#business/${b.id}`, 'Ir al panel del comercio')}
+  </div>`;
 }
 
 function presentacion() {
@@ -1068,6 +1255,11 @@ function render({ focus = false } = {}) {
   if (!repository) return;
   try {
     const [page = 'home', id] = route();
+    const isCartFlow = page === 'cart' || page === 'carts';
+    const footer = document.querySelector('.footer');
+    if (footer) {
+      footer.classList.toggle('footer-compact', isCartFlow);
+    }
     const pages = {
       home,
       shop: () => shop(id),
@@ -1361,6 +1553,16 @@ async function doAction(button) {
 
   if (action === 'clear-cart') {
     await repository.clearCart(businessId);
+    return;
+  }
+
+  if (action === 'set-fulfillment') {
+    const select = document.querySelector('#fulfillment');
+    if (select && select.value !== button.dataset.value) {
+      select.value = button.dataset.value;
+      rememberForm(select.closest('form'));
+      render();
+    }
     return;
   }
 
