@@ -639,66 +639,97 @@ function presentacion() {
   return `${back('#home', 'Volver a los comercios')}
   <div class="pres-container">
     <div class="pres-hero">
-      <span class="eyebrow">PROPUESTA DE INFRAESTRUCTURA DIGITAL COMUNITARIA</span>
+      <span class="eyebrow">PROPUESTA DE INFRAESTRUCTURA DIGITAL COMPARTIDA</span>
       <h1>CAUCE · Plataforma Local para Aluminé</h1>
-      <p class="pres-lead">Una solución tecnológica diseñada para dinamizar el comercio local, retener el valor económico dentro de la comunidad y conectar vecinos y visitantes con la gastronomía de Aluminé sin intermediación extractiva.</p>
+      <p class="pres-lead">Una propuesta tecnológica orientada a facilitar la digitalización de la gastronomía local, conectar a vecinos y visitantes con los comercios de Aluminé y brindar herramientas operativas sencillas y compartidas.</p>
     </div>
 
     <section class="pres-section">
-      <h2>1. El Desafío Actual: Dependencia y Fuga Económica</h2>
+      <h2>1. El Desafío: Dinámica y Digitalización Local</h2>
       <div class="pres-grid-3">
         <div class="pres-card">
-          <h3>Fuga de Valor Local</h3>
-          <p>Las aplicaciones comerciales centralizadas retienen entre un <strong class="pres-highlight">25% y 35% de comisión</strong> por cada pedido, sustrayendo recursos genuinos del circuito económico de Aluminé.</p>
+          <h3>Canales digitales fragmentados</h3>
+          <p>Muchos comercios pequeños gestionan consultas, cartas y pedidos a través de distintos canales. CAUCE propone concentrar descubrimiento, pedidos y operación en una experiencia digital local común.</p>
         </div>
         <div class="pres-card">
-          <h3>Exclusión de Pequeños Comercios</h3>
-          <p>Rotiserías, casas de empanadas y cocinas familiares quedan marginadas por costos inaccesibles, burocracia y exigencias inviables para localidades cordilleranas.</p>
+          <h3>Barreras de digitalización</h3>
+          <p>Para un comercio pequeño, implementar por cuenta propia catálogo, pedidos, seguimiento y herramientas de gestión puede requerir tiempo y recursos técnicos considerables.</p>
         </div>
         <div class="pres-card">
-          <h3>Desconexión Territorial</h3>
-          <p>Los algoritmos estándar de las grandes ciudades ignoran la estacionalidad turística, las distancias reales y el trato directo característico de nuestra comunidad.</p>
+          <h3>Una experiencia pensada para la localidad</h3>
+          <p>CAUCE puede adaptarse a la escala, los horarios, la estacionalidad y las modalidades de entrega propias de Aluminé, respetando la cercanía característica de la comunidad.</p>
         </div>
       </div>
     </section>
 
     <section class="pres-section">
-      <h2>2. La Solución: CAUCE como Infraestructura Digital Local</h2>
-      <div class="pres-grid-2">
+      <h2>2. La Solución: CAUCE como Infraestructura Digital Compartida</h2>
+      <div class="pres-grid-3">
         <div class="pres-card">
-          <h3>Infraestructura Soberana y Ágil</h3>
-          <p>CAUCE funciona como un canal digital comunitario de acceso universal, sin descargas pesadas ni comisiones confiscatorias. Opera como una herramienta compartida de servicio local.</p>
+          <h3>Plataforma común de gestión</h3>
+          <p>CAUCE propone una plataforma común donde comercios gastronómicos puedan publicar su oferta, recibir pedidos y administrar retiro o delivery desde herramientas simples e integradas.</p>
         </div>
         <div class="pres-card">
-          <h3>Diseño Orientado a la Cordillera</h3>
-          <p>Construida con autonomía técnica, capacidad de funcionamiento offline y optimizada para conexiones móviles reales en zonas de montaña.</p>
+          <h3>Diseñada para crecer</h3>
+          <p>La arquitectura permite comenzar en Aluminé y, si el modelo resulta satisfactorio, incorporar nuevas localidades o sectores productivos sin duplicar el sistema.</p>
+        </div>
+        <div class="pres-card">
+          <h3>Arquitectura independiente del proveedor</h3>
+          <p>El software está diseñado para poder separar la experiencia de usuario, la lógica de negocio y la infraestructura de datos, facilitando futuras decisiones sobre alojamiento y operación.</p>
         </div>
       </div>
     </section>
 
     <section class="pres-section">
       <h2>3. Beneficios por Actor de la Comunidad</h2>
-      <div class="pres-grid-3">
+      <div class="pres-grid-2">
         <div class="pres-card">
           <h3>👤 Para el Vecino y Turista</h3>
-          <p>• Catálogo unificado de comercios de Aluminé en un solo enlace.<br>• Elección clara entre retiro en mostrador o delivery.<br>• Seguimiento del pedido paso a paso con código seguro de entrega de 4 dígitos.</p>
+          <p>
+            • Descubrir la oferta gastronómica de Aluminé en un catálogo unificado.<br>
+            • Consultar cartas actualizadas y precios de manera clara.<br>
+            • Elegir entre retiro en mostrador o delivery según su conveniencia.<br>
+            • Realizar pedidos y seguir su evolución con verificación transparente.
+          </p>
         </div>
         <div class="pres-card">
           <h3>🏪 Para el Comercio Local</h3>
-          <p>• Menú digital autogestionable: pausar platos o ajustar demoras al instante.<br>• Comanda térmica estándar (32 columnas) para cocina o mostrador.<br>• Ahorro directo: elimina comisiones abusivas y cuida el margen del negocio.</p>
+          <p>
+            • Catálogo autogestionable con actualización ágil de precios y disponibilidad.<br>
+            • Pedidos organizados en bandejas de trabajo para mostrador y cocina.<br>
+            • Herramientas operativas simples y comanda clara para agilizar la preparación.<br>
+            • Flexibilidad para operar con reparto propio o retiro en local.
+          </p>
         </div>
         <div class="pres-card">
           <h3>🛵 Para el Repartidor</h3>
-          <p>• Circuitos coordinados directamente con el local.<br>• Protección de datos del cliente hasta el momento del retiro del pedido.<br>• Verificación en mano mediante código para evitar confusiones en la entrega.</p>
+          <p>
+            • Asignación operativa de pedidos coordinada directamente con el local.<br>
+            • Hoja de ruta para retiro, trayecto y confirmación de llegada.<br>
+            • Verificación segura en mano mediante código de 4 dígitos.<br>
+            • Protección de datos del cliente hasta el retiro efectivo del pedido.
+          </p>
+        </div>
+        <div class="pres-card">
+          <h3>🏛️ Para la Localidad y Entidades Locales</h3>
+          <p>
+            • Concentrar la oferta gastronómica de Aluminé en una referencia digital común.<br>
+            • Facilitar presencia y herramientas digitales accesibles a pequeños emprendimientos.<br>
+            • Disponer de una plataforma compartida con posibilidad de acompañamiento institucional.<br>
+            • Generar información operativa agregada en una futura fase, respetando la privacidad.
+          </p>
         </div>
       </div>
     </section>
 
     <section class="pres-section">
-      <h2>4. Capacidad y Retención de Valor para Aluminé</h2>
+      <h2>4. Un Modelo Adaptable a la Realidad Local</h2>
       <div class="pres-card">
-        <p style="font-size:15px;line-height:1.6;color:var(--ink);">
-          La arquitectura de CAUCE <strong>permite a municipios, cámaras de comercio y asociaciones locales</strong> articular una estrategia digital propia sin delegar soberanía de datos ni presupuesto en intermediarios externos. Diseñada para <strong>retener el 100% del valor económico dentro de Aluminé</strong>, fortalece la economía barrial, el empleo local y la promoción de la gastronomía cordillerana.
+        <p style="font-size:15px;line-height:1.6;color:var(--ink);margin-bottom:12px;">
+          CAUCE puede implementarse con diferentes esquemas de sostenibilidad según las necesidades de los comercios y de las instituciones participantes. El modelo económico definitivo debe definirse junto a los actores del piloto.
+        </p>
+        <p style="font-size:14px;line-height:1.6;color:var(--muted);margin:0;">
+          La propuesta contempla alternativas que van desde la autogestión comercial asociativa hasta un posible acompañamiento institucional o modelo mixto a evaluar junto a la Cámara de Comercio o dependencias locales interesadas.
         </p>
       </div>
     </section>
@@ -707,61 +738,89 @@ function presentacion() {
       <h2>5. Modelo Multi-Localidad Modular</h2>
       <div class="pres-grid-2">
         <div class="pres-card">
-          <h3>Aislamiento Estricto por Territorio</h3>
-          <p>Cada localidad opera con su propio ámbito (<code style="background:var(--soft);padding:2px 6px;border-radius:4px;">localityId</code>), garantizando que los catálogos, pedidos y repartos de Aluminé no se mezclen con otras regiones.</p>
+          <h3>Aislamiento por localidad</h3>
+          <p>Cada comunidad opera bajo su propio ámbito delimitado (<code style="background:var(--soft);padding:2px 6px;border-radius:4px;">localityId</code>), asegurando que catálogos, pedidos y repartos no se superpongan entre distintas áreas.</p>
         </div>
         <div class="pres-card">
-          <h3>Escalabilidad Regional</h3>
-          <p>La misma base técnica puede extenderse a localidades vecinas de la cuenca (Villa Pehuenia - Moquehue, Junín de los Andes, San Martín de los Andes) compartiendo costos de infraestructura sin perder autonomía.</p>
+          <h3>Capacidad de extensión regional</h3>
+          <p>La base modular permite proyectar futuras instancias para otras localidades cordilleranas interesadas, compartiendo la base técnica con plena autonomía operativa de cada comunidad.</p>
         </div>
       </div>
     </section>
 
     <section class="pres-section">
-      <h2>6. Demostración Interactiva Guiada (Circuito en 3 Minutos)</h2>
-      <p class="quiet">Probá el recorrido completo de extremo a extremo en esta misma demostración interactiva:</p>
+      <h2>6. Demostración Interactiva Guiada (Circuito de Prueba)</h2>
+      <p class="quiet">Esta demostración permite recorrer el funcionamiento propuesto para cada rol de forma simulada:</p>
       <div class="pres-demo-links">
         <div class="pres-demo-card">
           <div>
-            <strong>1. Rol Vecino / Turista</strong>
-            <span>Elegí un comercio, armá tu pedido y probalo con retiro o envío.</span>
+            <strong>1. Rol Vecino / Cliente</strong>
+            <span>Elegí un comercio de ejemplo, armá tu pedido y probalo con retiro o envío.</span>
           </div>
-          <a href="#shop/orilla">Entrar a La Orilla Burger →</a>
+          <a href="#shop/orilla">Ver catálogo de La Orilla →</a>
         </div>
         <div class="pres-demo-card">
           <div>
-            <strong>2. Rol Cocina / Comercio</strong>
-            <span>Recibí el pedido, imprimí la comanda térmica y despachalo.</span>
+            <strong>2. Rol Cocina / Mostrador</strong>
+            <span>Recibí el pedido simulado, organizá la comanda y pasalo a preparación.</span>
           </div>
-          <a href="#business/orilla">Abrir Panel La Orilla →</a>
+          <a href="#business/orilla">Ver panel de comercio →</a>
         </div>
         <div class="pres-demo-card">
           <div>
             <strong>3. Rol Repartidor</strong>
-            <span>Retirá el pedido y confirmá la entrega con el código de 4 dígitos.</span>
+            <span>Visualizá el pedido asignado y completá la entrega con el código de verificación.</span>
           </div>
-          <a href="#rider/orilla">Abrir Reparto La Orilla →</a>
+          <a href="#rider/orilla">Ver panel de reparto →</a>
         </div>
       </div>
     </section>
 
     <section class="pres-section">
-      <h2>7. Etapas de Implementación Recomendadas</h2>
+      <h2>7. Etapas de Implementación Sugeridas</h2>
+      <p class="quiet" style="margin-bottom:14px;">Los tiempos dependerán del alcance acordado, cantidad de comercios y modelo operativo:</p>
       <div class="pres-stages">
         <div class="pres-stage-card">
-          <span class="pres-stage-tag">Fase 1 · Semanas 1 a 4</span>
-          <h3>Piloto Cerrado</h3>
-          <p>Convocatoria a 3-5 comercios referentes de Aluminé. Validación operativa de cartas, circuitos de retiro en mostrador y pruebas controladas con vecinos.</p>
+          <span class="pres-stage-tag">Etapa 1</span>
+          <h3>Validación con comercios</h3>
+          <p>Reuniones con comerciantes interesados, relevamiento de modalidades de venta, cartas y horarios reales.</p>
         </div>
         <div class="pres-stage-card">
-          <span class="pres-stage-tag">Fase 2 · Semanas 5 a 10</span>
-          <h3>Lanzamiento Comunitario</h3>
-          <p>Apertura a la totalidad de la gastronomía local, incorporación de repartidores locales coordinados y difusión en comercios, redes y oficinas de turismo.</p>
+          <span class="pres-stage-tag">Etapa 2</span>
+          <h3>Piloto controlado</h3>
+          <p>Puesta en funcionamiento inicial con un grupo acotado de locales para validar circuitos de retiro y delivery.</p>
         </div>
         <div class="pres-stage-card">
-          <span class="pres-stage-tag">Fase 3 · Mes 3 en adelante</span>
-          <h3>Autonomía y Consolidación</h3>
-          <p>Gobernanza participativa junto a comerciantes y referentes locales, estadísticas de impacto económico y evaluación de réplica en localidades de la región.</p>
+          <span class="pres-stage-tag">Etapa 3</span>
+          <h3>Evaluación y ajustes</h3>
+          <p>Análisis conjunto de la experiencia con comerciantes, clientes y repartidores para optimizar herramientas.</p>
+        </div>
+        <div class="pres-stage-card">
+          <span class="pres-stage-tag">Etapa 4</span>
+          <h3>Posible ampliación</h3>
+          <p>Incorporación progresiva de nuevos comercios y evaluación de extensión a otros rubros locales.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="pres-section">
+      <h2>8. Preguntas Frecuentes y Consideraciones</h2>
+      <div class="pres-grid-2">
+        <div class="pres-card">
+          <h3>¿Qué equipamiento requiere un comercio?</h3>
+          <p>Cualquier dispositivo con navegador web (teléfono móvil, tablet o computadora) con conexión a internet. No exige instalaciones especiales ni equipamiento específico.</p>
+        </div>
+        <div class="pres-card">
+          <h3>¿Cómo se contemplan los pagos?</h3>
+          <p>En esta demostración se simula pago en efectivo o contra entrega. En un esquema operativo real, los métodos de cobro se acuerdan según lo que prefiera cada comercio.</p>
+        </div>
+        <div class="pres-card">
+          <h3>¿Cómo se maneja la privacidad de datos?</h3>
+          <p>El sistema está pensado para minimizar los datos recabados: la información del pedido se utiliza exclusivamente para su despacho y entrega operativa.</p>
+        </div>
+        <div class="pres-card">
+          <h3>¿Cuál es el siguiente paso sugerido?</h3>
+          <p>Presentar la demostración a comerciantes e instituciones locales para recoger devoluciones y definir si existe interés en coordinar un piloto.</p>
         </div>
       </div>
     </section>
@@ -842,9 +901,9 @@ function openJoinModal() {
       <h2 id="join-modal-title">Sumá tu comercio a la red local</h2>
       <p class="quiet" style="font-size:13px;margin-bottom:14px;">Publicá tu carta digital, recibí pedidos para retiro o delivery y administrá tu cocina desde tu celular o PC.</p>
       <div style="background:var(--soft);padding:12px 14px;border-radius:12px;font-size:12px;margin-bottom:16px;line-height:1.5;">
-        <div>✓ <strong>Sin comisiones extractivas</strong>: preservá el margen genuino de tu trabajo.</div>
-        <div>✓ <strong>Menú digital y comanda térmica</strong>: controlá disponibilidad de platos y tiempos de espera.</div>
-        <div>✓ <strong>Retiro en mostrador o delivery propio</strong>: adaptado a tus horarios y dinámica.</div>
+        <div>✓ <strong>Herramienta directa y local</strong>: pensada para acompañar la actividad del comercio sin intermediaciones complejas.</div>
+        <div>✓ <strong>Menú digital y comanda para cocina</strong>: controlá disponibilidad de platos y tiempos de espera en tiempo real.</div>
+        <div>✓ <strong>Retiro en mostrador o delivery propio</strong>: adaptable a los horarios y modalidades de cada local.</div>
       </div>
       <form id="join-form">
         <div class="form-grid">
