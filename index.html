@@ -13,33 +13,34 @@
 </head>
 <body>
   <a class="skip" href="#main">Saltar al contenido</a>
-  <div class="demo-banner">
-    <span>DEMOSTRACIÓN COMERCIAL · ALUMINÉ</span>
-    <span>Comercios locales ficticios. Circuito completo de pedidos y paneles.</span>
-    <button class="demo-reset-pill" id="banner-reset-demo" type="button">Reiniciar demo</button>
-  </div>
   <header class="header">
-    <a class="brand" href="#home" aria-label="CAUCE, inicio">cauce<span class="brand-dot">.</span></a>
-    <a class="locality" href="#home"><span class="locality-dot"></span> Aluminé <span class="province">/ Neuquén</span></a>
+    <div class="brand-group">
+      <a class="brand" href="#home" aria-label="CAUCE, inicio">cauce<span class="brand-dot">.</span></a>
+      <a class="locality" href="#home"><span class="locality-dot"></span> Aluminé <span class="province">/ Neuquén</span></a>
+      <button class="demo-pill" id="header-demo-pill" type="button" data-action="open-demo-modal" aria-label="Información de la demostración">DEMO</button>
+    </div>
     <nav aria-label="Navegación principal">
       <a href="#home">Comercios</a>
       <a href="#orders" id="orders-link">Mis pedidos</a>
+      <a href="#presentacion" class="nav-institutional">Presentación</a>
       <a href="#manage" class="nav-secondary">Panel demo</a>
-      <a href="#carts" class="cart-nav" id="cart-nav">Carritos <span id="cart-count">0</span></a>
+      <a href="#carts" class="cart-nav" id="cart-nav">Carrito <span id="cart-count">0</span></a>
     </nav>
   </header>
   <main id="main" tabindex="-1"></main>
   <footer>
     <div><strong>cauce.</strong> <span>Lo rico de acá, a un toque · Aluminé</span></div>
     <p>Demostración comercial · Aluminé, Neuquén</p>
+    <a class="link-button" href="#presentacion">Presentación institucional</a>
     <a class="link-button" href="#manage">Paneles demo</a>
     <button class="link-button" id="reset-demo" type="button">Reiniciar datos de demostración</button>
   </footer>
   <nav class="bottom-nav" aria-label="Navegación móvil">
     <a href="#home" class="bottom-nav-item" id="bnav-home"><span class="bottom-nav-icon">🏠</span>Inicio</a>
-    <a href="#home" class="bottom-nav-item" id="bnav-stores"><span class="bottom-nav-icon">🍽️</span>Comercios</a>
+    <a href="#home" class="bottom-nav-item" id="bnav-search" data-action="focus-search"><span class="bottom-nav-icon">🔍</span>Buscar</a>
+    <a href="#carts" class="bottom-nav-item" id="bnav-carts"><span class="bottom-nav-icon">🛒</span>Carrito</a>
     <a href="#orders" class="bottom-nav-item" id="bnav-orders"><span class="bottom-nav-icon">📦</span>Pedidos</a>
-    <a href="#carts" class="bottom-nav-item" id="bnav-carts"><span class="bottom-nav-icon">🛒</span>Carritos</a>
+    <a href="#presentacion" class="bottom-nav-item" id="bnav-pres"><span class="bottom-nav-icon">🏛️</span>Info</a>
   </nav>
   <div id="modal-container"></div>
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
