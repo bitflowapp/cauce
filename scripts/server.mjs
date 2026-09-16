@@ -20,12 +20,12 @@ export function createStaticServer({ root = ROOT } = {}) {
       let path = decodeURIComponent(parsed.pathname);
       if (path === '/') path = '/index.html';
       if (path.includes('\0') || path.includes('\\') || path.split('/').some(part=>part==='..'||part==='.')) return finish(400,'Ruta inválida.');
-      if (!(path === '/index.html' || /^\/(js|styles)\//.test(path))) return finish(404,'No encontrado.');
+      if (!(path === '/index.html' || /^\/(js|styles|assets)\//.test(path))) return finish(404,'No encontrado.');
       const target = resolve(base, `.${path}`);
       if (!target.startsWith(base + sep)) return finish(403,'Ruta no permitida.');
       const actual = await realpath(target);
       if (!actual.startsWith(base + sep)) return finish(403,'Ruta no permitida.');
-      const mime = {'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml'}[extname(actual)];
+      const mime = {'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.webp':'image/webp','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.avif':'image/avif'}[extname(actual)];
       if (!mime || !(await stat(actual)).isFile()) return finish(404,'No encontrado.');
       res.setHeader('Content-Type',mime);
       if (req.method==='HEAD') return finish(200,'');
