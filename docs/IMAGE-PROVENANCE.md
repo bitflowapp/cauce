@@ -1,0 +1,355 @@
+# PROVENANCE Y LICENCIAS DE FOTOGRAFÍA GASTRONÓMICA — CAUCE v0.3.2
+
+Todas las imágenes utilizadas en **CAUCE v0.3.2** se encuentran almacenadas **LOCALMENTE** dentro del repositorio en `assets/images/`.
+
+- **Cero dependencias externas en tiempo de ejecución**: No se realizan solicitudes de red a servidores de imágenes externos durante el uso.
+- **Formato optimizado**: WebP local con dimensiones estandarizadas (16:9 para portadas de comercio: 1200×675 px; 4:3 para platos: 600×450 px).
+- **Mecanismo de Fallback**: Cada imagen cuenta con respaldo SVG vectorial inline (`renderIcon` / `getProductSvg`) en caso de falla de carga.
+- **Total de imágenes**: 59 archivos locales (7 portadas de comercio + 52 platos del catálogo gastronómico de Aluminé).
+
+---
+
+## 1. La Orilla (Craft Burgers & Cerveza)
+- **Proveedor**: Pexels (fotos de stock gastronómico comercial).
+- **Licencia comprobada**: Pexels License (uso comercial permitido, sin atribución obligatoria).
+- **Origen local de verificación**: Copiadas desde el proyecto local `hamburgueseria-neuquen/assets/carta/` y validadas contra `fuentes.json`.
+- **Detalle de archivos y fuentes**:
+  - `assets/images/merchants/orilla-cover.webp`
+    - Descripción: Portada de La Orilla (Hamburguesa sobre fondo negro, con la mano encuadrando el pan)
+    - Pexels ID: `17518458`
+    - URL origen: https://images.pexels.com/photos/17518458/pexels-photo-17518458.jpeg?auto=compress&cs=tinysrgb&w=1800
+    - Licencia: Pexels License - uso comercial permitido, sin atribucion obligatoria
+  - `assets/images/dishes/burger-clasica.webp`
+    - Descripción: La clásica (Hamburguesa con lechuga y tomate sobre tabla, fondo oscuro)
+    - Pexels ID: `30500754`
+    - URL origen: https://images.pexels.com/photos/30500754/pexels-photo-30500754.jpeg?auto=compress&cs=tinysrgb&w=1800
+    - Licencia: Pexels License - uso comercial permitido, sin atribucion obligatoria
+  - `assets/images/dishes/burger-doble.webp`
+    - Descripción: Doble de la casa (Dos hamburguesas con bacon y queso sobre tabla de madera)
+    - Pexels ID: `8305746`
+    - URL origen: https://images.pexels.com/photos/8305746/pexels-photo-8305746.jpeg?auto=compress&cs=tinysrgb&w=1800
+    - Licencia: Pexels License - uso comercial permitido, sin atribucion obligatoria
+  - `assets/images/dishes/burger-pehuen.webp`
+    - Descripción: Ahumada Pehuén (Hamburguesa con bacon y cheddar fundido sobre fondo oscuro)
+    - Pexels ID: `18713424`
+    - URL origen: https://images.pexels.com/photos/18713424/pexels-photo-18713424.jpeg?auto=compress&cs=tinysrgb&w=1800
+    - Licencia: Pexels License - uso comercial permitido, sin atribucion obligatoria
+  - `assets/images/dishes/burger-veggie.webp`
+    - Descripción: La de vegetales (Hamburguesa vegetariana con canasta de papas)
+    - Pexels ID: `5639459`
+    - URL origen: https://images.pexels.com/photos/5639459/pexels-photo-5639459.jpeg?auto=compress&cs=tinysrgb&w=1800
+    - Licencia: Pexels License - uso comercial permitido, sin atribucion obligatoria
+  - `assets/images/dishes/papas.webp`
+    - Descripción: Papas para compartir (Porcion generosa de papas fritas con ketchup)
+    - Pexels ID: `29150162`
+    - URL origen: https://images.pexels.com/photos/29150162/pexels-photo-29150162.jpeg?auto=compress&cs=tinysrgb&w=1800
+    - Licencia: Pexels License - uso comercial permitido, sin atribucion obligatoria
+  - `assets/images/dishes/papas-cheddar.webp`
+    - Descripción: Papas con cheddar y panceta (Papas con salsa de cheddar y bacon)
+    - Pexels ID: `21823086`
+    - URL origen: https://images.pexels.com/photos/21823086/pexels-photo-21823086.jpeg?auto=compress&cs=tinysrgb&w=1800
+    - Licencia: Pexels License - uso comercial permitido, sin atribucion obligatoria
+  - `assets/images/dishes/limonada.webp`
+    - Descripción: Limonada (Limonada con menta sobre plato negro)
+    - Pexels ID: `11161394`
+    - URL origen: https://images.pexels.com/photos/11161394/pexels-photo-11161394.jpeg?auto=compress&cs=tinysrgb&w=1800
+    - Licencia: Pexels License - uso comercial permitido, sin atribucion obligatoria
+  - `assets/images/dishes/cerveza-amber.webp`
+    - Descripción: Cerveza Amber Lager (Vaso de cerveza rubia con espuma, fondo oscuro)
+    - Pexels ID: `15991209`
+    - URL origen: https://images.pexels.com/photos/15991209/pexels-photo-15991209.jpeg?auto=compress&cs=tinysrgb&w=1800
+    - Licencia: Pexels License - uso comercial permitido, sin atribucion obligatoria
+  - `assets/images/dishes/combo-amigos.webp`
+    - Descripción: Combo Dupla Burger (Hamburguesa con papas y bebida sobre fondo oscuro)
+    - Pexels ID: `19247559`
+    - URL origen: https://images.pexels.com/photos/19247559/pexels-photo-19247559.jpeg?auto=compress&cs=tinysrgb&w=1800
+    - Licencia: Pexels License - uso comercial permitido, sin atribucion obligatoria
+
+---
+
+## 2. Horno del Sur (Pizzas & Empanadas a la Leña)
+- **Proveedor**: Wikimedia Commons.
+- **Licencias comprobadas**: Creative Commons (CC BY, CC BY-SA, CC0) y Dominio Público.
+- **Detalle de archivos y fuentes**:
+  - `assets/images/merchants/horno-cover.webp`
+    - Búsqueda / Tema: pizza oven
+    - URL origen: https://upload.wikimedia.org/wikipedia/commons/f/f2/2012_07_07_Pizza_Oven_Club_Noi_Rotkreuz.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original
+    - Licencia exacta: CC BY-SA 3.0
+    - Autor / Contribuidor: Lord Koxinga
+  - `assets/images/dishes/pizza-muzza.webp`
+    - Búsqueda / Tema: pizza margherita fresh mozzarella basil
+    - URL origen: https://upload.wikimedia.org/wikipedia/commons/d/d4/Margherita_Originale.JPG?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original
+    - Licencia exacta: CC BY-SA 3.0
+    - Autor / Contribuidor: Mario56
+  - `assets/images/dishes/pizza-napo.webp`
+    - Búsqueda / Tema: pizza napoletana tomato slices
+    - URL origen: https://upload.wikimedia.org/wikipedia/commons/2/2c/Pizza_%2840295714762%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original
+    - Licencia exacta: CC BY 2.0
+    - Autor / Contribuidor: N i c o l a from Fiumicino (Rome), Italy
+  - `assets/images/dishes/pizza-fugazza.webp`
+    - Búsqueda / Tema: onion pizza
+    - URL origen: https://upload.wikimedia.org/wikipedia/commons/b/bc/Ham_and_onion_pizza.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original
+    - Licencia exacta: CC BY 2.0
+    - Autor / Contribuidor: jeffreyw
+  - `assets/images/dishes/pizza-hongos.webp`
+    - Búsqueda / Tema: mushroom pizza slice
+    - URL origen: https://upload.wikimedia.org/wikipedia/commons/9/9c/Thick_crust_pizza_%281%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original
+    - Licencia exacta: CC BY 2.0
+    - Autor / Contribuidor: jeffreyw
+  - `assets/images/dishes/empanadas.webp`
+    - Búsqueda / Tema: empanada argentina baked
+    - URL origen: https://upload.wikimedia.org/wikipedia/commons/a/a7/Empanada_de_Vigan.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original
+    - Licencia exacta: CC BY-SA 4.0
+    - Autor / Contribuidor: Jessartcam
+  - `assets/images/dishes/empanadas-jamon.webp`
+    - Búsqueda / Tema: empanadas baked golden brown
+    - URL origen: https://upload.wikimedia.org/wikipedia/commons/f/f9/A_plate_with_six_oven-baked_Argentine_ham_and_cheese_empanadas.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original
+    - Licencia exacta: CC BY-SA 3.0
+    - Autor / Contribuidor: Horacio Cambeiro
+  - `assets/images/dishes/empanadas-verdura.webp`
+    - Búsqueda / Tema: baked empanadas
+    - URL origen: https://upload.wikimedia.org/wikipedia/commons/f/f9/A_plate_with_six_oven-baked_Argentine_ham_and_cheese_empanadas.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original
+    - Licencia exacta: CC BY-SA 3.0
+    - Autor / Contribuidor: Horacio Cambeiro
+  - `assets/images/dishes/agua.webp`
+    - Búsqueda / Tema: glass bottled mineral water table
+    - URL origen: https://upload.wikimedia.org/wikipedia/commons/8/86/Belu_Bottled_Mineral_Water.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original
+    - Licencia exacta: CC BY-SA 4.0
+    - Autor / Contribuidor: Beluwater
+  - `assets/images/dishes/cerveza-patagonia.webp`
+    - Búsqueda / Tema: beer bottle glass
+    - URL origen: https://upload.wikimedia.org/wikipedia/commons/9/99/Angkor_beer_bottle_%26_glass.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original
+    - Licencia exacta: CC0
+    - Autor / Contribuidor: Dan arndt
+
+---
+
+## 3. Rotisería El Pehuén (Minutas & Comida de Campo)
+- **Proveedor**: Wikimedia Commons.
+- **Licencias comprobadas**: Creative Commons (CC BY, CC BY-SA, CC0) y Dominio Público.
+- **Detalle de archivos y fuentes**:
+  - `assets/images/merchants/pehuen-cover.webp`
+    - Búsqueda / Tema: roasted chicken
+    - URL origen: https://upload.wikimedia.org/wikipedia/commons/b/b3/020241107_Roasted_Chicken.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original
+    - Licencia exacta: CC BY-SA 4.0
+    - Autor / Contribuidor: Silar
+  - `assets/images/dishes/milanesa-pure.webp`
+    - Búsqueda / Tema: schnitzel mashed potatoes plate
+    - URL origen: https://upload.wikimedia.org/wikipedia/commons/0/0e/Chicken_schnitzel_and_mashed_potatoes.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original
+    - Licencia exacta: CC BY-SA 3.0
+    - Autor / Contribuidor: Pastorius
+  - `assets/images/dishes/milanesa-napo.webp`
+    - Búsqueda / Tema: parmigiana
+    - URL origen: https://upload.wikimedia.org/wikipedia/commons/6/62/La_parmigiana_%281963%29_Catherine_Spaak.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original
+    - Licencia exacta: Public domain
+    - Autor / Contribuidor: Film diretto da Antonio Pietrangeli e prodotto da Documento Film
+  - `assets/images/dishes/pollo-spiedo.webp`
+    - Búsqueda / Tema: roasted half chicken roasted potatoes
+    - URL origen: https://upload.wikimedia.org/wikipedia/commons/9/9d/Rosemary_Chicken_%28263792483%29.jpeg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original
+    - Licencia exacta: CC BY 3.0
+    - Autor / Contribuidor: Shreeram Kushwaha
+  - `assets/images/dishes/canelones.webp`
+    - Búsqueda / Tema: cannelloni
+    - URL origen: https://upload.wikimedia.org/wikipedia/commons/4/48/Baked_cannelloni%2C_Rauenthal.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original
+    - Licencia exacta: CC BY-SA 4.0
+    - Autor / Contribuidor: Gerda Arendt
+  - `assets/images/dishes/tortilla-papas.webp`
+    - Búsqueda / Tema: tortilla espanola potato omelette
+    - URL origen: https://upload.wikimedia.org/wikipedia/commons/c/c0/Tortilla_de_Patatas_%28Corte_transversal%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original
+    - Licencia exacta: CC BY-SA 3.0
+    - Autor / Contribuidor: Tamorlan
+  - `assets/images/dishes/empanadas-fritas.webp`
+    - Búsqueda / Tema: fried empanadas plate crispy
+    - URL origen: https://upload.wikimedia.org/wikipedia/commons/5/50/DFC_3930_Golden_crispy_fried_dumplings_arranged_in_neat_rows_on_a_cooling_rack_ready_to_be_served.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original
+    - Licencia exacta: CC BY-SA 4.0
+    - Autor / Contribuidor: PattayaPatrol
+  - `assets/images/dishes/gaseosa-cola.webp`
+    - Búsqueda / Tema: cola drink glass with ice
+    - URL origen: https://upload.wikimedia.org/wikipedia/commons/1/10/Glass_cola.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original
+    - Licencia exacta: Public domain
+    - Autor / Contribuidor: pic_p_ter
+  - `assets/images/dishes/flan-mixto.webp`
+    - Búsqueda / Tema: flan caramel custard plate
+    - URL origen: https://upload.wikimedia.org/wikipedia/commons/0/04/Coconut_Flan.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original
+    - Licencia exacta: CC BY 2.0
+    - Autor / Contribuidor: norwichnuts
+
+---
+
+## 4. Café de la Plaza (Especialidad & Pastelería)
+- **Proveedor**: Wikimedia Commons.
+- **Licencias comprobadas**: Creative Commons (CC BY, CC BY-SA, CC0) y Dominio Público.
+- **Detalle de archivos y fuentes**:
+  - `assets/images/merchants/plaza-cover.webp`
+    - Búsqueda / Tema: coffee pastries
+    - URL origen: https://upload.wikimedia.org/wikipedia/commons/c/c5/Delicious_coffee_and_pastries_on_a_wooden_table_in_a_cozy_cafe_setting_during_a_sunny_morning.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original
+    - Licencia exacta: CC BY 2.0
+    - Autor / Contribuidor: Shixart1985
+  - `assets/images/dishes/cafe-espresso.webp`
+    - Búsqueda / Tema: espresso cup
+    - URL origen: https://upload.wikimedia.org/wikipedia/commons/e/ec/20231220_una_tazza_di_bokeh_PD103944.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original
+    - Licencia exacta: CC BY-SA 4.0
+    - Autor / Contribuidor: Paul Danese
+  - `assets/images/dishes/capuccino-canela.webp`
+    - Búsqueda / Tema: cappuccino foam latte art cup
+    - URL origen: https://upload.wikimedia.org/wikipedia/commons/9/9f/Cappuccino_latte_art_2006-04-14.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original
+    - Licencia exacta: CC BY-SA 2.5
+    - Autor / Contribuidor: Lukas Kolbe (lukas2)
+  - `assets/images/dishes/medialunas-manteca.webp`
+    - Búsqueda / Tema: croissant breakfast pastry plate
+    - URL origen: https://upload.wikimedia.org/wikipedia/commons/9/94/Breakfast_spread_with_coffee%2C_pastry%2C_and_juice_on_a_table_in_a_cozy_morning_setting.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original
+    - Licencia exacta: CC BY 2.0
+    - Autor / Contribuidor: Shixart1985
+  - `assets/images/dishes/tostado-campo.webp`
+    - Búsqueda / Tema: panini sandwich
+    - URL origen: https://upload.wikimedia.org/wikipedia/commons/6/67/Italiano_sandwich_01.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original
+    - Licencia exacta: CC BY 2.0
+    - Autor / Contribuidor: cherrylet
+  - `assets/images/dishes/chipa-porcon.webp`
+    - Búsqueda / Tema: pao de queijo chipa cheese bread
+    - URL origen: https://upload.wikimedia.org/wikipedia/commons/3/39/P%C3%A3o_de_Queijo_-_cheese_bread.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original
+    - Licencia exacta: CC BY-SA 3.0
+    - Autor / Contribuidor: Jonathan Wilkins
+  - `assets/images/dishes/torta-frambuesa.webp`
+    - Búsqueda / Tema: chocolate raspberry cake
+    - URL origen: https://upload.wikimedia.org/wikipedia/commons/b/b0/Chocolate_Cake_%26_Raspberry_%2825271967935%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original
+    - Licencia exacta: CC BY 2.0
+    - Autor / Contribuidor: Prayitno / Thank you for (12 millions +) view from Los Angeles, USA
+  - `assets/images/dishes/submarino.webp`
+    - Búsqueda / Tema: hot chocolate milk mug
+    - URL origen: https://upload.wikimedia.org/wikipedia/commons/1/14/Hot_chocolate_mug_with_whipped_cream.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original
+    - Licencia exacta: CC BY-SA 3.0
+    - Autor / Contribuidor: User Jonik on en.wikipedia
+  - `assets/images/dishes/alfajor-maicena.webp`
+    - Búsqueda / Tema: alfajor
+    - URL origen: https://upload.wikimedia.org/wikipedia/commons/c/c6/-_Alfajor_Murrica_Doceria.JPG?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original
+    - Licencia exacta: CC BY-SA 3.0
+    - Autor / Contribuidor: pissolati.amanda
+
+---
+
+## 5. Cervecería Río Arriba (Gastropub & Ahumados)
+- **Proveedor**: Wikimedia Commons.
+- **Licencias comprobadas**: Creative Commons (CC BY, CC BY-SA, CC0) y Dominio Público.
+- **Detalle de archivos y fuentes**:
+  - `assets/images/merchants/rioarriba-cover.webp`
+    - Búsqueda / Tema: craft beer
+    - URL origen: https://upload.wikimedia.org/wikipedia/commons/9/90/Beer_Flight.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original
+    - Licencia exacta: CC BY-SA 4.0
+    - Autor / Contribuidor: Wanderstheworld
+  - `assets/images/dishes/tabla-ahumados.webp`
+    - Búsqueda / Tema: charcuterie board cured meats cheese
+    - URL origen: https://upload.wikimedia.org/wikipedia/commons/2/21/-365photo_2017_edition_Food_%2832033206853%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original
+    - Licencia exacta: CC0
+    - Autor / Contribuidor: terri_bateman
+  - `assets/images/dishes/sandwich-lomo.webp`
+    - Búsqueda / Tema: steak sandwich
+    - URL origen: https://upload.wikimedia.org/wikipedia/commons/4/43/O%E2%80%99Connor_Steak_Sandwich%2C_Sorrento_Beach_Club%2C_2026_%2801%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original
+    - Licencia exacta: CC BY-SA 4.0
+    - Autor / Contribuidor: Bahnfrend
+  - `assets/images/dishes/sandwich-trucha.webp`
+    - Búsqueda / Tema: salmon sandwich
+    - URL origen: https://upload.wikimedia.org/wikipedia/commons/4/40/Homemade_salmon_bagel_sandwich_1.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original
+    - Licencia exacta: CC BY 4.0
+    - Autor / Contribuidor: 에그란
+  - `assets/images/dishes/papas-bravas.webp`
+    - Búsqueda / Tema: patatas bravas
+    - URL origen: https://upload.wikimedia.org/wikipedia/commons/9/98/Patatas_bravas-2011.JPG?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original
+    - Licencia exacta: CC BY 3.0
+    - Autor / Contribuidor: Tamorlan
+  - `assets/images/dishes/pinta-ipa.webp`
+    - Búsqueda / Tema: pint glass india pale ale beer
+    - URL origen: https://upload.wikimedia.org/wikipedia/commons/3/32/Fuller%27s_India_pale_ale.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original
+    - Licencia exacta: CC BY-SA 3.0
+    - Autor / Contribuidor: Wikimedia Commons Contributor
+  - `assets/images/dishes/pinta-stout.webp`
+    - Búsqueda / Tema: stout beer
+    - URL origen: https://upload.wikimedia.org/wikipedia/commons/7/73/2014-12-24_18.55.43-EDIT.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original
+    - Licencia exacta: CC BY-SA 4.0
+    - Autor / Contribuidor: Zymologist
+  - `assets/images/dishes/rabas-artesanales.webp`
+    - Búsqueda / Tema: calamari rings
+    - URL origen: https://upload.wikimedia.org/wikipedia/commons/b/b0/Bocadillo_de_calamares-2009.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original
+    - Licencia exacta: CC BY 3.0
+    - Autor / Contribuidor: Tamorlan
+
+---
+
+## 6. Ronda Cocina Casera (Pastas & Platos de Olla)
+- **Proveedor**: Wikimedia Commons.
+- **Licencias comprobadas**: Creative Commons (CC BY, CC BY-SA, CC0) y Dominio Público.
+- **Detalle de archivos y fuentes**:
+  - `assets/images/merchants/ronda-cover.webp`
+    - Búsqueda / Tema: pasta plate
+    - URL origen: https://upload.wikimedia.org/wikipedia/commons/4/48/A_plate_of_red_sauce_pasta.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original
+    - Licencia exacta: CC BY-SA 4.0
+    - Autor / Contribuidor: Rocky Masum This work was made by Masum-al-Hasan Rocky and released under the license(s) stated below. Please feel free to use it for any purpose as long as you credit Masum-al-Hasan Rocky as author and follow the terms of the chosen license. If you use this work outside of the Wikimedia projects, I would very much like to get a note from you. Thanks!
+  - `assets/images/dishes/sorrentinos-ricota.webp`
+    - Búsqueda / Tema: ravioli
+    - URL origen: https://upload.wikimedia.org/wikipedia/commons/4/4f/Liat_Portal_for_Foodie_Disorder_-_Four_cheese_ravioli_with_cream_sauce.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original
+    - Licencia exacta: CC BY-SA 4.0
+    - Autor / Contribuidor: HaJunkiyada
+  - `assets/images/dishes/tarta.webp`
+    - Búsqueda / Tema: quiche
+    - URL origen: https://upload.wikimedia.org/wikipedia/commons/b/be/Bywater_Bakery_Quiche_New_Orleans_April_2018.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original
+    - Licencia exacta: CC BY-SA 4.0
+    - Autor / Contribuidor: Infrogmation of New Orleans
+  - `assets/images/dishes/milanesa.webp`
+    - Búsqueda / Tema: wiener schnitzel plate lemon
+    - URL origen: https://upload.wikimedia.org/wikipedia/commons/0/07/Wiener_Schnitzel_at_restaurant_Faro%2C_Helsinki.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original
+    - Licencia exacta: CC BY-SA 4.0
+    - Autor / Contribuidor: JIP
+  - `assets/images/dishes/pastel-papas.webp`
+    - Búsqueda / Tema: cottage pie shepherd pie baked
+    - URL origen: https://upload.wikimedia.org/wikipedia/commons/1/1c/Shepherd%27s_Pie_Irish_Brewry%2C_Kolkata_West_Bengal_DSC016.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original
+    - Licencia exacta: CC BY-SA 4.0
+    - Autor / Contribuidor: Pratiti090
+  - `assets/images/dishes/ensalada.webp`
+    - Búsqueda / Tema: salad bowl
+    - URL origen: https://upload.wikimedia.org/wikipedia/commons/4/4c/Bob_Stocksdale_Salad_Bowl_with_Servers.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original
+    - Licencia exacta: CC0
+    - Autor / Contribuidor: Nobody225
+
+---
+
+## 7. Panadería La Unión (Confitería & Pan de Campo)
+- **Proveedor**: Wikimedia Commons.
+- **Licencias comprobadas**: Creative Commons (CC BY, CC BY-SA, CC0) y Dominio Público.
+- **Detalle de archivos y fuentes**:
+  - `assets/images/merchants/union-cover.webp`
+    - Búsqueda / Tema: bakery bread
+    - URL origen: https://upload.wikimedia.org/wikipedia/commons/a/a3/A_display_of_Scali_bread_at_the_Winter_Hill_Bakery.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original
+    - Licencia exacta: CC BY-SA 4.0
+    - Autor / Contribuidor: Mmangan333
+  - `assets/images/dishes/miga-surtidos.webp`
+    - Búsqueda / Tema: finger sandwiches
+    - URL origen: https://upload.wikimedia.org/wikipedia/commons/7/74/Canapes_and_finger_sandwiches._High_Tea_at_the_Savoy_Hotel.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original
+    - Licencia exacta: CC BY-SA 4.0
+    - Autor / Contribuidor: Payton Walton
+  - `assets/images/dishes/docena-medialunas.webp`
+    - Búsqueda / Tema: croissants
+    - URL origen: https://upload.wikimedia.org/wikipedia/commons/7/72/020220327_Croissants%2C_Bielsko-Bia%C5%82a%2C_Market_Square.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original
+    - Licencia exacta: CC BY-SA 4.0
+    - Autor / Contribuidor: Silar
+  - `assets/images/dishes/pan-campo-hogaza.webp`
+    - Búsqueda / Tema: sourdough bread loaf sliced crust
+    - URL origen: https://upload.wikimedia.org/wikipedia/commons/8/8b/Pullman_loaf.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original
+    - Licencia exacta: CC BY 2.0
+    - Autor / Contribuidor: loppear
+  - `assets/images/dishes/alfajor-nuez.webp`
+    - Búsqueda / Tema: chocolate coated alfajor cookie
+    - URL origen: https://upload.wikimedia.org/wikipedia/commons/b/bc/R%C3%BAstico_Chocolate_artisan_dark_chocolate_alfajor_with_dulce_de_leche.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original
+    - Licencia exacta: CC BY-SA 4.0
+    - Autor / Contribuidor: AsadoExplorer
+  - `assets/images/dishes/empanadas-hojaldre.webp`
+    - Búsqueda / Tema: pasties
+    - URL origen: https://upload.wikimedia.org/wikipedia/commons/d/da/Bombae_performing_during_Queens_and_Kings_of_Pride%2C_Windsor-Essex_Pride_Fest%2C_2025-08-09_40.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original
+    - Licencia exacta: CC BY-SA 4.0
+    - Autor / Contribuidor: Chris Woodrich
+  - `assets/images/dishes/tarta-manzana.webp`
+    - Búsqueda / Tema: apple pie
+    - URL origen: https://upload.wikimedia.org/wikipedia/commons/a/a6/Apple_cake_with_vanilla_ice_cream_2.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original
+    - Licencia exacta: CC0
+    - Autor / Contribuidor: W.carter
+
+---

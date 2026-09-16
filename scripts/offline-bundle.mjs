@@ -31,7 +31,7 @@ let html=await readFile(resolve(root,'index.html'),'utf8');
 const hash=value=>createHash('sha256').update(value).digest('base64');
 html=html.replace(/<link[^>]+rel="(?:stylesheet|icon)"[^>]*>/g,'')
   .replace(/<script type="module" src="js\/app.js"><\/script>/,'')
-  .replace(/<meta http-equiv="Content-Security-Policy"[^>]*>/,`<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-${hash(bundle)}'; style-src 'sha256-${hash(css)}'; connect-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'">`)
+  .replace(/<meta http-equiv="Content-Security-Policy"[^>]*>/,`<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-${hash(bundle)}'; style-src 'sha256-${hash(css)}'; img-src 'self' data:; connect-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'">`)
   .replace('</head>',`<style>${css}</style></head>`)
   .replace('</body>',`<script>${bundle}</script></body>`);
 await writeFile(resolve(root,'CAUCE-demo.html'),html);

@@ -48,18 +48,51 @@ const merchantActor = business => ({ kind:'merchant', ...scopeOf(business) });
 const countCart = cart => (cart?.lines || []).reduce((total, line) => total + line.quantity, 0);
 const availability = b => `<span class="availability ${b.open ? '' : 'closed'}">${b.open ? 'Abierto' : 'Cerrado'}</span>`;
 
+function renderIcon(name, size = 16, className = '') {
+  const cls = className ? `icon ${className}` : 'icon';
+  switch (name) {
+    case 'clock':
+      return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`;
+    case 'delivery':
+      return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5.5" cy="17.5" r="2.5"/><circle cx="18.5" cy="17.5" r="2.5"/><path d="M15 6h-5a2 2 0 0 0-2 2l-1 5.5h6.5l1.5-4h4.5l1.5 4H22"/><path d="M9 13.5h5.5"/></svg>`;
+    case 'bag':
+      return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>`;
+    case 'pin':
+      return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>`;
+    case 'check':
+      return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>`;
+    case 'store':
+      return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>`;
+    case 'bell':
+      return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>`;
+    case 'bell-off':
+      return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.73 21a2 2 0 0 1-3.46 0"/><path d="M18.63 13A17.89 17.89 0 0 1 18 8"/><path d="M6.26 6.26A5.86 5.86 0 0 0 6 8c0 7-3 9-3 9h14"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`;
+    case 'key':
+      return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7.5" cy="15.5" r="4.5"/><path d="m21 3-9.5 9.5"/><path d="m15.5 7.5 3 3"/></svg>`;
+    case 'receipt':
+      return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M8 7h8"/><path d="M8 11h8"/><path d="M8 15h5"/></svg>`;
+    default:
+      return '';
+  }
+}
+
 function updateNavigation() {
   if (!repository) return;
   const state = repository.snapshot();
   const totalItems = state.businesses.reduce((total, b) => total + countCart(repository.cart(b.id)), 0);
   const badge = document.querySelector('#cart-count');
   if (badge) badge.textContent = String(totalItems);
+  const mobileBadge = document.querySelector('#bnav-cart-badge');
+  if (mobileBadge) {
+    mobileBadge.textContent = String(totalItems);
+    mobileBadge.hidden = totalItems <= 0;
+  }
 
   const [currentPage = 'home'] = route();
   document.querySelectorAll('.bottom-nav-item').forEach(item => {
     const id = item.id;
     const isHome = id === 'bnav-home' && (currentPage === 'home' || currentPage === 'shop');
-    const isSearch = id === 'bnav-search' && currentPage === 'home';
+    const isSearch = id === 'bnav-search' && currentPage === 'home' && Boolean(searchState.query);
     const isOrders = id === 'bnav-orders' && (currentPage === 'orders' || currentPage === 'order');
     const isCarts = id === 'bnav-carts' && (currentPage === 'carts' || currentPage === 'cart');
     const isPres = id === 'bnav-pres' && currentPage === 'presentacion';
@@ -84,8 +117,10 @@ function storesMarkup() {
     const sampleProduct = repository.products(b.id)[0];
     const previewSvg = getProductSvg(sampleProduct?.dishType || 'burger');
     return `<a class="store-card" href="#shop/${esc(b.id)}" data-testid="store-card">
-      <div class="store-art theme-${theme(b)}" aria-hidden="true">
-        <div class="store-art-preview">${previewSvg}</div>
+      <div class="store-art" aria-hidden="true">
+        <div class="store-art-fallback theme-${theme(b)}">${previewSvg}</div>
+        ${b.coverImage ? `<img class="store-cover-img" src="${esc(b.coverImage)}" alt="" loading="lazy" onerror="this.classList.add('img-hidden')">` : ''}
+        <div class="store-art-gradient"></div>
         ${b.badge ? `<span class="badge-pill">${esc(b.badge)}</span>` : ''}
       </div>
       <div class="store-info">
@@ -96,9 +131,9 @@ function storesMarkup() {
         ${b.subtitle ? `<div class="store-subtitle">${esc(b.subtitle)}</div>` : ''}
         <p class="store-category">${esc(b.description)}</p>
         <div class="store-meta">
-          <span>⏱️ ${esc(b.eta)}</span>
-          <span>🛵 ${b.deliveryEnabled ? `Envío ${money(b.deliveryFee)}` : 'Solo retiro'}</span>
-          <span>🛍️ Retiro gratis</span>
+          <span>${renderIcon('clock', 13)} ${esc(b.eta)}</span>
+          <span>${renderIcon('delivery', 13)} ${b.deliveryEnabled ? `Envío ${money(b.deliveryFee)}` : 'Solo retiro'}</span>
+          <span>${renderIcon('bag', 13)} Retiro gratis</span>
           ${b.minimumOrder > 0 ? `<span>Mínimo ${money(b.minimumOrder)}</span>` : ''}
         </div>
       </div>
@@ -116,9 +151,9 @@ function home() {
       <h1>Lo rico de acá,<br><em>a un toque.</em></h1>
       <p>Pedí comida en comercios de Aluminé desde un solo lugar. Elegí retiro en el local o delivery directo a tu puerta.</p>
       <div class="hero-stats">
-        <span class="hero-stat">🌱 ${businesses.length} locales</span>
-        <span class="hero-stat">🛵 Retiro y delivery</span>
-        <span class="hero-stat">⏱️ 20–45 min</span>
+        <span class="hero-stat">${renderIcon('store', 13)} ${businesses.length} locales</span>
+        <span class="hero-stat">${renderIcon('delivery', 13)} Retiro y delivery</span>
+        <span class="hero-stat">${renderIcon('clock', 13)} 20–45 min</span>
       </div>
     </div>
     <div class="river-art" aria-hidden="true">
@@ -176,32 +211,43 @@ function shop(businessId) {
     <div>
       <span class="eyebrow">${esc(b.category)} · COMERCIO LOCAL</span>
       <h1>${esc(b.name)}</h1>
-      ${b.subtitle ? `<div class="store-subtitle" style="font-size:15px;margin-bottom:6px;">${esc(b.subtitle)}</div>` : ''}
+      ${b.subtitle ? `<div class="store-subtitle" style="font-size:14px;margin-bottom:4px;">${esc(b.subtitle)}</div>` : ''}
       <p>${esc(b.description)}</p>
       <div class="shop-info">
         ${availability(b)}
-        <span>⏱️ Demora estimada: ${esc(b.eta)}</span>
-        <span>🛵 ${b.deliveryEnabled ? `Envío ${money(b.deliveryFee)}` : 'Solo retiro'}</span>
-        <span>🛍️ Retiro gratis</span>
+        <span>${renderIcon('clock', 13)} Demora estimada: ${esc(b.eta)}</span>
+        <span>${renderIcon('delivery', 13)} ${b.deliveryEnabled ? `Envío ${money(b.deliveryFee)}` : 'Solo retiro'}</span>
+        <span>${renderIcon('bag', 13)} Retiro gratis</span>
         ${b.minimumOrder > 0 ? `<span>Mínimo ${money(b.minimumOrder)}</span>` : ''}
       </div>
-      <div class="shop-address" style="margin-top:10px;">📍 ${esc(b.address || 'Aluminé, Neuquén')} · ${esc(b.hoursLabel)}</div>
+      <div class="shop-address" style="margin-top:8px;">${renderIcon('pin', 13)} ${esc(b.address || 'Aluminé, Neuquén')} · ${esc(b.hoursLabel)}</div>
     </div>
   </section>
 
   ${!b.open ? `<div class="notice closed-notice"><strong>Este local está cerrado en este momento.</strong>Horario de atención: ${esc(b.hoursLabel)}. Podés recorrer la carta completa y conocer los platos.</div>` : ''}
 
+  ${categories.length > 1 ? `
+    <nav class="category-nav-bar" aria-label="Categorías de la carta">
+      <div class="chips">
+        ${categories.map(c => `<button type="button" class="chip" data-action="scroll-to" data-target="cat-${esc(c.replace(/\\s+/g,'-'))}">${esc(c)}</button>`).join('')}
+      </div>
+    </nav>
+  ` : ''}
+
   <div class="shop-layout">
     <div>
       ${categories.map(category => `
-        <section class="product-group" id="cat-${esc(category.replace(/\s+/g,'-'))}">
+        <section class="product-group" id="cat-${esc(category.replace(/\\s+/g,'-'))}">
           <h2>${esc(category)}</h2>
           ${products.filter(p => p.category === category).map(p => {
             const quantity = cart.lines.find(l => l.productId === p.id)?.quantity || 0;
             const price = confirmedPrice(p);
             const foodSvg = getProductSvg(p.dishType || 'burger');
             return `<article class="product">
-              <div class="product-img">${foodSvg}</div>
+              <div class="product-img">
+                ${p.image ? `<img src="${esc(p.image)}" alt="" loading="lazy" onerror="this.style.display='none'">` : ''}
+                ${foodSvg}
+              </div>
               <div class="product-details">
                 <h3>${esc(p.name)} ${p.badge ? `<span class="dish-badge">${esc(p.badge)}</span>` : ''}</h3>
                 <p>${esc(p.description)}</p>
@@ -395,7 +441,7 @@ function tracking(orderId) {
 
   const deliveryCodeMarkup = (order.fulfillment === 'delivery' && order.deliveryCode?.code)
     ? `<div class="delivery-code-box">
-        <div class="code-title">🔑 Código de verificación de entrega</div>
+        <div class="code-title">${renderIcon('key', 14)} Código de verificación de entrega</div>
         <div class="code-digits">${esc(formatDeliveryCode(order.deliveryCode.code))}</div>
         <p class="code-desc">Cuando recibas el pedido, decile este código al repartidor: <strong>${esc(formatDeliveryCode(order.deliveryCode.code))}</strong></p>
       </div>`
@@ -403,7 +449,7 @@ function tracking(orderId) {
 
   return `${back('#orders', 'Volver a mis pedidos')}
   <div class="narrow">
-    <span class="eyebrow">SEGUIMIENTO DE DEMOSTRACIÓN</span>
+    <span class="eyebrow">SEGUIMIENTO DE PEDIDO</span>
     <h1 class="page-title">${esc(STATUS_LABELS[order.status] || order.status)}</h1>
     <p class="quiet">${esc(order.code)} · ${esc(b.name)}</p>
     ${renderPublicOrderTimeline(order.status)}
@@ -451,7 +497,7 @@ function orderCard(order, actor) {
   const isRiderAwaiting = actor.kind === 'rider' && isAwaitingPreparation(order);
   const formattedPhone = order.customer?.phone ? formatArgentinePhone(order.customer.phone) : '';
   const deliveryCodeBadge = (order.fulfillment === 'delivery' && order.deliveryCode?.code)
-    ? `<div class="delivery-code-badge"><span>🔑 Código de entrega:</span><strong>${esc(formatDeliveryCode(order.deliveryCode.code))}</strong></div>`
+    ? `<div class="delivery-code-badge"><span>${renderIcon('key', 14)} Código de entrega:</span><strong>${esc(formatDeliveryCode(order.deliveryCode.code))}</strong></div>`
     : '';
 
   return `<article class="card order-card"><div class="row"><div>
@@ -463,14 +509,14 @@ function orderCard(order, actor) {
     <p class="order-items">${order.lines.map(l => `${l.quantity} × ${esc(l.name)}`).join(' · ')}</p>
     <div class="row"><strong>${money(order.total)}</strong>
       <div style="display:flex;gap:10px;align-items:center;">
-        ${actor.kind === 'merchant' ? `<button class="link-button" type="button" data-action="view-ticket" data-order="${esc(order.id)}" data-business="${esc(b.id)}">🧾 Ver comanda</button>` : ''}
+        ${actor.kind === 'merchant' ? `<button class="link-button" type="button" data-action="view-ticket" data-order="${esc(order.id)}" data-business="${esc(b.id)}">${renderIcon('receipt', 13)} Ver comanda</button>` : ''}
         <a class="link-button" href="#order/${esc(order.id)}">Ver seguimiento</a>
       </div>
     </div>
     ${deliveryCodeBadge}
     ${actor.kind !== 'customer' ? (
       isRiderAwaiting
-        ? `<p class="microcopy below-note" style="color:var(--clay);">⏳ Pedido en cocina. Los datos de contacto y entrega se activan al retirar del local.</p>`
+        ? `<p class="microcopy below-note" style="color:var(--clay);">Pedido en cocina. Los datos de contacto y entrega se activan al retirar del local.</p>`
         : `<p class="microcopy below-note">${esc(order.customer?.name)} · ${esc(formattedPhone || order.customer?.phone)}
           ${order.customer?.address ? `<br>${esc(order.customer.address)}` : ''}
           ${order.customer?.notes ? `<br>Nota: ${esc(order.customer.notes)}` : ''}</p>`
@@ -518,7 +564,7 @@ function businessPanel(businessId) {
     <div><span class="eyebrow">PANEL DE COMERCIO · DEMO</span><h1 class="page-title">${esc(b.name)}</h1>${availability(b)}</div>
     <div class="manage-controls">
       <button class="sound-toggle ${!soundService.muted ? 'on' : ''}" type="button" data-action="toggle-sound">
-        ${!soundService.muted ? '🔔 Aviso sonoro: ACTIVO (tocar para probar)' : '🔕 Aviso sonoro: SILENCIADO (tocar para activar)'}
+        ${!soundService.muted ? `${renderIcon('bell', 14)} Aviso sonoro: ACTIVO` : `${renderIcon('bell-off', 14)} Aviso sonoro: SILENCIADO`}
       </button>
       <a class="button secondary" href="#shop/${esc(b.id)}">Ver mi carta</a>
       <button class="button" type="button" data-action="toggle-open" data-business="${esc(b.id)}">${b.open ? 'Cerrar' : 'Abrir'} comercio demo</button>
@@ -527,11 +573,11 @@ function businessPanel(businessId) {
   ${demoNotice()}
 
   <div class="tab-bar">
-    <button type="button" class="tab-btn ${activeBusinessTab === 'all' ? 'active' : ''}" data-action="set-biz-tab" data-tab="all">🏢 Todo</button>
-    <button type="button" class="tab-btn ${activeBusinessTab === 'orders' ? 'active' : ''}" data-action="set-biz-tab" data-tab="orders">📋 Pedidos (${allOrders.length})</button>
-    <button type="button" class="tab-btn ${activeBusinessTab === 'products' ? 'active' : ''}" data-action="set-biz-tab" data-tab="products">🍽️ Productos (${products.length})</button>
-    <button type="button" class="tab-btn ${activeBusinessTab === 'settings' ? 'active' : ''}" data-action="set-biz-tab" data-tab="settings">⚙️ Configuración</button>
-    <button type="button" class="tab-btn ${activeBusinessTab === 'metrics' ? 'active' : ''}" data-action="set-biz-tab" data-tab="metrics">📊 Resumen comercial</button>
+    <button type="button" class="tab-btn ${activeBusinessTab === 'all' ? 'active' : ''}" data-action="set-biz-tab" data-tab="all">Todo</button>
+    <button type="button" class="tab-btn ${activeBusinessTab === 'orders' ? 'active' : ''}" data-action="set-biz-tab" data-tab="orders">Pedidos (${allOrders.length})</button>
+    <button type="button" class="tab-btn ${activeBusinessTab === 'products' ? 'active' : ''}" data-action="set-biz-tab" data-tab="products">Productos (${products.length})</button>
+    <button type="button" class="tab-btn ${activeBusinessTab === 'settings' ? 'active' : ''}" data-action="set-biz-tab" data-tab="settings">Configuración</button>
+    <button type="button" class="tab-btn ${activeBusinessTab === 'metrics' ? 'active' : ''}" data-action="set-biz-tab" data-tab="metrics">Resumen comercial</button>
   </div>
 
   ${activeBusinessTab === 'all' || activeBusinessTab === 'orders' ? `
@@ -543,11 +589,11 @@ function businessPanel(businessId) {
       ${b.deliveryEnabled ? `<a class="link-button" href="#rider/${esc(b.id)}">Ir a reparto demo →</a>` : ''}
     </div>
     ${allOrders.length ? `
-      ${renderOrderSection('⚡ Nuevos pedidos entrantes — ¡Atender ahora!', incomingOrders, 'incoming')}
-      ${renderOrderSection('🍳 En cocina y preparación', prepOrders, 'prep')}
-      ${renderOrderSection('✅ Listos para entrega / despacho', readyOrders, 'ready')}
-      ${renderOrderSection('🛵 En reparto a domicilio', transitOrders, 'transit')}
-      ${renderOrderSection('📦 Historial de pedidos finalizados', closedOrders, 'closed')}
+      ${renderOrderSection('Nuevos pedidos entrantes', incomingOrders, 'incoming')}
+      ${renderOrderSection('En cocina y preparación', prepOrders, 'prep')}
+      ${renderOrderSection('Listos para entrega / despacho', readyOrders, 'ready')}
+      ${renderOrderSection('En reparto a domicilio', transitOrders, 'transit')}
+      ${renderOrderSection('Historial de pedidos finalizados', closedOrders, 'closed')}
     ` : empty('La bandeja está vacía', 'Creá un pedido de prueba desde la carta de este comercio.', `#shop/${b.id}`, 'Abrir la carta')}
   ` : ''}
 
@@ -555,7 +601,7 @@ function businessPanel(businessId) {
     <section class="product-group"><h2>Gestión de Carta</h2><p class="quiet">Modificá precios, stock y disponibilidad de platos al instante.</p><div class="edit-products">
       ${products.map(p => `<div class="card edit-product">
         <button type="button" class="product-toggle-btn ${p.available ? 'active' : 'paused'}" data-action="quick-toggle-product" data-business="${esc(b.id)}" data-product="${esc(p.id)}">
-          ${p.available ? '🟢 Disponible en carta (tocar para pausar)' : '🔴 Pausado (agotado, tocar para activar)'}
+          ${p.available ? 'Disponible en carta (tocar para pausar)' : 'Pausado (agotado, tocar para activar)'}
         </button>
         <form data-form="product" data-business="${esc(b.id)}" data-product="${esc(p.id)}">
           <h3>${esc(p.name)}</h3>
@@ -684,7 +730,7 @@ function presentacion() {
       <h2>3. Beneficios por Actor de la Comunidad</h2>
       <div class="pres-grid-2">
         <div class="pres-card">
-          <h3>👤 Para el Vecino y Turista</h3>
+          <h3>Para el Vecino y Turista</h3>
           <p>
             • Descubrir la oferta gastronómica de Aluminé en un catálogo unificado.<br>
             • Consultar cartas actualizadas y precios de manera clara.<br>
@@ -693,7 +739,7 @@ function presentacion() {
           </p>
         </div>
         <div class="pres-card">
-          <h3>🏪 Para el Comercio Local</h3>
+          <h3>Para el Comercio Local</h3>
           <p>
             • Catálogo autogestionable con actualización ágil de precios y disponibilidad.<br>
             • Pedidos organizados en bandejas de trabajo para mostrador y cocina.<br>
@@ -702,7 +748,7 @@ function presentacion() {
           </p>
         </div>
         <div class="pres-card">
-          <h3>🛵 Para el Repartidor</h3>
+          <h3>Para el Repartidor</h3>
           <p>
             • Asignación operativa de pedidos coordinada directamente con el local.<br>
             • Hoja de ruta para retiro, trayecto y confirmación de llegada.<br>
@@ -711,7 +757,7 @@ function presentacion() {
           </p>
         </div>
         <div class="pres-card">
-          <h3>🏛️ Para la Localidad y Entidades Locales</h3>
+          <h3>Para la Comunidad y Entidades Locales</h3>
           <p>
             • Concentrar la oferta gastronómica de Aluminé en una referencia digital común.<br>
             • Facilitar presencia y herramientas digitales accesibles a pequeños emprendimientos.<br>
@@ -901,9 +947,9 @@ function openJoinModal() {
       <h2 id="join-modal-title">Sumá tu comercio a la red local</h2>
       <p class="quiet" style="font-size:13px;margin-bottom:14px;">Publicá tu carta digital, recibí pedidos para retiro o delivery y administrá tu cocina desde tu celular o PC.</p>
       <div style="background:var(--soft);padding:12px 14px;border-radius:12px;font-size:12px;margin-bottom:16px;line-height:1.5;">
-        <div>✓ <strong>Herramienta directa y local</strong>: pensada para acompañar la actividad del comercio sin intermediaciones complejas.</div>
-        <div>✓ <strong>Menú digital y comanda para cocina</strong>: controlá disponibilidad de platos y tiempos de espera en tiempo real.</div>
-        <div>✓ <strong>Retiro en mostrador o delivery propio</strong>: adaptable a los horarios y modalidades de cada local.</div>
+        <div>${renderIcon('check', 13)} <strong>Herramienta directa y local</strong>: pensada para acompañar la actividad del comercio sin intermediaciones complejas.</div>
+        <div>${renderIcon('check', 13)} <strong>Menú digital y comanda para cocina</strong>: controlá disponibilidad de platos y tiempos de espera en tiempo real.</div>
+        <div>${renderIcon('check', 13)} <strong>Retiro en mostrador o delivery propio</strong>: adaptable a los horarios y modalidades de cada local.</div>
       </div>
       <form id="join-form">
         <div class="form-grid">
@@ -981,7 +1027,7 @@ function openTicketModal(order, businessName) {
       <p class="quiet" style="font-size:12px;">Formato de impresión térmica para cocina y despacho.</p>
       <div class="ticket-container">${esc(ticketText)}</div>
       <div style="display:flex;gap:10px;margin-top:16px;">
-        <button class="button full" type="button" data-action="copy-ticket" data-text="${esc(ticketText)}">📋 Copiar comanda</button>
+        <button class="button full" type="button" data-action="copy-ticket" data-text="${esc(ticketText)}">${renderIcon('receipt', 14)} Copiar comanda</button>
         <button class="button secondary" type="button" data-action="close-modal">Cerrar</button>
       </div>
     </div>
@@ -995,6 +1041,14 @@ function closeModal() {
 
 async function doAction(button) {
   const { action, business: businessId, product: productId } = button.dataset;
+
+  if (action === 'scroll-to') {
+    const target = document.getElementById(button.dataset.target);
+    if (target) {
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    return;
+  }
 
   if (action === 'filter') {
     searchState.category = button.dataset.category;
@@ -1039,9 +1093,9 @@ async function doAction(button) {
     soundService.setMuted(!soundService.muted);
     if (!soundService.muted) {
       await soundService.playNewOrder();
-      toast('🔔 Aviso sonoro activado (probando tono armónico).');
+      toast('Aviso sonoro activado (tono armónico).');
     } else {
-      toast('🔕 Aviso sonoro silenciado.');
+      toast('Aviso sonoro silenciado.');
     }
     render();
     return;
@@ -1068,7 +1122,7 @@ async function doAction(button) {
         merchantActor(b)
       );
       render();
-      toast(p.available ? `🔴 ${p.name} pausado (agotado).` : `🟢 ${p.name} disponible en carta.`);
+      toast(p.available ? `${p.name} pausado (agotado).` : `${p.name} disponible en carta.`);
     }
     return;
   }
@@ -1176,8 +1230,8 @@ if (modalContainer) {
       await repository.addMerchantLead(data);
       modalContainer.innerHTML = `<div class="modal-overlay" role="dialog" aria-modal="true">
         <div class="modal-card" style="text-align:center;padding:32px 24px;">
-          <div style="font-size:38px;margin-bottom:12px;">🎉</div>
-          <span class="eyebrow" style="color:var(--green);">SOLICITUD REGISTRADA</span>
+          <div style="font-size:32px;margin-bottom:12px;color:var(--forest);display:grid;place-items:center;">${renderIcon('check', 40)}</div>
+          <span class="eyebrow" style="color:var(--forest);">SOLICITUD REGISTRADA</span>
           <h2>¡Gracias ${esc(data.name || '')}!</h2>
           <p style="font-size:14px;color:var(--muted);max-width:440px;margin:10px auto 20px;line-height:1.5;">
             Registramos la solicitud para incorporar a <strong>${esc(data.businessName || 'tu comercio')}</strong> en CAUCE · Aluminé. En una implementación operativa real, el equipo local se contactará por WhatsApp al <strong>${esc(data.phone || '')}</strong> para dar de alta la carta y entregarte tu panel.

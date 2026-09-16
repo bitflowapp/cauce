@@ -1,4 +1,4 @@
-﻿// Datos de demostración comercial para CAUCE · Aluminé.
+// Datos de demostración comercial para CAUCE · Aluminé.
 // Todos los nombres, importes, productos y comercios son ficticios y diseñados para presentación comercial local.
 
 const businesses = [
@@ -22,6 +22,7 @@ const businesses = [
     address: 'Av. 4 de Febrero 420',
     ratingDemo: '4.9',
     badge: 'Popular',
+    coverImage: 'assets/images/merchants/orilla-cover.webp',
   },
   {
     id: 'horno',
@@ -43,6 +44,7 @@ const businesses = [
     address: 'Cristian Joubert 180',
     ratingDemo: '4.8',
     badge: 'Masa madre',
+    coverImage: 'assets/images/merchants/horno-cover.webp',
   },
   {
     id: 'pehuen',
@@ -64,6 +66,7 @@ const businesses = [
     address: 'Ruta 23 y San Martín',
     ratingDemo: '4.9',
     badge: 'Comida lista',
+    coverImage: 'assets/images/merchants/pehuen-cover.webp',
   },
   {
     id: 'plaza',
@@ -85,6 +88,7 @@ const businesses = [
     address: 'Frente a Plaza San Martín',
     ratingDemo: '4.9',
     badge: 'Especialidad',
+    coverImage: 'assets/images/merchants/plaza-cover.webp',
   },
   {
     id: 'rioarriba',
@@ -106,6 +110,7 @@ const businesses = [
     address: 'Costanera Río Aluminé 95',
     ratingDemo: '4.7',
     badge: 'Vista al río',
+    coverImage: 'assets/images/merchants/rioarriba-cover.webp',
   },
   {
     id: 'ronda',
@@ -127,6 +132,7 @@ const businesses = [
     address: 'Torrado 340',
     ratingDemo: '4.8',
     badge: 'Casero',
+    coverImage: 'assets/images/merchants/ronda-cover.webp',
   },
   {
     id: 'union',
@@ -148,6 +154,7 @@ const businesses = [
     address: 'Av. 4 de Febrero 115',
     ratingDemo: '4.9',
     badge: 'Tradición',
+    coverImage: 'assets/images/merchants/union-cover.webp',
   },
 ];
 
@@ -233,6 +240,7 @@ const products = productDefinitions.map(([businessId, id, name, description, cat
   stock: 30,
   dishType: dishType || 'burger',
   badge: badge || '',
+  image: `assets/images/dishes/${id}.webp`,
 }));
 
 export function initialDemoState() {
