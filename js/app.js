@@ -1041,7 +1041,7 @@ function presentacion() {
           <span class="territory-tag">ALUMINÉ</span>
           <span class="territory-tag">NEUQUÉN</span>
           <span class="territory-tag">PATAGONIA</span>
-          <span class="territory-tag">PILOTO 90 DÍAS</span>
+          <span class="territory-tag">PROPUESTA DE PILOTO</span>
         </div>
       </div>
       <div class="pres-hero-art" aria-hidden="true">${renderSticker('wave', 72)}</div>
@@ -1050,64 +1050,59 @@ function presentacion() {
     <section class="pres-slide-card">
       <div class="pres-slide-header">
         <span class="eyebrow">DIRECCIÓN OPERATIVA</span>
-        <h2 class="section-display-title">PILOTO INTENSIVO DE 90 DÍAS</h2>
-        <p class="quiet" style="margin-top:6px;">Los tiempos dependerán del alcance acordado, cantidad de comercios y modelo operativo.</p>
+        <h2 class="section-display-title">IMPLEMENTACIÓN POR ETAPAS</h2>
+        <p class="quiet" style="margin-top:6px;">Los tiempos y alcance se definen con los actores participantes según la escala acordada.</p>
       </div>
 
       <div class="pres-phases-grid">
         <div class="pres-phase-item">
           <span class="pres-phase-num">01</span>
           <span class="pres-stage-tag">Etapa 1</span>
-          <strong>Preparación &amp; Relevamiento</strong>
-          <span class="pres-phase-dur">15 días</span>
-          <p>Validación con comercios interesados, relevamiento de modalidades de venta, cartas y horarios reales.</p>
+          <strong>Validación y relevamiento</strong>
+          <p>Relevamiento con comercios interesados, modalidades de venta, cartas y horarios reales.</p>
         </div>
         <div class="pres-phase-item">
           <span class="pres-phase-num">02</span>
           <span class="pres-stage-tag">Etapa 2</span>
-          <strong>Lanzamiento Piloto</strong>
-          <span class="pres-phase-dur">15 días</span>
+          <strong>Piloto inicial</strong>
           <p>Puesta en marcha con un grupo inicial de locales para validar circuitos de retiro y entrega de cercanía.</p>
         </div>
         <div class="pres-phase-item">
           <span class="pres-phase-num">03</span>
           <span class="pres-stage-tag">Etapa 3</span>
-          <strong>Ajuste Operativo</strong>
-          <span class="pres-phase-dur">30 días</span>
+          <strong>Ajuste operativo</strong>
           <p>Análisis conjunto de la experiencia con comerciantes, clientes y repartidores para optimizar herramientas.</p>
         </div>
         <div class="pres-phase-item">
           <span class="pres-phase-num">04</span>
           <span class="pres-stage-tag">Etapa 4</span>
-          <strong>Expansión Gradual</strong>
-          <span class="pres-phase-dur">20 días</span>
-          <p>Incorporación progresiva de nuevos comercios y evaluación de extensión a otros rubros locales.</p>
+          <strong>Evaluación</strong>
+          <p>Revisión de resultados, experiencia de uso e impacto operativo con los actores participantes.</p>
         </div>
         <div class="pres-phase-item">
           <span class="pres-phase-num">05</span>
           <span class="pres-stage-tag">Etapa 5</span>
-          <strong>Balance &amp; Continuidad</strong>
-          <span class="pres-phase-dur">10 días</span>
-          <p>Evaluación de indicadores, retroalimentación comunitaria y definición del esquema operativo permanente.</p>
+          <strong>Posible ampliación</strong>
+          <p>Definición del esquema permanente e incorporación progresiva de nuevos comercios y rubros.</p>
         </div>
       </div>
 
       <div class="pres-metrics-row">
         <div class="pres-metric-box">
-          <span class="pres-metric-val">6 a 12</span>
-          <span class="pres-metric-lbl">Comercios gastronómicos activos</span>
+          <span class="pres-metric-lbl">COMERCIOS PARTICIPANTES</span>
+          <span class="pres-metric-val">A definir con el piloto</span>
         </div>
         <div class="pres-metric-box">
-          <span class="pres-metric-val">500+</span>
-          <span class="pres-metric-lbl">Pedidos de prueba completados</span>
+          <span class="pres-metric-lbl">PEDIDOS PROCESADOS</span>
+          <span class="pres-metric-val">Indicador a medir</span>
         </div>
         <div class="pres-metric-box">
-          <span class="pres-metric-val">&lt;35 min</span>
-          <span class="pres-metric-lbl">Tiempo estimado de entrega</span>
+          <span class="pres-metric-lbl">TIEMPOS DE ENTREGA</span>
+          <span class="pres-metric-val">Indicador operativo</span>
         </div>
         <div class="pres-metric-box">
-          <span class="pres-metric-val">Alto</span>
-          <span class="pres-metric-lbl">Índice de satisfacción local</span>
+          <span class="pres-metric-lbl">EXPERIENCIA DE USO</span>
+          <span class="pres-metric-val">A evaluar con participantes</span>
         </div>
       </div>
 
@@ -1123,7 +1118,7 @@ function presentacion() {
         <div>
           <span class="eyebrow">DIAGNÓSTICO TERRITORIAL</span>
           <h2 class="section-display-title">LA OFERTA LOCAL EXISTE, PERO ESTÁ DISPERSA.</h2>
-          <p class="quiet" style="margin-top:6px;">Hoy la información gastronómica de la localidad está repartida en múltiples canales y cuesta acceder a ella.</p>
+          <p class="quiet" style="margin-top:6px;">Muchos comercios utilizan distintos canales para comunicar cartas, horarios y recibir consultas. CAUCE propone concentrar esas tareas en una experiencia común.</p>
         </div>
         <div class="pres-header-sticker" aria-hidden="true">
           ${renderSticker('chatBubbles', 145)}
@@ -1165,12 +1160,12 @@ function presentacion() {
         <div class="pres-pillar-card">
           <div class="pres-pillar-badge social">IMPACTO SOCIAL</div>
           <h3>Cercanía &amp; Trabajo Local</h3>
-          <p>Fomenta el reparto de proximidad organizado por los propios locales, dinamiza el empleo barrial y preserva el trato humano y directo entre vecinos.</p>
+          <p>Puede facilitar esquemas de reparto de proximidad organizados por los comercios y generar nuevas oportunidades operativas locales, preservando el trato humano y directo entre vecinos.</p>
         </div>
         <div class="pres-pillar-card">
           <div class="pres-pillar-badge economic">IMPACTO ECONÓMICO</div>
           <h3>Circulación en el Pueblo</h3>
-          <p>El valor económico de las ventas y la logística de entrega queda íntegramente en la comunidad, fortaleciendo el ecosistema gastronómico de Aluminé.</p>
+          <p>CAUCE propone un canal digital que puede reducir intermediaciones y adaptar su modelo económico a las necesidades de los comercios participantes, buscando fortalecer el ecosistema gastronómico local.</p>
         </div>
         <div class="pres-pillar-card">
           <div class="pres-pillar-badge strategic">IMPACTO ESTRATÉGICO</div>
@@ -1191,7 +1186,7 @@ function presentacion() {
         <div class="pres-card">
           <div class="pres-card-icon">${renderSticker('bag', 38)}</div>
           <h3>1. Vidriera &amp; Catálogo Público</h3>
-          <p>Diseño ágil y responsive adaptado a celulares para que vecinos y turistas descubran qué pedir, fotos de platos reales, precios claros y horarios actualizados sin intermediación.</p>
+          <p>Diseño ágil y responsive adaptado a celulares para que vecinos y turistas descubran qué pedir, fotos de platos reales, precios claros y horarios actualizados con gestión directa del comercio.</p>
         </div>
         <div class="pres-card">
           <div class="pres-card-icon">${renderSticker('merchant', 38)}</div>

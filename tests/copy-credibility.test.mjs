@@ -32,6 +32,12 @@ test('ausencia de afirmaciones infladas o no demostradas en el copy de la aplica
     'Fuga de valor local',
     'Exclusión de Pequeños Comercios',
     'algoritmos estándar',
+    '500+',
+    'satisfacción Alto',
+    'queda íntegramente en la comunidad',
+    'dinamiza el empleo',
+    'PILOTO 90 DÍAS',
+    '90 días',
   ];
 
   for (const expr of forbiddenExpressions) {
@@ -49,6 +55,8 @@ test('presencia de tono institucional propositivo y constructivo en la presentac
 
   const requiredInstitutionalSections = [
     'PROPUESTA DE INFRAESTRUCTURA DIGITAL COMPARTIDA',
+    'PROPUESTA DE PILOTO',
+    'IMPLEMENTACIÓN POR ETAPAS',
     'Canales digitales fragmentados',
     'Barreras de digitalización',
     'Una experiencia pensada para la localidad',
@@ -58,7 +66,14 @@ test('presencia de tono institucional propositivo y constructivo en la presentac
     'Etapa 2',
     'Etapa 3',
     'Etapa 4',
-    'Los tiempos dependerán del alcance acordado, cantidad de comercios y modelo operativo',
+    'Etapa 5',
+    'Los tiempos y alcance se definen con los actores participantes',
+    'COMERCIOS PARTICIPANTES',
+    'PEDIDOS PROCESADOS',
+    'TIEMPOS DE ENTREGA',
+    'EXPERIENCIA DE USO',
+    'A definir con el piloto',
+    'Indicador a medir',
     'acompañamiento institucional',
   ];
 
