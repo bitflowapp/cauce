@@ -42,7 +42,7 @@ const route = () => location.hash.slice(1).split('/').filter(Boolean);
 const themes = new Set(['sage','clay','sand']);
 const theme = business => themes.has(business.theme) ? business.theme : 'sage';
 const back = (href = '#home', label = 'Volver a los comercios') => `<a class="back" href="${esc(href)}">← ${esc(label)}</a>`;
-const empty = (title, message, href = '#home', label = 'Ver comercios') => `<section class="empty"><h2>${esc(title)}</h2><p>${esc(message)}</p><a class="button" href="${esc(href)}">${esc(label)}</a></section>`;
+const empty = (title, message, href = '#home', label = 'Ver comercios', sticker = 'diner') => `<section class="empty"><div class="empty-sticker" aria-hidden="true">${renderSticker(sticker, 64)}</div><h2>${esc(title)}</h2><p>${esc(message)}</p><a class="button" href="${esc(href)}">${esc(label)}</a></section>`;
 const demoNotice = () => `<div class="notice"><strong>Estás probando una demostración comercial local de CAUCE · Aluminé.</strong>Los comercios y los datos son de prueba. Los paneles permiten demostrar la experiencia real de un restaurante, un cliente y un repartidor.</div>`;
 const merchantActor = business => ({ kind:'merchant', ...scopeOf(business) });
 const countCart = cart => (cart?.lines || []).reduce((total, line) => total + line.quantity, 0);
@@ -82,13 +82,23 @@ function renderSticker(name, size = 48, className = '') {
     case 'wave':
       return `<svg class="${cls} sticker-wave" width="${size}" height="${size}" viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M4 11C8 7 12 15 16 11C20 7 24 15 28 11" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 21C8 17 12 25 16 21C20 17 24 25 28 21" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
     case 'coffee':
-      return `<svg class="${cls} sticker-coffee" width="${size}" height="${size}" viewBox="0 0 64 64" fill="none" aria-hidden="true"><path d="M12 24H44V42C44 49.7 37.7 56 30 56H26C18.3 56 12 49.7 12 42V24Z" fill="#ffffff" stroke="#111817" stroke-width="4" stroke-linejoin="round"/><path d="M44 28H48C52.4 28 56 31.6 56 36C56 40.4 52.4 44 48 44H44" fill="#ffffff" stroke="#111817" stroke-width="4" stroke-linecap="round"/><ellipse cx="28" cy="24" rx="14" ry="4" fill="#0f3b37"/><path d="M22 16C20 12 24 9 22 5" stroke="#111817" stroke-width="3" stroke-linecap="round"/><path d="M30 15C28 11 32 8 30 4" stroke="#111817" stroke-width="3" stroke-linecap="round"/><path d="M38 16C36 12 40 9 38 5" stroke="#111817" stroke-width="3" stroke-linecap="round"/></svg>`;
+      return `<svg class="${cls} sticker-coffee" width="${size}" height="${size}" viewBox="0 0 64 64" fill="none" aria-hidden="true"><path d="M12 24H44V42C44 49.7 37.7 56 30 56H26C18.3 56 12 49.7 12 42V24Z" fill="#ffffff" stroke="#111817" stroke-width="4" stroke-linejoin="round"/><path d="M44 28H48C52.4 28 56 31.6 56 36C56 40.4 52.4 44 48 44H44" fill="#ffffff" stroke="#111817" stroke-width="4" stroke-linecap="round"/><ellipse cx="28" cy="24" rx="14" ry="4" fill="#143d34"/><path d="M22 16C20 12 24 9 22 5" stroke="#111817" stroke-width="3" stroke-linecap="round"/><path d="M30 15C28 11 32 8 30 4" stroke="#111817" stroke-width="3" stroke-linecap="round"/><path d="M38 16C36 12 40 9 38 5" stroke="#111817" stroke-width="3" stroke-linecap="round"/></svg>`;
     case 'scooter':
-      return `<svg class="${cls} sticker-scooter" width="${size}" height="${size}" viewBox="0 0 80 80" fill="none" aria-hidden="true"><circle cx="20" cy="58" r="10" fill="#ffffff" stroke="#111817" stroke-width="4"/><circle cx="20" cy="58" r="4" fill="#0f3b37"/><circle cx="62" cy="58" r="10" fill="#ffffff" stroke="#111817" stroke-width="4"/><circle cx="62" cy="58" r="4" fill="#0f3b37"/><path d="M20 58H36L44 48H56L62 58" stroke="#111817" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M48 48L52 28H44" stroke="#111817" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><rect x="12" y="30" width="18" height="18" rx="3" fill="#ffffff" stroke="#111817" stroke-width="4"/><path d="M12 37H30" stroke="#111817" stroke-width="2.5"/><circle cx="21" cy="34" r="1.5" fill="#0284c7"/><circle cx="42" cy="20" r="7" fill="#ffffff" stroke="#111817" stroke-width="4"/><path d="M38 27L42 42L48 46" stroke="#111817" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M40 33L50 31" stroke="#111817" stroke-width="4" stroke-linecap="round"/><path d="M4 42H8M2 48H7M5 54H9" stroke="#111817" stroke-width="3" stroke-linecap="round"/></svg>`;
+      return `<svg class="${cls} sticker-scooter" width="${size}" height="${size}" viewBox="0 0 80 80" fill="none" aria-hidden="true"><circle cx="20" cy="58" r="10" fill="#ffffff" stroke="#111817" stroke-width="4"/><circle cx="20" cy="58" r="4" fill="#143d34"/><circle cx="62" cy="58" r="10" fill="#ffffff" stroke="#111817" stroke-width="4"/><circle cx="62" cy="58" r="4" fill="#143d34"/><path d="M20 58H36L44 48H56L62 58" stroke="#111817" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M48 48L52 28H44" stroke="#111817" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><rect x="12" y="30" width="18" height="18" rx="3" fill="#ffffff" stroke="#111817" stroke-width="4"/><path d="M12 37H30" stroke="#111817" stroke-width="2.5"/><circle cx="21" cy="34" r="1.5" fill="#1d4e73"/><circle cx="42" cy="20" r="7" fill="#ffffff" stroke="#111817" stroke-width="4"/><path d="M38 27L42 42L48 46" stroke="#111817" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M40 33L50 31" stroke="#111817" stroke-width="4" stroke-linecap="round"/><path d="M4 42H8M2 48H7M5 54H9" stroke="#111817" stroke-width="3" stroke-linecap="round"/></svg>`;
     case 'runner':
-      return `<svg class="${cls} sticker-runner" width="${size}" height="${size}" viewBox="0 0 80 80" fill="none" aria-hidden="true"><circle cx="48" cy="20" r="8" fill="#ffffff" stroke="#111817" stroke-width="4"/><path d="M40 18C44 14 54 14 58 17L64 19" stroke="#111817" stroke-width="3.5" stroke-linecap="round"/><circle cx="52" cy="19" r="1.5" fill="#111817"/><path d="M46 28L40 46" stroke="#111817" stroke-width="4" stroke-linecap="round"/><rect x="28" y="27" width="12" height="16" rx="3" fill="#ffffff" stroke="#111817" stroke-width="3.5"/><path d="M34 27V43" stroke="#0f3b37" stroke-width="2"/><path d="M44 32L54 36L60 30" stroke="#111817" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><rect x="58" y="24" width="6" height="10" rx="1.5" fill="#ffffff" stroke="#111817" stroke-width="2"/><path d="M40 46L26 56L18 52" stroke="#111817" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M40 46L52 54L64 66" stroke="#111817" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><ellipse cx="16" cy="52" rx="4" ry="2.5" fill="#111817"/><ellipse cx="66" cy="67" rx="4" ry="2.5" fill="#111817"/><path d="M64 12L68 8M68 16L73 14" stroke="#111817" stroke-width="2.5" stroke-linecap="round"/></svg>`;
+      return `<svg class="${cls} sticker-runner" width="${size}" height="${size}" viewBox="0 0 80 80" fill="none" aria-hidden="true"><circle cx="48" cy="20" r="8" fill="#ffffff" stroke="#111817" stroke-width="4"/><path d="M40 18C44 14 54 14 58 17L64 19" stroke="#111817" stroke-width="3.5" stroke-linecap="round"/><circle cx="52" cy="19" r="1.5" fill="#111817"/><path d="M46 28L40 46" stroke="#111817" stroke-width="4" stroke-linecap="round"/><rect x="28" y="27" width="12" height="16" rx="3" fill="#ffffff" stroke="#111817" stroke-width="3.5"/><path d="M34 27V43" stroke="#143d34" stroke-width="2"/><path d="M44 32L54 36L60 30" stroke="#111817" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><rect x="58" y="24" width="6" height="10" rx="1.5" fill="#ffffff" stroke="#111817" stroke-width="2"/><path d="M40 46L26 56L18 52" stroke="#111817" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><path d="M40 46L52 54L64 66" stroke="#111817" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><ellipse cx="16" cy="52" rx="4" ry="2.5" fill="#111817"/><ellipse cx="66" cy="67" rx="4" ry="2.5" fill="#111817"/><path d="M64 12L68 8M68 16L73 14" stroke="#111817" stroke-width="2.5" stroke-linecap="round"/></svg>`;
+    case 'merchant':
+      return `<svg class="${cls} sticker-merchant" width="${size}" height="${size}" viewBox="0 0 80 80" fill="none" aria-hidden="true"><path d="M26 24C22 17 30 9 40 9C50 9 58 17 54 24H26Z" fill="#ffffff" stroke="#111817" stroke-width="4" stroke-linejoin="round"/><circle cx="40" cy="30" r="9" fill="#ffffff" stroke="#111817" stroke-width="4"/><path d="M34 29C35 31 37 31 38 29M42 29C43 31 45 31 46 29" stroke="#111817" stroke-width="2.5" stroke-linecap="round"/><path d="M36 34C38 37 42 37 44 34" stroke="#111817" stroke-width="3" stroke-linecap="round"/><path d="M30 40H50L54 66H26L30 40Z" fill="#ffffff" stroke="#111817" stroke-width="4" stroke-linejoin="round"/><path d="M34 50H46V58H34V50Z" fill="#edf5fa" stroke="#111817" stroke-width="2.5"/><path d="M30 44L20 50L24 54" stroke="#111817" stroke-width="4" stroke-linecap="round"/><path d="M50 44L60 48L68 44" stroke="#111817" stroke-width="4" stroke-linecap="round"/><ellipse cx="68" cy="42" rx="10" ry="3.5" fill="#ffffff" stroke="#111817" stroke-width="3"/><path d="M63 41C64 36 72 36 73 41Z" fill="#143d34" stroke="#111817" stroke-width="2.5"/><path d="M68 35C67 33 69 32 68 30" stroke="#111817" stroke-width="2" stroke-linecap="round"/><path d="M34 66V74M46 66V74" stroke="#111817" stroke-width="4" stroke-linecap="round"/><ellipse cx="32" cy="74" rx="4" ry="2.5" fill="#111817"/><ellipse cx="48" cy="74" rx="4" ry="2.5" fill="#111817"/><path d="M74 34L77 32M78 39L81 40" stroke="#111817" stroke-width="2.5" stroke-linecap="round"/></svg>`;
+    case 'diner':
+      return `<svg class="${cls} sticker-diner" width="${size}" height="${size}" viewBox="0 0 80 80" fill="none" aria-hidden="true"><path d="M26 28C22 24 24 16 30 14C36 12 40 10 46 12C52 10 58 14 60 20C64 24 64 32 58 36C60 42 54 46 48 46H28C22 46 20 40 22 34C20 30 22 26 26 28Z" fill="#111817"/><path d="M34 26C34 22 42 22 46 26V36C46 40 34 40 34 36V26Z" fill="#ffffff" stroke="#111817" stroke-width="3.5" stroke-linejoin="round"/><circle cx="42" cy="28" r="1.5" fill="#111817"/><path d="M40 33C42 35 44 34 45 33" stroke="#111817" stroke-width="2.5" stroke-linecap="round"/><path d="M30 46H52L56 70H26L30 46Z" fill="#ffffff" stroke="#111817" stroke-width="4" stroke-linejoin="round"/><path d="M42 50H50V58H42V50Z" fill="#ffffff" stroke="#111817" stroke-width="3" stroke-linejoin="round"/><path d="M50 52H53C54.5 52 55.5 53.5 55.5 55C55.5 56.5 54.5 58 53 58H50" stroke="#111817" stroke-width="2.5"/><path d="M44 46C43 43 45 41 44 38" stroke="#111817" stroke-width="2" stroke-linecap="round"/><path d="M62 18L63.5 14L65 18L69 19.5L65 21L63.5 25L62 21L58 19.5L62 18Z" fill="#143d34"/></svg>`;
+    case 'croissant':
+      return `<svg class="${cls} sticker-croissant" width="${size}" height="${size}" viewBox="0 0 64 64" fill="none" aria-hidden="true"><path d="M12 40C10 32 14 20 28 14C42 14 52 24 52 38C52 42 48 44 44 40C40 36 38 28 28 26C20 26 16 34 14 42C13 44 11 43 12 40Z" fill="#ffffff" stroke="#111817" stroke-width="4" stroke-linejoin="round"/><path d="M26 15C32 20 34 26 30 38" stroke="#111817" stroke-width="3" stroke-linecap="round"/><path d="M38 17C43 23 44 30 40 40" stroke="#111817" stroke-width="3" stroke-linecap="round"/><circle cx="20" cy="24" r="1.5" fill="#143d34"/><path d="M48 10L49 7L50 10L53 11L50 12L49 15L48 12L45 11L48 10Z" fill="#143d34"/><path d="M10 22L11 20L12 22L14 23L12 24L11 26L10 24L8 23L10 22Z" fill="#143d34"/></svg>`;
     case 'burger':
-      return `<svg class="${cls} sticker-burger" width="${size}" height="${size}" viewBox="0 0 64 64" fill="none" aria-hidden="true"><path d="M12 28C12 18 20 12 32 12C44 12 52 18 52 28H12Z" fill="#ffffff" stroke="#111817" stroke-width="4" stroke-linejoin="round"/><circle cx="24" cy="18" r="1.5" fill="#0f3b37"/><circle cx="32" cy="16" r="1.5" fill="#0f3b37"/><circle cx="40" cy="20" r="1.5" fill="#0f3b37"/><path d="M8 32C12 30 16 34 20 32C24 30 28 34 32 32C36 30 40 34 44 32C48 30 52 34 56 32" stroke="#16a34a" stroke-width="4" stroke-linecap="round"/><rect x="10" y="36" width="44" height="8" rx="4" fill="#ffffff" stroke="#111817" stroke-width="3.5"/><path d="M12 46H52C52 52 46 54 32 54C18 54 12 52 12 46Z" fill="#ffffff" stroke="#111817" stroke-width="4" stroke-linejoin="round"/></svg>`;
+      return `<svg class="${cls} sticker-burger" width="${size}" height="${size}" viewBox="0 0 64 64" fill="none" aria-hidden="true"><path d="M12 28C12 18 20 12 32 12C44 12 52 18 52 28H12Z" fill="#ffffff" stroke="#111817" stroke-width="4" stroke-linejoin="round"/><circle cx="24" cy="18" r="1.5" fill="#143d34"/><circle cx="32" cy="16" r="1.5" fill="#143d34"/><circle cx="40" cy="20" r="1.5" fill="#143d34"/><path d="M8 32C12 30 16 34 20 32C24 30 28 34 32 32C36 30 40 34 44 32C48 30 52 34 56 32" stroke="#143d34" stroke-width="4" stroke-linecap="round"/><rect x="10" y="36" width="44" height="8" rx="4" fill="#ffffff" stroke="#111817" stroke-width="3.5"/><path d="M12 46H52C52 52 46 54 32 54C18 54 12 52 12 46Z" fill="#ffffff" stroke="#111817" stroke-width="4" stroke-linejoin="round"/></svg>`;
+    case 'bag':
+      return `<svg class="${cls} sticker-bag" width="${size}" height="${size}" viewBox="0 0 64 64" fill="none" aria-hidden="true"><path d="M24 24V14C24 10 28 8 32 8C36 8 40 10 40 14V24" fill="none" stroke="#111817" stroke-width="3.5" stroke-linecap="round"/><path d="M14 24H50L46 56H18L14 24Z" fill="#ffffff" stroke="#111817" stroke-width="4" stroke-linejoin="round"/><path d="M12 24H52" stroke="#111817" stroke-width="3" stroke-linecap="round"/><path d="M24 38C26 36 28 40 30 38C32 36 34 40 36 38C38 36 40 40 42 38" stroke="#1d4e73" stroke-width="2.5" stroke-linecap="round"/><path d="M24 43C26 41 28 45 30 43C32 41 34 45 36 43C38 41 40 45 42 43" stroke="#1d4e73" stroke-width="2.5" stroke-linecap="round"/></svg>`;
+    case 'chatBubbles':
+      return `<svg class="${cls} sticker-chat" width="${size}" height="${Math.round(size * 0.56)}" viewBox="0 0 160 90" fill="none" aria-hidden="true"><rect x="8" y="8" width="138" height="30" rx="15" fill="#ffffff" stroke="#111817" stroke-width="3"/><path d="M25 38L20 45L32 38" fill="#ffffff" stroke="#111817" stroke-width="3" stroke-linejoin="round"/><circle cx="24" cy="23" r="4.5" fill="#22c55e"/><text x="34" y="27" font-family="system-ui, -apple-system, sans-serif" font-size="10" font-weight="700" fill="#111817">¿Tenés empanadas hoy?</text><rect x="22" y="48" width="130" height="30" rx="15" fill="#ffffff" stroke="#111817" stroke-width="3"/><path d="M135 78L142 85L138 78" fill="#ffffff" stroke="#111817" stroke-width="3" stroke-linejoin="round"/><circle cx="38" cy="63" r="4.5" fill="#e11d48"/><text x="48" y="67" font-family="system-ui, -apple-system, sans-serif" font-size="10" font-weight="700" fill="#111817">¿Hacen delivery?</text></svg>`;
     case 'actionLines':
       return `<svg class="${cls} sticker-lines" width="${size}" height="${size}" viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M4 16H12M6 8L14 12M6 24L14 20" stroke="#111817" stroke-width="3" stroke-linecap="round"/></svg>`;
     default:
@@ -260,22 +270,22 @@ function home() {
     </div>
     <div class="steps-grid">
       <div class="step-card">
-        <div class="step-num-badge">1</div>
+        <div class="step-num-badge step-badge-1">1</div>
         <h3>El cliente elige un comercio.</h3>
         <p>Explorá los locales de Aluminé, descubrí platos con fotos reales y revisá cartas actualizadas.</p>
-        <div class="step-illustration" aria-hidden="true">${renderSticker('burger', 48)}</div>
+        <div class="step-illustration" aria-hidden="true">${renderSticker('runner', 64)}</div>
       </div>
       <div class="step-card">
-        <div class="step-num-badge">2</div>
+        <div class="step-num-badge step-badge-2">2</div>
         <h3>Hace el pedido.</h3>
         <p>Armá tu pedido sin intermediarios, seleccioná retiro en local o delivery y confirmá en un toque.</p>
-        <div class="step-illustration" aria-hidden="true">${renderSticker('coffee', 48)}</div>
+        <div class="step-illustration" aria-hidden="true">${renderSticker('merchant', 64)}</div>
       </div>
       <div class="step-card">
-        <div class="step-num-badge">3</div>
+        <div class="step-num-badge step-badge-3">3</div>
         <h3>Retira o sigue el delivery del propio comercio.</h3>
         <p>El local cocina tu comida y la entrega en mostrador o la despacha con código de 4 dígitos seguro.</p>
-        <div class="step-illustration" aria-hidden="true">${renderSticker('scooter', 56)}</div>
+        <div class="step-illustration" aria-hidden="true">${renderSticker('scooter', 70)}</div>
       </div>
     </div>
   </section>
@@ -283,6 +293,7 @@ function home() {
   <section class="merchant-growth-section">
     <div class="growth-container">
       <div class="growth-text">
+        <div class="growth-sticker-badge" aria-hidden="true">${renderSticker('merchant', 56)}</div>
         <span class="eyebrow">PARA NEGOCIOS</span>
         <h2 class="display-title">TU COMERCIO TAMBIÉN CRECE EN CAUCE</h2>
         <p class="growth-lead">Gestioná tu negocio de forma simple y vendé más en tu comunidad.</p>
@@ -299,6 +310,7 @@ function home() {
         </div>
       </div>
       <div class="growth-preview">
+        <div class="growth-sticker-float" aria-hidden="true">${renderSticker('bag', 44)}</div>
         <div class="growth-badge">DATOS DE DEMOSTRACIÓN</div>
         <div class="growth-card">
           <div class="growth-card-header">
@@ -1020,9 +1032,9 @@ function presentacion() {
   <div class="pres-container">
     <header class="pres-hero-card">
       <div class="pres-hero-inner">
-        <span class="eyebrow" style="color:var(--teal-light, #14b8a6);">PROPUESTA DE INFRAESTRUCTURA DIGITAL COMPARTIDA</span>
-        <h1 class="display-title" style="color:#ffffff;margin:12px 0 16px;">CAUCE · ALUMINÉ</h1>
-        <p class="pres-lead" style="color:rgba(255,255,255,0.9);max-width:680px;font-size:18px;line-height:1.6;margin-bottom:20px;">
+        <span class="eyebrow eyebrow-territory">PROPUESTA DE INFRAESTRUCTURA DIGITAL COMPARTIDA</span>
+        <h1 class="display-title">CAUCE · ALUMINÉ</h1>
+        <p class="pres-lead">
           Una propuesta tecnológica orientada a facilitar la digitalización de la gastronomía local, conectar a vecinos y visitantes con los comercios de Aluminé y brindar herramientas operativas sencillas y compartidas.
         </p>
         <div class="pres-meta-tags">
@@ -1032,6 +1044,7 @@ function presentacion() {
           <span class="territory-tag">PILOTO 90 DÍAS</span>
         </div>
       </div>
+      <div class="pres-hero-art" aria-hidden="true">${renderSticker('wave', 72)}</div>
     </header>
 
     <section class="pres-slide-card">
@@ -1098,36 +1111,46 @@ function presentacion() {
         </div>
       </div>
 
-      <div class="pres-callout-quote">
+      <div class="pres-callout-quote pres-quote-with-art">
+        <div class="pres-quote-char" aria-hidden="true">${renderSticker('runner', 52)}</div>
         <p>“No venimos a reemplazar lo local. Venimos a darle cauce.”</p>
+        <div class="pres-quote-char" aria-hidden="true">${renderSticker('diner', 52)}</div>
       </div>
     </section>
 
     <section class="pres-slide-card">
-      <div class="pres-slide-header">
-        <span class="eyebrow">DIAGNÓSTICO TERRITORIAL</span>
-        <h2 class="section-display-title">LA OFERTA LOCAL EXISTE, PERO ESTÁ DISPERSA.</h2>
+      <div class="pres-slide-header pres-diagnostic-header">
+        <div>
+          <span class="eyebrow">DIAGNÓSTICO TERRITORIAL</span>
+          <h2 class="section-display-title">LA OFERTA LOCAL EXISTE, PERO ESTÁ DISPERSA.</h2>
+          <p class="quiet" style="margin-top:6px;">Hoy la información gastronómica de la localidad está repartida en múltiples canales y cuesta acceder a ella.</p>
+        </div>
+        <div class="pres-header-sticker" aria-hidden="true">
+          ${renderSticker('chatBubbles', 145)}
+          ${renderSticker('croissant', 44)}
+        </div>
       </div>
 
       <div class="pres-grid-3">
         <div class="pres-card">
-          <div class="pres-card-icon">${renderSticker('coffee', 36)}</div>
+          <div class="pres-card-icon">${renderSticker('coffee', 38)}</div>
           <h3>Canales digitales fragmentados</h3>
           <p>Muchos comercios pequeños gestionan consultas, cartas y pedidos a través de distintos canales (mensajería instantánea, redes y llamadas). CAUCE propone concentrar descubrimiento, pedidos y operación en una experiencia digital local común.</p>
         </div>
         <div class="pres-card">
-          <div class="pres-card-icon">${renderSticker('burger', 36)}</div>
+          <div class="pres-card-icon">${renderSticker('burger', 38)}</div>
           <h3>Barreras de digitalización</h3>
           <p>Para un comercio pequeño, implementar por cuenta propia catálogo digital, pedidos en línea, seguimiento y herramientas de gestión requiere tiempo y recursos técnicos considerables.</p>
         </div>
         <div class="pres-card">
-          <div class="pres-card-icon">${renderSticker('scooter', 36)}</div>
+          <div class="pres-card-icon">${renderSticker('scooter', 42)}</div>
           <h3>Una experiencia pensada para la localidad</h3>
           <p>CAUCE puede adaptarse a la escala, los horarios de montaña, la estacionalidad turística y las modalidades de entrega propias de Aluminé, respetando la cercanía característica de la comunidad.</p>
         </div>
       </div>
 
-      <div class="pres-callout-quote" style="background:var(--forest-tint, #e6f4f1);color:var(--forest, #0f3b37);border-left-color:var(--forest, #0f3b37);">
+      <div class="pres-callout-quote pres-quote-with-art" style="background:var(--mountain-blue-soft);color:var(--mountain-blue);border-left-color:var(--mountain-blue);">
+        <div class="pres-quote-char" aria-hidden="true">${renderSticker('merchant', 52)}</div>
         <p>“El salto no es tecnológico: es organizativo. Lo local tiene futuro cuando se organiza con su propia gente.”</p>
       </div>
     </section>
@@ -1166,18 +1189,22 @@ function presentacion() {
 
       <div class="pres-grid-2">
         <div class="pres-card">
+          <div class="pres-card-icon">${renderSticker('bag', 38)}</div>
           <h3>1. Vidriera &amp; Catálogo Público</h3>
           <p>Diseño ágil y responsive adaptado a celulares para que vecinos y turistas descubran qué pedir, fotos de platos reales, precios claros y horarios actualizados sin intermediación.</p>
         </div>
         <div class="pres-card">
+          <div class="pres-card-icon">${renderSticker('merchant', 38)}</div>
           <h3>2. Panel Operativo de Pedidos</h3>
           <p>Bandejas de trabajo para mostrador y cocina. Permite confirmar, preparar y despachar comandas sin perder pedidos en chats dispersos ni recurrir a hojas sueltas.</p>
         </div>
         <div class="pres-card">
+          <div class="pres-card-icon">${renderSticker('scooter', 42)}</div>
           <h3>3. Hoja de Ruta para Repartidores</h3>
           <p>Panel simple para el repartidor del comercio con datos de entrega, mapa de referencia y confirmación con código de seguridad de 4 dígitos al entregar en mano.</p>
         </div>
         <div class="pres-card">
+          <div class="pres-card-icon">${renderSticker('wave', 34)}</div>
           <h3>4. Arquitectura Modular &amp; Independiente</h3>
           <p>El software está diseñado para separar la experiencia de usuario, la lógica de negocio y la infraestructura de datos, facilitando futuras decisiones sobre alojamiento y operación.</p>
         </div>
