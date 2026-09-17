@@ -13,7 +13,7 @@ from playwright.sync_api import sync_playwright, expect
 
 ROOT = Path(__file__).resolve().parent.parent
 EVIDENCE = ROOT / 'evidence'
-BASE = 'http://127.0.0.1:4173'
+BASE = os.environ.get('CAUCE_TEST_URL', 'http://127.0.0.1:4173')
 
 results = []
 

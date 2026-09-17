@@ -26,10 +26,10 @@ const entry=await add(resolve(root,'js/app.js'));
 const bundle=`(() => {\n'use strict';\nconst modules = {\n${[...modules].map(([id,source])=>`${JSON.stringify(id)}: (exports, require) => {\n${source}\nObject.assign(exports, {${symbols.get(id).join(',')}});\n}`).join(',\n')}\n};\nconst cache = new Map();\nfunction require(id) { if(cache.has(id))return cache.get(id);const result=Object.create(null);cache.set(id,result);modules[id](result,require);return result; }\nrequire(${JSON.stringify(entry)});\n})();`;
 await mkdir(resolve(root,'evidence'),{recursive:true});
 await writeFile(resolve(root,'evidence/offline.bundle.js'),bundle);
-const css=await readFile(resolve(root,'styles/cauce.css'),'utf8');
+const css=(await readFile(resolve(root,'styles/cauce.css'),'utf8')).replaceAll("url('../assets/", "url('assets/");
 let html=await readFile(resolve(root,'index.html'),'utf8');
 const hash=value=>createHash('sha256').update(value).digest('base64');
-html=html.replace(/<link[^>]+rel="(?:stylesheet|icon)"[^>]*>/g,'')
+html=html.replace(/<link[^>]+rel="(?:stylesheet|icon|modulepreload|preload)"[^>]*>/g,'')
   .replace(/<script type="module" src="js\/app.js"><\/script>/,'')
   .replace(/<meta http-equiv="Content-Security-Policy"[^>]*>/,`<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-${hash(bundle)}'; style-src 'sha256-${hash(css)}'; img-src 'self' data:; connect-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'">`)
   .replace('</head>',`<style>${css}</style></head>`)

@@ -157,21 +157,17 @@ function storesMarkup() {
       <div class="store-art" aria-hidden="true">
         <div class="store-art-fallback theme-${theme(b)}">${previewSvg}</div>
         ${b.coverImage ? `<img class="store-cover-img" src="${esc(b.coverImage)}" alt="" loading="lazy">` : ''}
-        <div class="store-art-gradient"></div>
-        ${b.badge ? `<span class="badge-pill">${esc(b.badge)}</span>` : ''}
       </div>
       <div class="store-info">
         <div class="store-title">
           <h3>${esc(b.name)}</h3>
           ${availability(b)}
         </div>
-        ${b.subtitle ? `<div class="store-subtitle">${esc(b.subtitle)}</div>` : ''}
-        <p class="store-category">${esc(b.description)}</p>
+        <p class="store-category">${esc(b.category)}</p>
         <div class="store-meta">
           <span>${renderIcon('clock', 13)} ${esc(b.eta)}</span>
           <span>${renderIcon('delivery', 13)} ${b.deliveryEnabled ? `Envío ${money(b.deliveryFee)}` : 'Solo retiro'}</span>
           <span>${renderIcon('bag', 13)} Retiro gratis</span>
-          ${b.minimumOrder > 0 ? `<span>Mínimo ${money(b.minimumOrder)}</span>` : ''}
         </div>
       </div>
     </a>`;
@@ -183,7 +179,8 @@ function home() {
   const categories = ['Todos', ...new Set(businesses.map(b => b.category))];
 
   return `<section class="hero-editorial">
-    <div class="hero-territory-backdrop" style="background-image: url('assets/images/territory/alumine-hero-panoramica.webp');" role="img" aria-label="Valle y río de Aluminé, Neuquén">
+    <div class="hero-territory-backdrop">
+      <img class="hero-territory-image" src="assets/images/territory/alumine-hero-panoramica.webp" alt="" width="1200" height="675" fetchpriority="high">
       <div class="hero-backdrop-overlay"></div>
       <div class="hero-container">
         <div class="hero-copy">
@@ -197,7 +194,7 @@ function home() {
           </div>
           <div class="hero-cta-group">
             <button class="button button-hero" type="button" data-action="scroll-to" data-target="stores-section">Explorá comercios ↓</button>
-            <button class="button button-hero-outline" type="button" data-action="open-join-modal">Sumá tu comercio →</button>
+            <button class="button secondary button-hero-outline" type="button" data-action="open-join-modal">Sumá tu comercio →</button>
           </div>
         </div>
         <div class="hero-mockup-wrapper" aria-hidden="true">
@@ -341,7 +338,8 @@ function home() {
   </section>
 
   <section class="territory-quote-section">
-    <div class="territory-quote-card" style="background-image: url('assets/images/territory/alumine-pehuenes.webp');" role="img" aria-label="Pehuenes milenarios en Aluminé">
+    <div class="territory-quote-card" role="img" aria-label="Pehuenes milenarios en Aluminé">
+      <img class="territory-quote-image" src="assets/images/territory/alumine-pehuenes.webp" alt="" width="1200" height="800" loading="lazy">
       <div class="territory-quote-overlay"></div>
       <div class="territory-quote-content">
         <svg class="brand-wave" viewBox="0 0 32 32" width="36" height="36" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true">
@@ -372,7 +370,7 @@ function shop(businessId) {
     <div>
       <span class="eyebrow">${esc(b.category)} · COMERCIO LOCAL</span>
       <h1>${esc(b.name)}</h1>
-      ${b.subtitle ? `<div class="store-subtitle" style="font-size:14px;margin-bottom:4px;">${esc(b.subtitle)}</div>` : ''}
+      ${b.subtitle ? `<div class="store-subtitle">${esc(b.subtitle)}</div>` : ''}
       <p>${esc(b.description)}</p>
       <div class="shop-info">
         ${availability(b)}
@@ -381,7 +379,7 @@ function shop(businessId) {
         <span>${renderIcon('bag', 13)} Retiro gratis</span>
         ${b.minimumOrder > 0 ? `<span>Mínimo ${money(b.minimumOrder)}</span>` : ''}
       </div>
-      <div class="shop-address" style="margin-top:8px;">${renderIcon('pin', 13)} ${esc(b.address || 'Aluminé, Neuquén')} · ${esc(b.hoursLabel)}</div>
+      <div class="shop-address">${renderIcon('pin', 13)} ${esc(b.address || 'Aluminé, Neuquén')} · ${esc(b.hoursLabel)}</div>
     </div>
   </section>
 
@@ -450,9 +448,9 @@ function shop(businessId) {
         </div>
         <a class="button full" href="#cart/${esc(b.id)}">Ir al checkout →</a>
       ` : `
-        <p class="inline-total" style="font-weight:400;color:var(--muted);">El carrito de este comercio está vacío.</p>
+        <p class="inline-total empty-cart-total">El carrito de este comercio está vacío.</p>
       `}
-      <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--line);">
+      <div class="shop-panel-link">
         <p class="microcopy">¿Querés ver este local desde adentro?</p>
         <a class="link-button" href="#business/${esc(b.id)}">Abrir panel del comercio →</a>
       </div>
@@ -463,7 +461,7 @@ function shop(businessId) {
     <div class="floating-cart-bar">
       <div>
         <strong>${cartItemCount} producto${cartItemCount === 1 ? '' : 's'} en ${esc(b.name)}</strong>
-        <div style="font-size:12px;opacity:.9;">Total estimado: ${currentQuote ? money(currentQuote.subtotal) : ''}</div>
+        <div class="floating-cart-total">Total estimado: ${currentQuote ? money(currentQuote.subtotal) : ''}</div>
       </div>
       <a href="#cart/${esc(b.id)}">Ver mi pedido →</a>
     </div>
@@ -541,7 +539,7 @@ function carts() {
             <span class="category-pill">${esc(b.category)}</span>
           </div>
           <h3>${esc(b.name)}</h3>
-          <p class="quiet" style="font-size:12px;margin:2px 0 0;">${count} producto${count === 1 ? '' : 's'} · Subtotal ${q ? money(q.subtotal) : '—'}</p>
+          <p class="quiet compact-summary">${count} producto${count === 1 ? '' : 's'} · Subtotal ${q ? money(q.subtotal) : '—'}</p>
         </div>
       </div>
       <div class="cart-secondary-action-block">
@@ -565,7 +563,7 @@ function carts() {
       <div class="cart-secondary-section">
         <div class="cart-secondary-header">
           <h2 class="cart-secondary-title">Otros carritos guardados</h2>
-          <p class="quiet" style="font-size:13px;">Comercios donde tenés productos guardados para continuar más tarde.</p>
+          <p class="quiet secondary-description">Comercios donde tenés productos guardados para continuar más tarde.</p>
         </div>
         <div class="cart-secondary-list">
           ${secondary.map(renderSecondaryMerchantCard).join('')}
@@ -829,7 +827,7 @@ function orderCard(order, actor) {
     ${actor.kind !== 'customer' ? renderOrderTimeline(order.status) : ''}
     <p class="order-items">${order.lines.map(l => `${l.quantity} × ${esc(l.name)}`).join(' · ')}</p>
     <div class="row"><strong>${money(order.total)}</strong>
-      <div style="display:flex;gap:10px;align-items:center;">
+      <div class="order-links">
         ${actor.kind === 'merchant' ? `<button class="link-button" type="button" data-action="view-ticket" data-order="${esc(order.id)}" data-business="${esc(b.id)}">${renderIcon('receipt', 13)} Ver comanda</button>` : ''}
         <a class="link-button" href="#order/${esc(order.id)}">Ver seguimiento</a>
       </div>
@@ -840,12 +838,12 @@ function orderCard(order, actor) {
         <div class="rider-mission-step origin">
           <span class="rider-mission-badge">RETIRAR EN</span>
           <strong>${esc(b.name)}</strong>
-          <span class="quiet" style="font-size:12px;">${esc(b.address || 'Aluminé')}</span>
+          <span class="quiet microcopy">${esc(b.address || 'Aluminé')}</span>
         </div>
         <div class="rider-mission-step destination">
           <span class="rider-mission-badge">ENTREGAR EN</span>
           ${isRiderAwaiting
-            ? `<p class="quiet" style="margin:2px 0 0;font-size:12px;color:var(--clay);">Pedido en cocina. Los datos de contacto y entrega se activan al retirar del local.</p>`
+            ? `<p class="quiet rider-awaiting">Pedido en cocina. Los datos de contacto y entrega se activan al retirar del local.</p>`
             : `<strong>${esc(order.customer?.name)}</strong>
                <span class="rider-address">${esc(order.customer?.address || 'Dirección de entrega')}</span>
                ${order.customer?.phone ? `<a href="tel:${esc(order.customer.phone)}" class="rider-phone-link">${renderIcon('phone', 12)} ${esc(formattedPhone || order.customer.phone)}</a>` : ''}
@@ -905,7 +903,7 @@ function businessPanel(businessId) {
         ${!soundService.muted ? `${renderIcon('bell', 14)} Aviso sonoro: ACTIVO` : `${renderIcon('bell-off', 14)} Aviso sonoro: SILENCIADO`}
       </button>
       <a class="button secondary" href="#shop/${esc(b.id)}">Ver mi carta</a>
-      <button class="button" type="button" data-action="toggle-open" data-business="${esc(b.id)}">${b.open ? 'Cerrar' : 'Abrir'} comercio demo</button>
+      <button class="button secondary" type="button" data-action="toggle-open" data-business="${esc(b.id)}">${b.open ? 'Cerrar' : 'Abrir'} comercio demo</button>
     </div>
   </div>
   ${demoNotice()}
@@ -953,7 +951,7 @@ function businessPanel(businessId) {
               <input id="edit-stock-${p.id}" name="stock" type="number" min="0" max="10000" step="1" required value="${p.stock}">
             </label>
           </div>
-          <label class="check-label" style="margin: 8px 0;"><input name="available" type="checkbox" ${p.available ? 'checked' : ''}> Disponible</label>
+          <label class="check-label product-availability"><input name="available" type="checkbox" ${p.available ? 'checked' : ''}> Disponible</label>
           <button class="button secondary full" type="submit">Guardar cambios demo</button>
         </form>
       </div>`).join('')}
@@ -975,11 +973,11 @@ function businessPanel(businessId) {
           <label class="field">Costo de envío demo ($)<input name="deliveryFee" type="number" min="0" step="100" value="${b.deliveryFee}"></label>
           <label class="field wide">Horario de atención<input name="hoursLabel" maxlength="60" value="${esc(b.hoursLabel)}"></label>
           <div class="field wide">
-            <label class="check-label" style="margin-bottom:8px;"><input name="deliveryEnabled" type="checkbox" ${b.deliveryEnabled ? 'checked' : ''}> Habilitar delivery</label>
+            <label class="check-label"><input name="deliveryEnabled" type="checkbox" ${b.deliveryEnabled ? 'checked' : ''}> Habilitar delivery</label>
             <label class="check-label"><input name="pickupEnabled" type="checkbox" ${b.pickupEnabled ? 'checked' : ''}> Habilitar retiro</label>
           </div>
         </div>
-        <button class="button" style="margin-top:16px;" type="submit">Guardar configuración demo</button>
+        <button class="button settings-submit" type="submit">Guardar configuración demo</button>
       </form>
     </div></div>
   ` : ''}
@@ -988,11 +986,11 @@ function businessPanel(businessId) {
     <div class="metrics-grid">
       <div class="metric-card"><div class="metric-label">Ventas demo hoy</div><div class="metric-value">${money(metrics.todayRevenue)}</div><small class="quiet">${metrics.todayOrderCount} pedidos</small></div>
       <div class="metric-card"><div class="metric-label">Ticket promedio</div><div class="metric-value">${money(metrics.averageTicket)}</div><small class="quiet">Por pedido</small></div>
-      <div class="metric-card"><div class="metric-label">Pedidos activos</div><div class="metric-value" style="color:var(--clay);">${metrics.activeCount}</div><small class="quiet">En preparación</small></div>
-      <div class="metric-card"><div class="metric-label">Stock bajo</div><div class="metric-value" style="color:#b87023;">${metrics.lowStockCount}</div><small class="quiet">5 o menos</small></div>
+      <div class="metric-card"><div class="metric-label">Pedidos activos</div><div class="metric-value clay-text">${metrics.activeCount}</div><small class="quiet">En preparación</small></div>
+      <div class="metric-card"><div class="metric-label">Stock bajo</div><div class="metric-value amber-text">${metrics.lowStockCount}</div><small class="quiet">5 o menos</small></div>
     </div>
     <div class="card"><h3>Platos más pedidos</h3>
-      ${metrics.topProducts.length ? `<div style="margin-top:10px;">${metrics.topProducts.map((p, i) => `<div class="row" style="padding:8px 0;border-bottom:1px solid var(--line);"><span><strong>#${i+1}</strong> ${esc(p.name)}</span><strong>${p.quantity} u.</strong></div>`).join('')}</div>` : '<p class="quiet">Los pedidos generarán estadísticas acá.</p>'}
+      ${metrics.topProducts.length ? `<div>${metrics.topProducts.map((p, i) => `<div class="row metric-product-row"><span><strong>#${i+1}</strong> ${esc(p.name)}</span><strong>${p.quantity} u.</strong></div>`).join('')}</div>` : '<p class="quiet">Los pedidos generarán estadísticas acá.</p>'}
     </div>
   ` : ''}`;
 }
@@ -1021,9 +1019,9 @@ function riderPanel(businessId) {
         <span class="rider-progress-tag">${progress}%</span>
       </div>
     </div>
-    ${demoNotice()}
-    <p class="quiet" style="margin-bottom:16px;">Solo aparecen los pedidos asignados a ${esc(rider.name)}. No se comparte una flota entre comercios.</p>
     ${all.length ? all.map(o => orderCard(o, actor)).join('') : empty('Todavía no hay pedidos asignados', 'Prepará un pedido con delivery y asignalo desde el panel de este comercio.', `#business/${b.id}`, 'Ir al panel del comercio')}
+    <p class="quiet rider-scope-note">Solo aparecen los pedidos asignados a ${esc(rider.name)}. No se comparte una flota entre comercios.</p>
+    ${demoNotice()}
   </div>`;
 }
 
@@ -1051,7 +1049,7 @@ function presentacion() {
       <div class="pres-slide-header">
         <span class="eyebrow">DIRECCIÓN OPERATIVA</span>
         <h2 class="section-display-title">IMPLEMENTACIÓN POR ETAPAS</h2>
-        <p class="quiet" style="margin-top:6px;">Los tiempos y alcance se definen con los actores participantes según la escala acordada.</p>
+        <p class="quiet">Los tiempos y alcance se definen con los actores participantes según la escala acordada.</p>
       </div>
 
       <div class="pres-phases-grid">
@@ -1118,7 +1116,7 @@ function presentacion() {
         <div>
           <span class="eyebrow">DIAGNÓSTICO TERRITORIAL</span>
           <h2 class="section-display-title">LA OFERTA LOCAL EXISTE, PERO ESTÁ DISPERSA.</h2>
-          <p class="quiet" style="margin-top:6px;">Muchos comercios utilizan distintos canales para comunicar cartas, horarios y recibir consultas. CAUCE propone concentrar esas tareas en una experiencia común.</p>
+          <p class="quiet">Muchos comercios utilizan distintos canales para comunicar cartas, horarios y recibir consultas. CAUCE propone concentrar esas tareas en una experiencia común.</p>
         </div>
         <div class="pres-header-sticker" aria-hidden="true">
           ${renderSticker('chatBubbles', 145)}
@@ -1144,7 +1142,7 @@ function presentacion() {
         </div>
       </div>
 
-      <div class="pres-callout-quote pres-quote-with-art" style="background:var(--mountain-blue-soft);color:var(--mountain-blue);border-left-color:var(--mountain-blue);">
+      <div class="pres-callout-quote pres-quote-with-art">
         <div class="pres-quote-char" aria-hidden="true">${renderSticker('merchant', 52)}</div>
         <p>“El salto no es tecnológico: es organizativo. Lo local tiene futuro cuando se organiza con su propia gente.”</p>
       </div>
@@ -1179,7 +1177,7 @@ function presentacion() {
       <div class="pres-slide-header">
         <span class="eyebrow">HERRAMIENTAS OPERATIVAS</span>
         <h2 class="section-display-title">CAUCE como Infraestructura Digital Compartida</h2>
-        <p class="pres-lead" style="margin-top:8px;">Una vidriera digital integrada con herramientas de mostrador, cocina y reparto de cercanía.</p>
+        <p class="pres-lead">Una vidriera digital integrada con herramientas de mostrador, cocina y reparto de cercanía.</p>
       </div>
 
       <div class="pres-grid-2">
@@ -1206,11 +1204,11 @@ function presentacion() {
       </div>
 
       <div class="pres-slide-subbox">
-        <h3 style="margin-top:0;">Un Modelo Adaptable a la Realidad Local</h3>
-        <p style="font-size:15px;line-height:1.6;color:var(--ink);margin-bottom:12px;">
+        <h3>Un Modelo Adaptable a la Realidad Local</h3>
+        <p class="pres-model-lead">
           CAUCE puede implementarse con diferentes esquemas de sostenibilidad según las necesidades de los comercios y de las instituciones participantes. El modelo económico definitivo debe definirse junto a los actores del piloto.
         </p>
-        <p style="font-size:14px;line-height:1.6;color:var(--muted);margin:0;">
+        <p class="pres-model-detail">
           La propuesta contempla alternativas que van desde la autogestión comercial asociativa hasta un posible acompañamiento institucional o modelo mixto a evaluar junto a la Cámara de Comercio o dependencias locales interesadas.
         </p>
       </div>
@@ -1272,7 +1270,7 @@ function presentacion() {
       </div>
     </section>
 
-    <div style="margin-top:32px;text-align:center;">
+    <div class="pres-return">
       <a class="button" href="#home">Volver al inicio y explorar comercios →</a>
     </div>
   </div>`;
@@ -1321,38 +1319,40 @@ function rememberForm(form) {
 
 function openDemoModal() {
   if (!modalContainer) return;
-  modalContainer.innerHTML = `<div class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="demo-modal-title">
+  modalContainer.innerHTML = `<div class="modal-overlay">
     <div class="modal-card">
       <button class="modal-close" type="button" data-action="close-modal" aria-label="Cerrar modal">×</button>
-      <span class="eyebrow" style="color:var(--clay);">DEMOSTRACIÓN COMERCIAL · ALUMINÉ</span>
+      <span class="eyebrow clay-text">DEMOSTRACIÓN COMERCIAL · ALUMINÉ</span>
       <h2 id="demo-modal-title">Acerca de esta demostración</h2>
-      <p style="font-size:14px;line-height:1.5;margin-bottom:14px;">
+      <p class="modal-intro">
         Estás interactuando con la versión de demostración comercial de <strong>CAUCE · Aluminé</strong>.
       </p>
-      <div style="background:var(--soft);padding:14px 16px;border-radius:12px;font-size:12px;line-height:1.6;margin-bottom:18px;">
+      <div class="modal-note">
         <div>• <strong>Comercios y productos ficticios</strong>: representan locales y platos típicos de Aluminé con fines ilustrativos.</div>
         <div>• <strong>Cobros reales desactivados</strong>: simula pagos contra entrega (efectivo demo). Ninguna transacción genera cargos reales.</div>
         <div>• <strong>Aislamiento en navegador</strong>: los pedidos y carritos se guardan exclusivamente en este dispositivo (localStorage).</div>
         <div>• <strong>Circuito completo</strong>: podés alternar entre cliente, cocina con comanda térmica y repartidor con código de seguridad.</div>
       </div>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+      <div class="modal-actions">
         <button class="button danger" type="button" data-action="reset-demo">Reiniciar datos demo</button>
         <a class="button secondary" href="#presentacion" data-action="close-modal">Ver presentación institucional</a>
-        <button class="button secondary" type="button" data-action="close-modal" style="margin-left:auto;">Cerrar</button>
+        <button class="button secondary modal-dismiss" type="button" data-action="close-modal">Cerrar</button>
       </div>
     </div>
   </div>`;
+  modalContainer.setAttribute('aria-labelledby', 'demo-modal-title');
+  modalContainer.showModal();
 }
 
 function openJoinModal() {
   if (!modalContainer) return;
-  modalContainer.innerHTML = `<div class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="join-modal-title">
+  modalContainer.innerHTML = `<div class="modal-overlay">
     <div class="modal-card">
       <button class="modal-close" type="button" data-action="close-modal" aria-label="Cerrar modal">×</button>
       <span class="eyebrow">SUMATE A CAUCE · ALUMINÉ</span>
       <h2 id="join-modal-title">Sumá tu comercio a la red local</h2>
-      <p class="quiet" style="font-size:13px;margin-bottom:14px;">Publicá tu carta digital, recibí pedidos para retiro o delivery y administrá tu cocina desde tu celular o PC.</p>
-      <div style="background:var(--soft);padding:12px 14px;border-radius:12px;font-size:12px;margin-bottom:16px;line-height:1.5;">
+      <p class="quiet modal-intro">Publicá tu carta digital, recibí pedidos para retiro o delivery y administrá tu cocina desde tu celular o PC.</p>
+      <div class="modal-note">
         <div>${renderIcon('check', 13)} <strong>Herramienta directa y local</strong>: pensada para acompañar la actividad del comercio sin intermediaciones complejas.</div>
         <div>${renderIcon('check', 13)} <strong>Menú digital y comanda para cocina</strong>: controlá disponibilidad de platos y tiempos de espera en tiempo real.</div>
         <div>${renderIcon('check', 13)} <strong>Retiro en mostrador o delivery propio</strong>: adaptable a los horarios y modalidades de cada local.</div>
@@ -1393,24 +1393,26 @@ function openJoinModal() {
             <textarea name="notes" placeholder="Contanos sobre tu local o tus horarios…"></textarea>
           </label>
         </div>
-        <div style="display:flex;gap:12px;margin-top:20px;">
+        <div class="modal-actions">
           <button class="button full" type="submit">Enviar solicitud de incorporación</button>
           <button class="button secondary" type="button" data-action="close-modal">Cancelar</button>
         </div>
       </form>
     </div>
   </div>`;
+  modalContainer.setAttribute('aria-labelledby', 'join-modal-title');
+  modalContainer.showModal();
 }
 
 function openSwitchStoreModal(conflict) {
   if (!modalContainer) return;
-  modalContainer.innerHTML = `<div class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="switch-modal-title">
+  modalContainer.innerHTML = `<div class="modal-overlay">
     <div class="modal-card">
-      <span class="eyebrow" style="color:var(--clay);">CAMBIO DE COMERCIO</span>
+      <span class="eyebrow clay-text">CAMBIO DE COMERCIO</span>
       <h2 id="switch-modal-title">¿Querés cambiar de comercio?</h2>
       <p>Ya tenés productos de <strong>${esc(conflict.existingBusiness.name)}</strong> en tu pedido.</p>
-      <p class="quiet" style="font-size:13px;">En CAUCE cada pedido se procesa por comercio individual para garantizar tiempos de elaboración y frescura.</p>
-      <div style="display:flex;flex-direction:column;gap:10px;margin-top:22px;">
+      <p class="quiet secondary-description">En CAUCE cada pedido se procesa por comercio individual para garantizar tiempos de elaboración y frescura.</p>
+      <div class="modal-actions modal-actions-stacked">
         <button class="button danger full" type="button" data-action="confirm-switch-store">
           Vaciar pedido de ${esc(conflict.existingBusiness.name)} y pedir en ${esc(conflict.newBusiness.name)}
         </button>
@@ -1420,28 +1422,35 @@ function openSwitchStoreModal(conflict) {
       </div>
     </div>
   </div>`;
+  modalContainer.setAttribute('aria-labelledby', 'switch-modal-title');
+  modalContainer.showModal();
 }
 
 function openTicketModal(order, businessName) {
   if (!modalContainer) return;
   const ticketText = buildKitchenTicket(order, businessName);
-  modalContainer.innerHTML = `<div class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="ticket-modal-title">
+  modalContainer.innerHTML = `<div class="modal-overlay">
     <div class="modal-card">
       <button class="modal-close" type="button" data-action="close-modal" aria-label="Cerrar modal">×</button>
       <span class="eyebrow">VISTA DE COCINA / MOSTRADOR</span>
       <h2 id="ticket-modal-title">Comanda de cocina</h2>
-      <p class="quiet" style="font-size:12px;">Formato de impresión térmica para cocina y despacho.</p>
+      <p class="quiet microcopy">Formato de impresión térmica para cocina y despacho.</p>
       <div class="ticket-container">${esc(ticketText)}</div>
-      <div style="display:flex;gap:10px;margin-top:16px;">
+      <div class="modal-actions">
         <button class="button full" type="button" data-action="copy-ticket" data-text="${esc(ticketText)}">${renderIcon('receipt', 14)} Copiar comanda</button>
         <button class="button secondary" type="button" data-action="close-modal">Cerrar</button>
       </div>
     </div>
   </div>`;
+  modalContainer.setAttribute('aria-labelledby', 'ticket-modal-title');
+  modalContainer.showModal();
 }
 
 function closeModal() {
-  if (modalContainer) modalContainer.innerHTML = '';
+  if (modalContainer) {
+    modalContainer.close();
+    modalContainer.innerHTML = '';
+  }
   pendingSwitchConflict = null;
 }
 
@@ -1651,17 +1660,18 @@ if (modalContainer) {
       event.preventDefault();
       const data = Object.fromEntries(new FormData(event.target));
       await repository.addMerchantLead(data);
-      modalContainer.innerHTML = `<div class="modal-overlay" role="dialog" aria-modal="true">
-        <div class="modal-card" style="text-align:center;padding:32px 24px;">
-          <div style="font-size:32px;margin-bottom:12px;color:var(--forest);display:grid;place-items:center;">${renderIcon('check', 40)}</div>
-          <span class="eyebrow" style="color:var(--forest);">SOLICITUD REGISTRADA</span>
-          <h2>¡Gracias ${esc(data.name || '')}!</h2>
-          <p style="font-size:14px;color:var(--muted);max-width:440px;margin:10px auto 20px;line-height:1.5;">
+      modalContainer.innerHTML = `<div class="modal-overlay">
+        <div class="modal-card modal-success">
+          <div class="modal-success-icon">${renderIcon('check', 40)}</div>
+          <span class="eyebrow">SOLICITUD REGISTRADA</span>
+          <h2 id="join-modal-title">¡Gracias ${esc(data.name || '')}!</h2>
+          <p class="modal-success-copy">
             Registramos la solicitud para incorporar a <strong>${esc(data.businessName || 'tu comercio')}</strong> en CAUCE · Aluminé. En una implementación operativa real, el equipo local se contactará por WhatsApp al <strong>${esc(data.phone || '')}</strong> para dar de alta la carta y entregarte tu panel.
           </p>
           <button class="button" type="button" data-action="close-modal">Entendido</button>
         </div>
       </div>`;
+      modalContainer.querySelector('[data-action="close-modal"]').focus();
       toast('¡Solicitud demo registrada con éxito!');
     }
   });

@@ -9,6 +9,10 @@
   <title>CAUCE · Aluminé</title>
   <link rel="icon" href="styles/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="styles/cauce.css">
+  <link rel="preload" as="image" href="assets/images/territory/alumine-hero-panoramica.webp" fetchpriority="high">
+  <link rel="modulepreload" href="js/data/demo.js">
+  <link rel="modulepreload" href="js/core/cart.js">
+  <link rel="modulepreload" href="js/core/order-workflow.js">
   <script type="module" src="js/app.js"></script>
 </head>
 <body>
@@ -89,7 +93,7 @@
       <span>Carrito</span>
     </a>
   </nav>
-  <div id="modal-container"></div>
+  <dialog id="modal-container" aria-label="CAUCE"></dialog>
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
   <noscript>Esta demostración necesita JavaScript para funcionar.</noscript>
 </body>
