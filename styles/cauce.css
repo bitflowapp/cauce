@@ -2235,14 +2235,44 @@ main {
 }
 
 /* Fulfillment Selector */
-.fulfillment-picker {
-  margin-top: 6px;
+.fulfillment-fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-inline-size: 0;
+}
+
+.fulfillment-fieldset legend {
+  padding: 0;
+  margin: 0 0 12px;
+  float: left;
+  width: 100%;
+}
+
+.fulfillment-option {
+  position: relative;
+  display: flex;
+  width: 100%;
+}
+
+.fulfillment-radio {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+  pointer-events: none;
 }
 
 .fulfillment-options {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
+  clear: both;
 }
 
 .fulfillment-card {
@@ -2258,6 +2288,7 @@ main {
   display: flex;
   flex-direction: column;
   justify-content: center;
+  user-select: none;
 }
 
 .fulfillment-card:hover {
@@ -2265,10 +2296,54 @@ main {
   background: var(--white);
 }
 
+.fulfillment-radio:checked + .fulfillment-card,
+.fulfillment-card:has(:checked),
 .fulfillment-card.active {
   border-color: var(--forest);
   background: #eef6f1;
   box-shadow: 0 2px 10px rgba(27, 61, 52, 0.08);
+}
+
+.fulfillment-radio:focus-visible + .fulfillment-card,
+.fulfillment-card:focus-within {
+  outline: 2px solid var(--forest);
+  outline-offset: 2px;
+}
+
+.checkout-section-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.demo-fill-btn {
+  background: var(--paper-warm);
+  border: 1px dashed var(--sand-deep);
+  color: var(--forest);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 12px;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.demo-fill-btn:hover {
+  background: #eef6f1;
+  border-color: var(--forest);
+  color: var(--forest-deep);
+}
+
+.demo-fill-btn:focus-visible {
+  outline: 2px solid var(--forest);
+  outline-offset: 2px;
 }
 
 .fulfillment-card-top {
