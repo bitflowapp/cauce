@@ -1,4 +1,4 @@
-﻿"""Suite de validación de endurecimiento frontend para CAUCE v0.3.2.
+"""Suite de validación de endurecimiento frontend para CAUCE v0.3.2.
 Verifica:
 1. Keyboard checkout (accesibilidad y navegación por teclado en orden DOM real).
 2. Fulfillment accessibility (semántica fieldset/legend/radio, target >=44px, sincronización).
@@ -60,23 +60,41 @@ def run_tests():
             assert name_input.input_value() == '', 'El campo nombre debe iniciar vacío'
             assert phone_input.input_value() == '', 'El campo teléfono debe iniciar vacío'
 
-            # Selección de modalidad delivery
-            page.locator('label[for="fulfillment-delivery"]').click()
+            # 1. Focus del radio Delivery y selección por Space
+            page.evaluate("() => document.getElementById('fulfillment-delivery').focus()")
+            page.keyboard.press('Space')
             page.wait_for_timeout(100)
+            assert page.locator('#fulfillment-delivery').is_checked(), 'El radio delivery debe estar seleccionado'
 
-            # Llenado secuencial por foco de teclado
-            name_input.focus()
+            # 2. Tab entre inputs y completado por teclado
+            page.keyboard.press('Tab')  # helper demo button
+            page.keyboard.press('Tab')  # input nombre
+            expect(name_input).to_be_focused()
             page.keyboard.type('Marcela González')
-            page.keyboard.press('Tab')
+
+            page.keyboard.press('Tab')  # input teléfono
+            expect(phone_input).to_be_focused()
             page.keyboard.type('2942556677')
-            page.keyboard.press('Tab')
-            
+
+            page.keyboard.press('Tab')  # input dirección
             address_input = page.locator('#checkout-address')
             expect(address_input).to_be_focused()
             page.keyboard.type('Av. 4 de Febrero 450')
 
-            # Confirmar pedido
-            page.locator('[data-testid="confirm-order"]').click()
+            page.keyboard.press('Tab')  # input referencia
+            expect(page.locator('#checkout-reference')).to_be_focused()
+            page.keyboard.type('Casa con reja verde, timbre al fondo')
+
+            page.keyboard.press('Tab')  # textarea notas
+            expect(page.locator('#checkout-notes')).to_be_focused()
+            page.keyboard.type('Sin cebolla')
+
+            # 3. Tab hasta Confirmar pedido y Enter
+            page.keyboard.press('Tab')  # botón confirmar
+            confirm_btn = page.locator('[data-testid="confirm-order"]')
+            expect(confirm_btn).to_be_focused()
+            page.keyboard.press('Enter')
+            page.wait_for_timeout(300)
             expect(page.get_by_role('heading', name='Recibido', exact=True)).to_be_visible()
             record('1. Keyboard checkout: navegación, foco secuencial y envío por teclado', 'PASS')
             context.close()
@@ -162,7 +180,7 @@ def run_tests():
             svg_fallback = page.locator('.product-img svg').first
             expect(svg_fallback).to_be_visible()
 
-            assert len(errors) == 0, f"Se detectaron errores JS: {page_errors}"
+            assert len(errors) == 0, f"Se detectaron errores JS: {errors}"
             record('3. Forced image failure: fallback visual activado sin errores JS ni violación de CSP', 'PASS')
             context.close()
         except Exception as exc:
