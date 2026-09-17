@@ -4,7 +4,7 @@
  * en formato internacional sin signos '+' ni guiones (ejemplo: '5492942123456').
  * Si permanece vacío (''), la plataforma deriva la acción al formulario nativo de adhesión comercial.
  */
-export const CAUCE_CONTACT_WHATSAPP = '';
+export const CAUCE_CONTACT_WHATSAPP = '5492996209136';
 
 export const CONFIG = Object.freeze({
   name: 'CAUCE',

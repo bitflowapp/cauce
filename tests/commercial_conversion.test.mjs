@@ -13,7 +13,10 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 
 test('configuración comercial exporta CAUCE_CONTACT_WHATSAPP y está ligada a CONFIG', () => {
   assert.equal(typeof CAUCE_CONTACT_WHATSAPP, 'string');
+  assert.equal(CAUCE_CONTACT_WHATSAPP, '5492996209136');
   assert.equal(CONFIG.contactWhatsApp, CAUCE_CONTACT_WHATSAPP);
+  const defaultUrl = buildMerchantWhatsAppUrl();
+  assert.match(defaultUrl, /^https:\/\/wa\.me\/5492996209136\?text=/);
 });
 
 test('buildMerchantWhatsAppUrl genera URL válida con número configurado y mensaje precargado', () => {
@@ -30,10 +33,9 @@ test('buildMerchantWhatsAppUrl sanea formatos con símbolos y espacios', () => {
   assert.match(url, /^https:\/\/wa\.me\/5492942123456\?text=/);
 });
 
-test('buildMerchantWhatsAppUrl retorna null cuando no hay número configurado (evita CTAs rotos)', () => {
+test('buildMerchantWhatsAppUrl retorna null cuando el argumento no tiene número (evita CTAs rotos)', () => {
   assert.equal(buildMerchantWhatsAppUrl(''), null);
   assert.equal(buildMerchantWhatsAppUrl(null), null);
-  assert.equal(buildMerchantWhatsAppUrl(undefined), null);
   assert.equal(buildMerchantWhatsAppUrl('123'), null); // Demasiado corto para ser un teléfono internacional válido
 });
 
@@ -95,15 +97,22 @@ test('sección de credibilidad funcional muestra capacidades reales sin afirmaci
 
   // Sección de prueba técnica
   assert.ok(
-    appJs.includes('reality-proof-section') && appJs.includes('TECNOLOGÍA LOCAL YA PROBADA'),
-    'Falta sección de prueba de producto funcional ("Esto ya funciona")'
+    appJs.includes('reality-proof-section') && appJs.includes('CIRCUITO FUNCIONAL PROBADO'),
+    'Falta sección de prueba de producto funcional ("CIRCUITO FUNCIONAL PROBADO")'
   );
 
   // 4 capacidades reales del circuito
-  assert.ok(appJs.includes('Pedido ágil sin intermediarios'), 'Falta capacidad 1: pedido');
+  assert.ok(appJs.includes('Pedido ágil directo al comercio'), 'Falta capacidad 1: pedido directo');
   assert.ok(appJs.includes('Comanda y panel de control'), 'Falta capacidad 2: panel/cocina');
   assert.ok(appJs.includes('Trazabilidad de estados en vivo'), 'Falta capacidad 3: seguimiento');
   assert.ok(appJs.includes('Delivery propio con código seguro'), 'Falta capacidad 4: delivery propio');
+
+  // Ausencia de "sin intermediarios" en favor de formulación más precisa
+  assert.equal(
+    appJs.includes('sin intermediarios'),
+    false,
+    'No debe existir la expresión "sin intermediarios"; usar "directo al comercio"'
+  );
 });
 
 test('ausencia estricta de jerga publicitaria genérica e IA en el nuevo copy comercial', async () => {

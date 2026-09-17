@@ -263,7 +263,7 @@ function home() {
         <div class="catalog-merchant-icon" aria-hidden="true">${renderSticker('merchant', 44)}</div>
         <div class="catalog-merchant-text">
           <h3>¿Tenés un comercio en Aluminé?</h3>
-          <p>Sumá tu local a CAUCE para recibir pedidos directos y organizar tus entregas sin intermediarios.</p>
+          <p>Sumá tu local a CAUCE para recibir pedidos directos al comercio y organizar tus entregas.</p>
         </div>
       </div>
       <a class="button button-commercial" href="${esc(whatsAppUrl || '#home')}" ${whatsAppUrl ? 'target="_blank" rel="noopener noreferrer"' : ''} data-action="commercial-contact">Sumar mi comercio</a>
@@ -286,7 +286,7 @@ function home() {
       <div class="step-card">
         <div class="step-num-badge step-badge-2">2</div>
         <h3>Hace el pedido.</h3>
-        <p>Armá tu pedido sin intermediarios, seleccioná retiro en local o delivery y confirmá en un toque.</p>
+        <p>Armá tu pedido directo al comercio, seleccioná retiro en local o delivery y confirmá en un toque.</p>
         <div class="step-illustration" aria-hidden="true">${renderSticker('merchant', 64)}</div>
       </div>
       <div class="step-card">
@@ -351,14 +351,14 @@ function home() {
 
   <section class="reality-proof-section" aria-labelledby="reality-proof-title">
     <div class="section-center-heading">
-      <span class="eyebrow">SISTEMA INTEGRAL</span>
-      <h2 id="reality-proof-title" class="section-display-title">TECNOLOGÍA LOCAL YA PROBADA</h2>
-      <p class="section-lead">CAUCE no es solo una propuesta: el circuito operativo de compra, comanda de cocina, trazabilidad y reparto propio ya está implementado y listo para funcionar.</p>
+      <span class="eyebrow">DEMOSTRACIÓN OPERATIVA</span>
+      <h2 id="reality-proof-title" class="section-display-title">CIRCUITO FUNCIONAL PROBADO</h2>
+      <p class="section-lead">CAUCE cuenta con el flujo operativo completo implementado en esta demostración: pedido directo al comercio, comanda de cocina, trazabilidad y reparto propio listos para evaluar en territorio.</p>
     </div>
     <div class="reality-grid">
       <div class="reality-card">
         <div class="reality-card-badge">01 · VECINOS</div>
-        <h3>Pedido ágil sin intermediarios</h3>
+        <h3>Pedido ágil directo al comercio</h3>
         <p>Catálogo interactivo con fotos, precios confirmados, opciones de retiro o delivery y confirmación en un toque.</p>
         <div class="reality-card-preview">
           <div class="rcp-header">
