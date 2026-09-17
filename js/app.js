@@ -496,17 +496,13 @@ function carts() {
           <span class="store-badge-mini">${esc(b.initials || 'C')}</span>
         </div>
         <div class="cart-merchant-details">
-          <div class="cart-merchant-tags">
-            <span class="category-pill">${esc(b.category)}</span>
-            <span class="cart-merchant-address">${esc(b.address || 'Aluminé')}</span>
-          </div>
           <h2 class="cart-merchant-name">${esc(b.name)}</h2>
           <p class="cart-merchant-items-summary">${count} producto${count === 1 ? '' : 's'}: ${esc(itemsSummary)}</p>
         </div>
       </div>
       <div class="cart-primary-action-block">
         <div class="cart-primary-subtotal">
-          <span class="subtotal-label">Subtotal estimado</span>
+          <span class="subtotal-label">Subtotal</span>
           <strong class="subtotal-amount">${q ? money(q.subtotal) : '—'}</strong>
         </div>
         <div class="cart-primary-buttons">
@@ -535,9 +531,6 @@ function carts() {
           <span class="store-badge-mini">${esc(b.initials || 'C')}</span>
         </div>
         <div class="cart-secondary-details">
-          <div class="cart-merchant-tags">
-            <span class="category-pill">${esc(b.category)}</span>
-          </div>
           <h3>${esc(b.name)}</h3>
           <p class="quiet compact-summary">${count} producto${count === 1 ? '' : 's'} · Subtotal ${q ? money(q.subtotal) : '—'}</p>
         </div>
@@ -556,7 +549,6 @@ function carts() {
       <p class="quiet">Cada comercio prepara y entrega su pedido por separado.</p>
     </div>
     <div class="cart-primary-section">
-      ${secondary.length > 0 ? '<span class="eyebrow cart-section-eyebrow">TU PEDIDO PRINCIPAL</span>' : ''}
       ${renderPrimaryMerchantCard(primary)}
     </div>
     ${secondary.length > 0 ? `
@@ -599,15 +591,12 @@ function cartPage(businessId) {
 
   return `${back(`#shop/${b.id}`, `Seguir eligiendo en ${b.name}`)}
   <div class="checkout-page-header">
-    <span class="eyebrow">FINALIZAR PEDIDO</span>
     <h1 class="page-title">Tu pedido en ${esc(b.name)}</h1>
-    <p class="quiet">Revisá tu selección y completá los datos para simular el circuito.</p>
   </div>
   <div class="cart-layout">
     <div class="checkout-main-col">
-      <section class="card checkout-section">
+      <section class="checkout-section">
         <div class="checkout-section-header">
-          <span class="eyebrow">1. PRODUCTOS</span>
           <h2 class="checkout-section-title">Tu pedido</h2>
         </div>
         <div class="cart-lines-list">
@@ -639,14 +628,13 @@ function cartPage(businessId) {
           }).join('')}
         </div>
         <div class="cart-lines-footer">
-          <button class="link-button" type="button" data-action="clear-cart" data-business="${esc(b.id)}">Vaciar este carrito</button>
+          <button class="link-button cart-clear-link" type="button" data-action="clear-cart" data-business="${esc(b.id)}">Vaciar este carrito</button>
         </div>
       </section>
 
-      <form id="checkout-form" data-form="checkout" data-business="${esc(b.id)}" class="card checkout-form">
+      <form id="checkout-form" data-form="checkout" data-business="${esc(b.id)}" class="checkout-form">
         <fieldset class="checkout-sub-section fulfillment-fieldset" data-testid="fulfillment-selector">
           <div class="checkout-section-header">
-            <span class="eyebrow">2. MODALIDAD</span>
             <legend class="checkout-section-title">¿Cómo recibís tu pedido?</legend>
           </div>
           <div class="fulfillment-options" role="radiogroup" aria-label="Modalidad de entrega">
@@ -679,12 +667,9 @@ function cartPage(businessId) {
 
         <section class="checkout-sub-section">
           <div class="checkout-section-header checkout-section-header-row">
-            <div>
-              <span class="eyebrow">3. TUS DATOS</span>
-              <h2 class="checkout-section-title">Datos de contacto</h2>
-            </div>
-            <button type="button" class="demo-fill-btn" data-action="fill-demo-checkout" data-business="${esc(b.id)}" title="Completar campos con datos de ejemplo para demostración">
-              ⚡ Cargar datos demo
+            <h2 class="checkout-section-title">Tus datos</h2>
+            <button type="button" class="demo-fill-link" data-action="fill-demo-checkout" data-business="${esc(b.id)}" title="Completar campos con datos de ejemplo">
+              Usar datos de prueba
             </button>
           </div>
           <div class="form-grid">
@@ -711,24 +696,22 @@ function cartPage(businessId) {
 
         <section class="checkout-sub-section">
           <div class="checkout-section-header">
-            <span class="eyebrow">4. INDICACIONES</span>
-            <h2 class="checkout-section-title">Notas para la cocina (opcional)</h2>
+            <h2 class="checkout-section-title">Indicaciones para el pedido</h2>
           </div>
-          <label class="sr-only" for="checkout-notes">Notas para la cocina (opcional)</label>
-          <textarea id="checkout-notes" name="notes" maxlength="300" placeholder="Aclaraciones para la preparación (sin sal, aderezos aparte, etc.)">${esc(values.notes)}</textarea>
+          <label class="sr-only" for="checkout-notes">Indicaciones para el pedido</label>
+          <textarea id="checkout-notes" name="notes" maxlength="300" placeholder="Ej: sin cebolla, llamar al llegar…">${esc(values.notes)}</textarea>
         </section>
       </form>
     </div>
 
     <aside class="sidebox checkout-sidebox">
       <div class="sidebox-header">
-        <span class="eyebrow">RESUMEN</span>
-        <h3 class="sidebox-title">Detalle a pagar</h3>
+        <h2 class="sidebox-title">Resumen</h2>
       </div>
       <div class="totals">
         <div class="row"><span>Productos</span><strong>${quote ? money(quote.subtotal) : '—'}</strong></div>
         <div class="row"><span>${values.fulfillment === 'pickup' ? 'Retiro en mostrador' : 'Costo de envío'}</span><strong>${values.fulfillment === 'pickup' ? 'Sin costo' : money(b.deliveryFee)}</strong></div>
-        <div class="row total"><span>Total a pagar</span><strong class="total-display">${quote ? money(quote.total) : '—'}</strong></div>
+        <div class="row total"><span>Total</span><strong class="total-display">${quote ? money(quote.total) : '—'}</strong></div>
       </div>
       ${quoteError ? `<div class="notice error">${esc(quoteError)}</div>` : ''}
       <div class="checkout-sticky-bar">
