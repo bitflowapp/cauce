@@ -1,4 +1,4 @@
-import { CONFIG } from './config.js';
+import { CONFIG, buildMerchantWhatsAppUrl } from './config.js';
 import { createRepository } from './repositories/repository-factory.js';
 import { DEMO_CUSTOMER_ID, DEMO_STORAGE_KEY } from './repositories/demo-repository.js';
 import { scopeOf } from './core/scope.js';
@@ -177,6 +177,7 @@ function storesMarkup() {
 function home() {
   const businesses = repository.snapshot().businesses.filter(b => b.localityId === CONFIG.defaultLocality && b.active);
   const categories = ['Todos', ...new Set(businesses.map(b => b.category))];
+  const whatsAppUrl = buildMerchantWhatsAppUrl();
 
   return `<section class="hero-editorial">
     <div class="hero-territory-backdrop">
@@ -194,7 +195,7 @@ function home() {
           </div>
           <div class="hero-cta-group">
             <button class="button button-hero" type="button" data-action="scroll-to" data-target="stores-section">Explorá comercios ↓</button>
-            <button class="button secondary button-hero-outline" type="button" data-action="open-join-modal">Sumá tu comercio →</button>
+            <a class="button secondary button-hero-outline" href="${esc(whatsAppUrl || '#home')}" ${whatsAppUrl ? 'target="_blank" rel="noopener noreferrer"' : ''} data-action="commercial-contact">Sumar mi comercio →</a>
           </div>
         </div>
         <div class="hero-mockup-wrapper" aria-hidden="true">
@@ -257,6 +258,16 @@ function home() {
       </div>
     </div>
     <div id="stores-results" aria-live="polite">${storesMarkup()}</div>
+    <div class="catalog-merchant-card">
+      <div class="catalog-merchant-content">
+        <div class="catalog-merchant-icon" aria-hidden="true">${renderSticker('merchant', 44)}</div>
+        <div class="catalog-merchant-text">
+          <h3>¿Tenés un comercio en Aluminé?</h3>
+          <p>Sumá tu local a CAUCE para recibir pedidos directos al comercio y organizar tus entregas.</p>
+        </div>
+      </div>
+      <a class="button button-commercial" href="${esc(whatsAppUrl || '#home')}" ${whatsAppUrl ? 'target="_blank" rel="noopener noreferrer"' : ''} data-action="commercial-contact">Sumar mi comercio</a>
+    </div>
   </section>
 
   <section class="how-it-works-section" aria-labelledby="how-it-works-title">
@@ -275,7 +286,7 @@ function home() {
       <div class="step-card">
         <div class="step-num-badge step-badge-2">2</div>
         <h3>Hace el pedido.</h3>
-        <p>Armá tu pedido sin intermediarios, seleccioná retiro en local o delivery y confirmá en un toque.</p>
+        <p>Armá tu pedido directo al comercio, seleccioná retiro en local o delivery y confirmá en un toque.</p>
         <div class="step-illustration" aria-hidden="true">${renderSticker('merchant', 64)}</div>
       </div>
       <div class="step-card">
@@ -287,51 +298,111 @@ function home() {
     </div>
   </section>
 
-  <section class="merchant-growth-section">
+  <section class="merchant-growth-section" aria-labelledby="merchant-section-title">
     <div class="growth-container">
       <div class="growth-text">
         <div class="growth-sticker-badge" aria-hidden="true">${renderSticker('merchant', 56)}</div>
-        <span class="eyebrow">PARA NEGOCIOS</span>
-        <h2 class="display-title">TU COMERCIO TAMBIÉN CRECE EN CAUCE</h2>
-        <p class="growth-lead">Gestioná tu negocio de forma simple y vendé más en tu comunidad.</p>
+        <span class="eyebrow">PARA COMERCIOS</span>
+        <h2 id="merchant-section-title" class="display-title">Tu comercio, también en CAUCE</h2>
+        <p class="growth-lead">Mostrá tu carta digital, recibí pedidos directos y organizá la cocina y el delivery desde un mismo sistema local.</p>
         <ul class="growth-features">
-          <li>${renderIcon('check', 16)} <strong>Cargan productos:</strong> fotos, precios y disponibilidad en tiempo real.</li>
-          <li>${renderIcon('check', 16)} <strong>Reciben pedidos:</strong> comandas claras listas para cocina y mostrador.</li>
-          <li>${renderIcon('check', 16)} <strong>Gestionan retiros:</strong> entregas ordenadas en el local.</li>
-          <li>${renderIcon('check', 16)} <strong>Administran delivery propio:</strong> repartidores propios con código de seguridad.</li>
-          <li>${renderIcon('check', 16)} <strong>Ven métricas simples:</strong> ventas del día, ticket promedio y platos más pedidos.</li>
+          <li>${renderIcon('check', 16)} <strong>Mostrar tus productos:</strong> fotos, precios y disponibilidad en tiempo real.</li>
+          <li>${renderIcon('check', 16)} <strong>Recibir pedidos:</strong> comandas claras listas para cocina y mostrador.</li>
+          <li>${renderIcon('check', 16)} <strong>Organizar la preparación:</strong> control de tiempos de espera y estados de pedido.</li>
+          <li>${renderIcon('check', 16)} <strong>Ofrecer retiro:</strong> entregas ordenadas en el local sin costo de envío.</li>
+          <li>${renderIcon('check', 16)} <strong>Gestionar delivery propio:</strong> repartidores locales con código de 4 dígitos seguro.</li>
+          <li>${renderIcon('check', 16)} <strong>Seguir el estado:</strong> trazabilidad directa desde la confirmación hasta la entrega.</li>
         </ul>
         <div class="growth-actions">
-          <button class="button button-primary" type="button" data-action="open-join-modal">Sumá tu negocio →</button>
+          <a class="button button-primary" href="${esc(whatsAppUrl || '#home')}" ${whatsAppUrl ? 'target="_blank" rel="noopener noreferrer"' : ''} data-action="commercial-contact">Sumar mi comercio</a>
           <a class="button secondary" href="#manage">Ver panel demo</a>
         </div>
       </div>
       <div class="growth-preview">
         <div class="growth-sticker-float" aria-hidden="true">${renderSticker('bag', 44)}</div>
-        <div class="growth-badge">DATOS DE DEMOSTRACIÓN</div>
+        <div class="growth-badge">PANEL COMERCIAL DEMO</div>
         <div class="growth-card">
           <div class="growth-card-header">
-            <strong>Tu negocio hoy · La Orilla</strong>
-            <span class="availability">Abierto</span>
+            <strong>La Orilla · Panel de cocina</strong>
+            <span class="availability">En servicio</span>
           </div>
           <div class="growth-metrics-row">
             <div class="growth-metric">
-              <span class="gm-num">24</span>
-              <span class="gm-lbl">Pedidos demo</span>
+              <span class="gm-num">En vivo</span>
+              <span class="gm-lbl">Aviso sonoro</span>
             </div>
             <div class="growth-metric">
-              <span class="gm-num">$ 284.500</span>
-              <span class="gm-lbl">Ventas demo</span>
+              <span class="gm-num">4 dígitos</span>
+              <span class="gm-lbl">Código entrega</span>
             </div>
             <div class="growth-metric">
-              <span class="gm-num">96</span>
-              <span class="gm-lbl">Clientes demo</span>
+              <span class="gm-num">Sin costo</span>
+              <span class="gm-lbl">Retiro local</span>
             </div>
           </div>
           <div class="growth-comanda-snippet">
-            <span class="gcs-title">Última comanda cocina:</span>
-            <code>#1284 · 2x Doble de la casa · Delivery propio</code>
+            <span class="gcs-title">Comanda cocina lista:</span>
+            <code>#CA-0042 · 2x Doble de la casa · Delivery propio</code>
           </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="reality-proof-section" aria-labelledby="reality-proof-title">
+    <div class="section-center-heading">
+      <span class="eyebrow">DEMOSTRACIÓN OPERATIVA</span>
+      <h2 id="reality-proof-title" class="section-display-title">CIRCUITO FUNCIONAL PROBADO</h2>
+      <p class="section-lead">CAUCE cuenta con el flujo operativo completo implementado en esta demostración: pedido directo al comercio, comanda de cocina, trazabilidad y reparto propio listos para evaluar en territorio.</p>
+    </div>
+    <div class="reality-grid">
+      <div class="reality-card">
+        <div class="reality-card-badge">01 · VECINOS</div>
+        <h3>Pedido ágil directo al comercio</h3>
+        <p>Catálogo interactivo con fotos, precios confirmados, opciones de retiro o delivery y confirmación en un toque.</p>
+        <div class="reality-card-preview">
+          <div class="rcp-header">
+            <span>La Orilla · Hamburguesas</span>
+            <span class="rcp-tag">Confirmado</span>
+          </div>
+          <div class="rcp-line">1 × Doble de la casa <strong>$ 10.500</strong></div>
+          <div class="rcp-meta">Retiro en local · 25–35 min</div>
+        </div>
+      </div>
+      <div class="reality-card">
+        <div class="reality-card-badge">02 · COCINA</div>
+        <h3>Comanda y panel de control</h3>
+        <p>Recepción en tiempo real con aviso sonoro, comanda lista para mostrador o cocina y pausa rápida de platos agotados.</p>
+        <div class="reality-card-preview rcp-kitchen">
+          <div class="rcp-kitchen-badge">ÚLTIMA COMANDA #CA-0042</div>
+          <div class="rcp-ticket-line"><strong>2 ×</strong> Pizza especial muzzarella</div>
+          <div class="rcp-ticket-line"><strong>1 ×</strong> Papas rústicas</div>
+          <div class="rcp-ticket-foot">Mostrador · Cliente: Juan C.</div>
+        </div>
+      </div>
+      <div class="reality-card">
+        <div class="reality-card-badge">03 · SEGUIMIENTO</div>
+        <h3>Trazabilidad de estados en vivo</h3>
+        <p>Vecino y comercio comparten la evolución del pedido: recibido, en preparación, listo y entregado.</p>
+        <div class="reality-card-preview">
+          <div class="rcp-timeline">
+            <div class="rcp-step done"><span>✓</span> Recibido</div>
+            <div class="rcp-step active"><span>●</span> En preparación</div>
+            <div class="rcp-step"><span>○</span> Listo</div>
+          </div>
+          <div class="rcp-eta-note">Demora estimada: 18 min</div>
+        </div>
+      </div>
+      <div class="reality-card">
+        <div class="reality-card-badge">04 · REPARTO</div>
+        <h3>Delivery propio con código seguro</h3>
+        <p>Despacho con repartidores propios del comercio y validación por código de 4 dígitos entre local, repartidor y vecino.</p>
+        <div class="reality-card-preview rcp-delivery">
+          <div class="rcp-code-display">
+            <span class="rcp-code-label">Código de entrega:</span>
+            <strong class="rcp-code-val">48 · 21</strong>
+          </div>
+          <div class="rcp-delivery-status">En camino a Av. San Martín 450</div>
         </div>
       </div>
     </div>
@@ -348,6 +419,19 @@ function home() {
         </svg>
         <blockquote>“No venimos a reemplazar lo local. Venimos a darle cauce.”</blockquote>
         <cite>ALUMINÉ · NEUQUÉN · PATAGONIA ARGENTINA</cite>
+      </div>
+    </div>
+  </section>
+
+  <section class="commercial-closing-section" aria-labelledby="closing-title">
+    <div class="closing-card">
+      <div class="closing-backdrop-art" aria-hidden="true">${renderSticker('wave', 72)}</div>
+      <span class="eyebrow eyebrow-light">SUMATE AL CIRCUITO</span>
+      <h2 id="closing-title" class="closing-title">¿Tenés un comercio en Aluminé?</h2>
+      <p class="closing-lead">Sumate a CAUCE y probemos juntos cómo puede funcionar para tu negocio.</p>
+      <div class="closing-actions">
+        <a class="button button-closing-primary" href="${esc(whatsAppUrl || '#home')}" ${whatsAppUrl ? 'target="_blank" rel="noopener noreferrer"' : ''} data-action="commercial-contact">Sumar mi comercio</a>
+        <button class="button button-closing-secondary" type="button" data-action="scroll-to" data-target="stores-section">Probar CAUCE</button>
       </div>
     </div>
   </section>`;
@@ -1329,12 +1413,23 @@ function openDemoModal() {
 
 function openJoinModal() {
   if (!modalContainer) return;
+  const whatsAppUrl = buildMerchantWhatsAppUrl();
   modalContainer.innerHTML = `<div class="modal-overlay">
     <div class="modal-card">
       <button class="modal-close" type="button" data-action="close-modal" aria-label="Cerrar modal">×</button>
       <span class="eyebrow">SUMATE A CAUCE · ALUMINÉ</span>
       <h2 id="join-modal-title">Sumá tu comercio a la red local</h2>
       <p class="quiet modal-intro">Publicá tu carta digital, recibí pedidos para retiro o delivery y administrá tu cocina desde tu celular o PC.</p>
+      ${whatsAppUrl ? `
+        <div class="modal-whatsapp-banner">
+          <div>
+            <strong>Conversación directa por WhatsApp</strong>
+            <p>Escribinos para coordinar la adhesión de tu local o coordinar una reunión breve.</p>
+          </div>
+          <a class="button button-whatsapp" href="${esc(whatsAppUrl)}" target="_blank" rel="noopener noreferrer">Sumar mi comercio por WhatsApp →</a>
+        </div>
+        <div class="modal-divider-text"><span>o completá tus datos en el formulario</span></div>
+      ` : ''}
       <div class="modal-note">
         <div>${renderIcon('check', 13)} <strong>Herramienta directa y local</strong>: pensada para acompañar la actividad del comercio sin intermediaciones complejas.</div>
         <div>${renderIcon('check', 13)} <strong>Menú digital y comanda para cocina</strong>: controlá disponibilidad de platos y tiempos de espera en tiempo real.</div>
@@ -1474,6 +1569,16 @@ async function doAction(button) {
         searchInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
     }, 80);
+    return;
+  }
+
+  if (action === 'commercial-contact') {
+    const whatsAppUrl = buildMerchantWhatsAppUrl();
+    if (whatsAppUrl) {
+      window.open(whatsAppUrl, '_blank', 'noopener,noreferrer');
+    } else {
+      openJoinModal();
+    }
     return;
   }
 
