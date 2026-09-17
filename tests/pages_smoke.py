@@ -1,4 +1,4 @@
-﻿"""
+"""
 Smoke test exhaustivo sobre la URL pública de GitHub Pages:
 https://bitflowapp.github.io/cauce/
 Verifica flujo comercial completo, consolas, persistencia, 404s y viewports de iPhone.
@@ -67,21 +67,22 @@ with sync_playwright() as playwright:
         expect(page.locator('#cart-count')).to_have_text('2')
         
         navigate(page, 'carts')
-        expect(page.get_by_role('link', name='Revisar carrito')).to_have_count(2)
+        expect(page.locator('[data-testid="continue-order-link"]')).to_have_count(2)
         
         # PERSISTENCE ACROSS RELOAD
         page.reload()
         page.wait_for_load_state('networkidle')
-        expect(page.get_by_role('link', name='Revisar carrito')).to_have_count(2)
+        expect(page.locator('[data-testid="continue-order-link"]')).to_have_count(2)
         record('CART y persistencia tras recarga en Pages', 'PASS')
         
         # CHECKOUT
         navigate(page, 'cart/orilla')
         expect(page.locator('.cart-line')).to_have_count(1)
-        page.get_by_label('Modalidad de entrega').select_option('delivery')
-        page.get_by_label('Dirección de ejemplo').fill('Av. 4 de Febrero 500')
+        page.locator('label[for="fulfillment-delivery"]').click()
+        page.locator('[data-action="fill-demo-checkout"]').click()
+        page.locator('input[name="address"]').fill('Av. 4 de Febrero 500')
         page.screenshot(path=str(EVIDENCE / 'pages-checkout-desktop.png'), full_page=True)
-        page.get_by_role('button', name='Crear pedido de prueba', exact=True).click()
+        page.locator('[data-testid="confirm-order"]').click()
         expect(page.get_by_role('heading', name='Recibido', exact=True)).to_be_visible()
         order_path = page.url.split('#', 1)[1]
         record('CHECKOUT delivery en GitHub Pages', 'PASS')

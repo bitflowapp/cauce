@@ -146,7 +146,7 @@ function storesMarkup() {
     return `<a class="store-card" href="#shop/${esc(b.id)}" data-testid="store-card">
       <div class="store-art" aria-hidden="true">
         <div class="store-art-fallback theme-${theme(b)}">${previewSvg}</div>
-        ${b.coverImage ? `<img class="store-cover-img" src="${esc(b.coverImage)}" alt="" loading="lazy" onerror="this.classList.add('img-hidden')">` : ''}
+        ${b.coverImage ? `<img class="store-cover-img" src="${esc(b.coverImage)}" alt="" loading="lazy">` : ''}
         <div class="store-art-gradient"></div>
         ${b.badge ? `<span class="badge-pill">${esc(b.badge)}</span>` : ''}
       </div>
@@ -394,7 +394,7 @@ function shop(businessId) {
             const foodSvg = getProductSvg(p.dishType || 'burger');
             return `<article class="product">
               <div class="product-img">
-                ${p.image ? `<img src="${esc(p.image)}" alt="" loading="lazy" onerror="this.style.display='none'">` : ''}
+                ${p.image ? `<img src="${esc(p.image)}" alt="" loading="lazy">` : ''}
                 ${foodSvg}
               </div>
               <div class="product-details">
@@ -476,13 +476,13 @@ function carts() {
     try { q = repository.quote(b.id, b.pickupEnabled ? 'pickup' : 'delivery'); } catch (_) {}
     const itemsSummary = cart.lines.map(l => {
       const p = products.find(item => item.id === l.productId);
-      return `${l.quantity} × ${esc(p?.name || 'Producto')}`;
+      return `${l.quantity} × ${p?.name || 'Producto'}`;
     }).join(' · ');
 
     return `<article class="card cart-primary-card">
       <div class="cart-primary-main">
         <div class="cart-merchant-media">
-          <img src="${esc(b.coverImage)}" alt="" class="cart-merchant-img" onerror="this.style.display='none'">
+          <img src="${esc(b.coverImage)}" alt="" class="cart-merchant-img">
           <span class="store-badge-mini">${esc(b.initials || 'C')}</span>
         </div>
         <div class="cart-merchant-details">
@@ -500,7 +500,7 @@ function carts() {
           <strong class="subtotal-amount">${q ? money(q.subtotal) : '—'}</strong>
         </div>
         <div class="cart-primary-buttons">
-          <a class="button button-continue-order" href="#cart/${esc(b.id)}" aria-label="Revisar carrito">Continuar pedido <span aria-hidden="true">→</span></a>
+          <a class="button button-continue-order" href="#cart/${esc(b.id)}" data-testid="continue-order-link" aria-label="Continuar pedido en ${esc(b.name)}">Continuar pedido <span aria-hidden="true">→</span></a>
           <button class="link-button cart-clear-link" type="button" data-action="clear-cart" data-business="${esc(b.id)}">Vaciar este carrito</button>
         </div>
       </div>
@@ -515,13 +515,13 @@ function carts() {
     try { q = repository.quote(b.id, b.pickupEnabled ? 'pickup' : 'delivery'); } catch (_) {}
     const itemsSummary = cart.lines.map(l => {
       const p = products.find(item => item.id === l.productId);
-      return `${l.quantity} × ${esc(p?.name || 'Producto')}`;
+      return `${l.quantity} × ${p?.name || 'Producto'}`;
     }).join(' · ');
 
     return `<article class="card cart-secondary-card">
       <div class="cart-secondary-main">
         <div class="cart-merchant-media-sm">
-          <img src="${esc(b.coverImage)}" alt="" class="cart-merchant-img-sm" onerror="this.style.display='none'">
+          <img src="${esc(b.coverImage)}" alt="" class="cart-merchant-img-sm">
           <span class="store-badge-mini">${esc(b.initials || 'C')}</span>
         </div>
         <div class="cart-secondary-details">
@@ -533,7 +533,7 @@ function carts() {
         </div>
       </div>
       <div class="cart-secondary-action-block">
-        <a class="button secondary" href="#cart/${esc(b.id)}" aria-label="Revisar carrito">Continuar pedido <span aria-hidden="true">→</span></a>
+        <a class="button secondary" href="#cart/${esc(b.id)}" data-testid="continue-order-link" aria-label="Continuar pedido en ${esc(b.name)}">Continuar pedido <span aria-hidden="true">→</span></a>
         <button class="link-button cart-clear-link" type="button" data-action="clear-cart" data-business="${esc(b.id)}">Vaciar</button>
       </div>
     </article>`;
@@ -543,7 +543,7 @@ function carts() {
   <div class="carts-view">
     <div class="carts-view-header">
       <h1 class="page-title">Tu carrito</h1>
-      <p class="quiet">Cada pedido se procesa de forma independiente en su comercio correspondiente.</p>
+      <p class="quiet">Cada comercio prepara y entrega su pedido por separado.</p>
     </div>
     <div class="cart-primary-section">
       ${secondary.length > 0 ? '<span class="eyebrow cart-section-eyebrow">TU PEDIDO PRINCIPAL</span>' : ''}
@@ -572,14 +572,15 @@ function cartPage(businessId) {
     return `${back(`#shop/${b.id}`, b.name)}${empty('Tu carrito está vacío', 'Los productos de este comercio aparecerán acá.', `#shop/${b.id}`, 'Ver la carta')}`;
   }
 
-  const values = formValues.get(b.id) || {
+  const values = {
     fulfillment: b.pickupEnabled ? 'pickup' : 'delivery',
-    name: 'Cliente de prueba',
-    phone: '0000000000',
-    address: 'Calle de prueba 123',
+    name: '',
+    phone: '',
+    address: '',
     reference: '',
     paymentMethod: 'cash_demo',
     notes: '',
+    ...formValues.get(b.id),
   };
 
   let quote = null;
@@ -608,7 +609,7 @@ function cartPage(businessId) {
             return `<div class="cart-line">
               <div class="cart-line-product">
                 <div class="cart-product-thumb" aria-hidden="true">
-                  ${p?.image ? `<img src="${esc(p.image)}" alt="" onerror="this.style.display='none'">` : ''}
+                  ${p?.image ? `<img src="${esc(p.image)}" alt="">` : ''}
                   ${foodSvg}
                 </div>
                 <div class="cart-line-info">
@@ -633,58 +634,62 @@ function cartPage(businessId) {
       </section>
 
       <form id="checkout-form" data-form="checkout" data-business="${esc(b.id)}" class="card checkout-form">
-        <section class="checkout-sub-section">
+        <fieldset class="checkout-sub-section fulfillment-fieldset" data-testid="fulfillment-selector">
           <div class="checkout-section-header">
             <span class="eyebrow">2. MODALIDAD</span>
-            <h2 class="checkout-section-title">¿Cómo recibís tu pedido?</h2>
+            <legend class="checkout-section-title">¿Cómo recibís tu pedido?</legend>
           </div>
-          <div class="fulfillment-picker">
-            <label for="fulfillment" class="sr-only">Modalidad de entrega</label>
-            <select id="fulfillment" name="fulfillment" class="sr-only-focusable" tabindex="-1">
-              ${b.pickupEnabled ? `<option value="pickup" ${values.fulfillment === 'pickup' ? 'selected' : ''}>Retiro por el comercio · sin costo</option>` : ''}
-              ${b.deliveryEnabled ? `<option value="delivery" ${values.fulfillment === 'delivery' ? 'selected' : ''}>Delivery del comercio · ${money(b.deliveryFee)}</option>` : ''}
-            </select>
-            <div class="fulfillment-options">
-              ${b.pickupEnabled ? `
-                <button type="button" class="fulfillment-card ${values.fulfillment === 'pickup' ? 'active' : ''}" data-action="set-fulfillment" data-value="pickup">
+          <div class="fulfillment-options" role="radiogroup" aria-label="Modalidad de entrega">
+            ${b.pickupEnabled ? `
+              <div class="fulfillment-option">
+                <input type="radio" id="fulfillment-pickup" name="fulfillment" value="pickup" ${values.fulfillment === 'pickup' ? 'checked' : ''} class="fulfillment-radio">
+                <label class="fulfillment-card ${values.fulfillment === 'pickup' ? 'active' : ''}" for="fulfillment-pickup">
                   <div class="fulfillment-card-top">
                     <span class="fulfillment-card-title">${renderIcon('bag', 15)} Retiro en local</span>
                     <span class="fulfillment-badge free">Sin costo</span>
                   </div>
                   <p class="fulfillment-card-meta">Retiro en mostrador · ${esc(b.address || 'Aluminé')}</p>
-                </button>
-              ` : ''}
-              ${b.deliveryEnabled ? `
-                <button type="button" class="fulfillment-card ${values.fulfillment === 'delivery' ? 'active' : ''}" data-action="set-fulfillment" data-value="delivery">
+                </label>
+              </div>
+            ` : ''}
+            ${b.deliveryEnabled ? `
+              <div class="fulfillment-option">
+                <input type="radio" id="fulfillment-delivery" name="fulfillment" value="delivery" ${values.fulfillment === 'delivery' ? 'checked' : ''} class="fulfillment-radio">
+                <label class="fulfillment-card ${values.fulfillment === 'delivery' ? 'active' : ''}" for="fulfillment-delivery">
                   <div class="fulfillment-card-top">
                     <span class="fulfillment-card-title">${renderIcon('delivery', 15)} Delivery del comercio</span>
                     <span class="fulfillment-badge fee">${money(b.deliveryFee)}</span>
                   </div>
                   <p class="fulfillment-card-meta">Reparto directo · Demora aprox. ${esc(b.eta)}</p>
-                </button>
-              ` : ''}
-            </div>
+                </label>
+              </div>
+            ` : ''}
           </div>
-        </section>
+        </fieldset>
 
         <section class="checkout-sub-section">
-          <div class="checkout-section-header">
-            <span class="eyebrow">3. TUS DATOS</span>
-            <h2 class="checkout-section-title">Datos de contacto</h2>
+          <div class="checkout-section-header checkout-section-header-row">
+            <div>
+              <span class="eyebrow">3. TUS DATOS</span>
+              <h2 class="checkout-section-title">Datos de contacto</h2>
+            </div>
+            <button type="button" class="demo-fill-btn" data-action="fill-demo-checkout" data-business="${esc(b.id)}" title="Completar campos con datos de ejemplo para demostración">
+              ⚡ Cargar datos demo
+            </button>
           </div>
           <div class="form-grid">
             <label class="field" for="checkout-name">
-              <span>Nombre <span class="sr-only">de ejemplo</span></span>
-              <input id="checkout-name" name="name" aria-label="Nombre de ejemplo" required minlength="2" maxlength="80" value="${esc(values.name)}" autocomplete="off" placeholder="Ej: Marcela González">
+              <span>Nombre y apellido</span>
+              <input id="checkout-name" name="name" required minlength="2" maxlength="80" value="${esc(values.name)}" autocomplete="name" placeholder="Ej: Marcela González">
             </label>
             <label class="field" for="checkout-phone">
-              <span>Teléfono de contacto <span class="sr-only">de ejemplo</span></span>
-              <input id="checkout-phone" name="phone" type="tel" inputmode="tel" aria-label="Teléfono de ejemplo" required minlength="8" maxlength="24" value="${esc(values.phone)}" autocomplete="off" placeholder="Ej: 2942-556677">
+              <span>Teléfono de contacto</span>
+              <input id="checkout-phone" name="phone" type="tel" inputmode="tel" required minlength="8" maxlength="24" value="${esc(values.phone)}" autocomplete="tel" placeholder="Ej: 2942-556677">
             </label>
             ${values.fulfillment === 'delivery' ? `
               <label class="field wide" for="checkout-address">
-                <span>Dirección de entrega <span class="sr-only">de ejemplo</span></span>
-                <input id="checkout-address" name="address" aria-label="Dirección de ejemplo" required minlength="5" maxlength="200" value="${esc(values.address)}" autocomplete="off" placeholder="Ej: Av. 4 de Febrero 450">
+                <span>Dirección de entrega</span>
+                <input id="checkout-address" name="address" required minlength="5" maxlength="200" value="${esc(values.address)}" autocomplete="street-address" placeholder="Ej: Av. 4 de Febrero 450">
               </label>
               <label class="field wide" for="checkout-reference">
                 <span>Indicaciones para la entrega (opcional)</span>
@@ -721,7 +726,7 @@ function cartPage(businessId) {
           <span class="checkout-sticky-label">Total</span>
           <strong class="checkout-sticky-amount">${quote ? money(quote.total) : '—'}</strong>
         </div>
-        <button class="button full button-confirm-order" type="submit" form="checkout-form" aria-label="Crear pedido de prueba" ${quote ? '' : 'disabled'}>Confirmar pedido</button>
+        <button class="button full button-confirm-order" type="submit" form="checkout-form" data-testid="confirm-order" ${quote ? '' : 'disabled'}>Confirmar pedido</button>
       </div>
       <p class="microcopy below-note">Demostración comercial · Pago simulado contra entrega</p>
     </aside>
@@ -928,12 +933,12 @@ function businessPanel(businessId) {
           <h3>${esc(p.name)}</h3>
           <div class="edit-fields">
             <label class="field" for="edit-price-${p.id}">
-              <span>Precio <span class="sr-only">de ejemplo</span></span>
-              <input id="edit-price-${p.id}" name="price" aria-label="Precio de ejemplo" type="number" min="1" max="10000000" step="1" required value="${p.price}">
+              <span>Precio</span>
+              <input id="edit-price-${p.id}" name="price" type="number" min="1" max="10000000" step="1" required value="${p.price}">
             </label>
             <label class="field" for="edit-stock-${p.id}">
-              <span>Stock disponible <span class="sr-only">de ejemplo</span></span>
-              <input id="edit-stock-${p.id}" name="stock" aria-label="Stock de ejemplo" type="number" min="0" max="10000" step="1" required value="${p.stock}">
+              <span>Stock disponible</span>
+              <input id="edit-stock-${p.id}" name="stock" type="number" min="0" max="10000" step="1" required value="${p.stock}">
             </label>
           </div>
           <label class="check-label" style="margin: 8px 0;"><input name="available" type="checkbox" ${p.available ? 'checked' : ''}> Disponible</label>
@@ -1556,13 +1561,20 @@ async function doAction(button) {
     return;
   }
 
-  if (action === 'set-fulfillment') {
-    const select = document.querySelector('#fulfillment');
-    if (select && select.value !== button.dataset.value) {
-      select.value = button.dataset.value;
-      rememberForm(select.closest('form'));
-      render();
-    }
+  if (action === 'fill-demo-checkout') {
+    const bId = button.dataset.business;
+    const b = repository.business(bId);
+    const current = formValues.get(bId) || {};
+    formValues.set(bId, {
+      fulfillment: b?.pickupEnabled ? 'pickup' : 'delivery',
+      ...current,
+      name: 'Marcela González',
+      phone: '2942-556677',
+      address: 'Av. 4 de Febrero 450',
+      reference: 'Casa con reja verde, timbre al fondo',
+    });
+    render();
+    toast('Datos de prueba cargados en el formulario.');
     return;
   }
 
@@ -1648,12 +1660,20 @@ main.addEventListener('change', event => {
     const results = document.querySelector('#stores-results');
     if (results) results.innerHTML = storesMarkup();
   }
-  if (event.target.id === 'fulfillment') {
+  if (event.target.name === 'fulfillment') {
     rememberForm(event.target.closest('form'));
     render();
-    document.querySelector('#fulfillment')?.focus();
+    document.querySelector(`input[name="fulfillment"][value="${event.target.value}"]`)?.focus();
   }
 });
+
+window.addEventListener('error', event => {
+  const target = event.target;
+  if (target && target.tagName === 'IMG') {
+    target.classList.add('img-hidden');
+    target.style.display = 'none';
+  }
+}, true);
 
 main.addEventListener('submit', async event => {
   const form = event.target;
