@@ -45,8 +45,8 @@ test('CTA comercial "Sumar mi comercio" existe en las ubicaciones estratégicas 
 
   // 1. Header desktop
   assert.ok(
-    indexHtml.includes('Sumar mi comercio') && indexHtml.includes('nav-merchant-cta'),
-    'Falta CTA comercial en el header de navegación'
+    indexHtml.includes('Sumar mi comercio') && indexHtml.includes('nav-merchant-cta') && indexHtml.includes('https://wa.me/5492996209136'),
+    'Falta CTA comercial en el header de navegación o no apunta a WhatsApp'
   );
 
   // 2. Hero

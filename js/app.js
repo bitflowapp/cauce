@@ -125,6 +125,20 @@ function updateNavigation() {
   if (cartNav) cartNav.setAttribute('href', cartHref);
   if (bnavCarts) bnavCarts.setAttribute('href', cartHref);
 
+  const navMerchantCta = document.querySelector('.nav-merchant-cta');
+  if (navMerchantCta) {
+    const whatsAppUrl = buildMerchantWhatsAppUrl();
+    if (whatsAppUrl) {
+      navMerchantCta.setAttribute('href', whatsAppUrl);
+      navMerchantCta.setAttribute('target', '_blank');
+      navMerchantCta.setAttribute('rel', 'noopener noreferrer');
+    } else {
+      navMerchantCta.setAttribute('href', '#home');
+      navMerchantCta.removeAttribute('target');
+      navMerchantCta.removeAttribute('rel');
+    }
+  }
+
   const [currentPage = 'home'] = route();
   document.querySelectorAll('.bottom-nav-item').forEach(item => {
     const id = item.id;
@@ -1575,7 +1589,9 @@ async function doAction(button) {
   if (action === 'commercial-contact') {
     const whatsAppUrl = buildMerchantWhatsAppUrl();
     if (whatsAppUrl) {
-      window.open(whatsAppUrl, '_blank', 'noopener,noreferrer');
+      if (button.tagName !== 'A' || !button.href || !button.href.includes('wa.me')) {
+        window.open(whatsAppUrl, '_blank', 'noopener,noreferrer');
+      }
     } else {
       openJoinModal();
     }
