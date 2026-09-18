@@ -25,15 +25,13 @@ function createMockStorage() {
 
 const code = expected => err => err.code === expected;
 
-test('estimación de tarifa de taxi arroja valores plausibles en Aluminé', () => {
-  const est1 = estimateTaxiFare('Plaza San Martín', 'Hospital de Aluminé');
-  assert.ok(est1.fareEstimated >= 2500 && est1.fareEstimated <= 5000);
-  assert.ok(est1.distanceKm.includes('km'));
-  assert.ok(est1.durationMin.includes('min'));
-  assert.ok(est1.pickupEta.includes('min'));
-
-  const est2 = estimateTaxiFare('Terminal de Ómnibus', 'Barrio La Pampa');
-  assert.ok(est2.fareEstimated > est1.fareEstimated);
+test('estimación de tarifa de taxi no presenta cotizaciones no validadas ni distancias inventadas', () => {
+  const est = estimateTaxiFare('Plaza San Martín', 'Hospital de Aluminé');
+  assert.equal(est.fareEstimated, 0);
+  assert.equal(est.fareLabel, 'Tarifa a coordinar con el servicio');
+  assert.equal(est.distanceKm, 'Recorrido de demostración');
+  assert.equal(est.durationMin, 'Tiempo a confirmar');
+  assert.equal(est.pickupEta, 'Tiempo a confirmar');
 });
 
 test('creación de viaje de taxi valida campos requeridos', () => {
@@ -41,19 +39,19 @@ test('creación de viaje de taxi valida campos requeridos', () => {
 
   // Origen corto
   assert.throws(
-    () => createTaxiTrip({ origin: 'a', destination: 'Hospital', passengerName: 'Juan', passengerPhone: '2942-551234' }, { storage }),
+    () => createTaxiTrip({ origin: 'a', destination: 'Hospital', passengerName: 'Juan', passengerPhone: '2942 001122' }, { storage }),
     code('INVALID_ORIGIN')
   );
 
   // Destino corto
   assert.throws(
-    () => createTaxiTrip({ origin: 'Plaza', destination: 'b', passengerName: 'Juan', passengerPhone: '2942-551234' }, { storage }),
+    () => createTaxiTrip({ origin: 'Plaza', destination: 'b', passengerName: 'Juan', passengerPhone: '2942 001122' }, { storage }),
     code('INVALID_DESTINATION')
   );
 
   // Nombre inválido
   assert.throws(
-    () => createTaxiTrip({ origin: 'Plaza', destination: 'Hospital', passengerName: '!', passengerPhone: '2942-551234' }, { storage }),
+    () => createTaxiTrip({ origin: 'Plaza', destination: 'Hospital', passengerName: '!', passengerPhone: '2942 001122' }, { storage }),
     code('INVALID_NAME')
   );
 
@@ -85,8 +83,12 @@ test('circuito completo de taxi: creación, asignación, viaje y finalización',
 
   assert.equal(trip.status, 'requested');
   assert.equal(trip.passenger.name, 'Laura Gómez');
-  assert.equal(trip.driver.mobileNumber, 'Móvil 04');
-  assert.ok(trip.estimate.fareEstimated > 0);
+  assert.equal(trip.driver.name, 'Conductor demo');
+  assert.equal(trip.driver.mobileNumber, 'Móvil DEMO');
+  assert.equal(trip.driver.vehicle, 'Vehículo de demostración');
+  assert.equal(trip.driver.plate, 'Patente DEMO');
+  assert.equal(trip.driver.rating, undefined);
+  assert.equal(trip.driver.completedTrips, undefined);
 
   // 2. Comprobar que está activo
   const active1 = getActiveTaxiTrip(storage);
@@ -213,3 +215,12 @@ test('reset limpia el estado de taxis', () => {
   resetTaxiState(storage);
   assert.equal(storage.getItem(TAXI_STORAGE_KEY), null);
 });
+
+test('ausencia de identidades ficticias realistas, rating o tarifas hardcodeadas en chofer demo', () => {
+  assert.notEqual(DEFAULT_TAXI_DRIVER.name, 'Carlos Morales');
+  assert.equal(DEFAULT_TAXI_DRIVER.name, 'Conductor demo');
+  assert.equal(DEFAULT_TAXI_DRIVER.mobileNumber, 'Móvil DEMO');
+  assert.equal(DEFAULT_TAXI_DRIVER.rating, undefined);
+  assert.equal(DEFAULT_TAXI_DRIVER.completedTrips, undefined);
+});
+

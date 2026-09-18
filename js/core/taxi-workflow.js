@@ -25,14 +25,14 @@ export const TAXI_STATUS_LABELS = Object.freeze({
 });
 
 export const TAXI_STATUS_DESCRIPTIONS = Object.freeze({
-  requested: 'Tu pedido de viaje fue registrado en el sistema local.',
-  searching: 'Avisando a los móviles habilitados de Aluminé.',
-  accepted: 'Un chofer aceptó tu viaje y se prepara para salir.',
-  driver_on_way: 'El móvil se desplaza hacia tu punto de encuentro.',
+  requested: 'Tu solicitud de viaje fue registrada en el prototipo local.',
+  searching: 'Buscando móvil de demostración en Aluminé.',
+  accepted: 'Un chofer de prueba aceptó tu viaje de demostración.',
+  driver_on_way: 'El móvil se desplaza en el recorrido esquemático hacia tu punto de encuentro.',
   driver_arrived: 'El taxi está esperando en la puerta o punto de subida.',
   passenger_on_board: 'Pasajero a bordo del vehículo.',
   in_trip: 'En viaje directo hacia el destino indicado.',
-  completed: 'Llegaron a destino. Pago directo al chofer.',
+  completed: 'Llegaron a destino. Cobro coordinado con el chofer.',
   canceled: 'El viaje fue cancelado.',
 });
 
@@ -131,7 +131,7 @@ export function getDriverNextAction(status) {
         action: 'complete_trip',
         label: 'Finalizar viaje',
         nextStatus: 'completed',
-        description: 'Cobrar en efectivo demo y cerrar el viaje',
+        description: 'Completar el servicio y cerrar el viaje',
       };
     default:
       return null;

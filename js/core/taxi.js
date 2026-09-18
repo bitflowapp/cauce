@@ -13,60 +13,30 @@ import {
 export const TAXI_STORAGE_KEY = 'cauce:demo:taxi:v1';
 
 export const DEFAULT_TAXI_DRIVER = Object.freeze({
-  id: 'driver-04',
-  name: 'Carlos Morales',
-  mobileNumber: 'Móvil 04',
-  vehicle: 'Chevrolet Classic blanco',
-  plate: 'AA 842 CD',
-  phone: '2942-551234',
-  rating: '4.9',
-  completedTrips: 18,
+  id: 'driver-demo',
+  name: 'Conductor demo',
+  mobileNumber: 'Móvil DEMO',
+  vehicle: 'Vehículo de demostración',
+  plate: 'Patente DEMO',
+  phone: 'Demostración operativa',
 });
 
 export const ALUMINE_TAXI_LOCATIONS = Object.freeze([
-  { id: 'plaza', name: 'Plaza San Martín (Centro)', address: 'San Martín y Torcuato Modarelli' },
-  { id: 'hospital', name: 'Hospital de Aluminé', address: 'Av. 4 de Febrero 420' },
-  { id: 'terminal', name: 'Terminal de Ómnibus', address: 'Ruta Provincial 23' },
+  { id: 'plaza', name: 'Plaza San Martín', address: 'Centro de Aluminé' },
+  { id: 'hospital', name: 'Hospital de Aluminé', address: 'Aluminé' },
+  { id: 'terminal', name: 'Terminal de Ómnibus', address: 'Aluminé' },
   { id: 'costanera', name: 'Costanera Río Aluminé', address: 'Paseo de la Costanera' },
-  { id: 'puente', name: 'Acceso Puente Aluminé', address: 'Ruta 23 y Río Aluminé' },
-  { id: 'artesanos', name: 'Paseo de los Artesanos', address: 'Av. 4 de Febrero s/n' },
-  { id: 'pampa', name: 'Barrio La Pampa', address: 'Calle Los Pehuenes 250' },
-  { id: 'polideportivo', name: 'Polideportivo Municipal', address: 'Av. Cristian Joubert' },
+  { id: 'puente', name: 'Acceso Puente Aluminé', address: 'Acceso a la localidad' },
 ]);
 
 export function estimateTaxiFare(origin, destination) {
-  const cleanOrigin = String(origin || '').trim().toLowerCase();
-  const cleanDest = String(destination || '').trim().toLowerCase();
-
-  let distanceKm = 2.4;
-  let durationMin = 7;
-  let baseFare = 2200;
-
-  if (cleanOrigin.includes('terminal') || cleanDest.includes('terminal')) {
-    distanceKm = 3.2;
-    durationMin = 10;
-  } else if (cleanOrigin.includes('pampa') || cleanDest.includes('pampa')) {
-    distanceKm = 4.1;
-    durationMin = 12;
-  } else if (cleanOrigin.includes('costanera') || cleanDest.includes('costanera')) {
-    distanceKm = 1.8;
-    durationMin = 6;
-  } else if (cleanOrigin.includes('hospital') || cleanDest.includes('hospital')) {
-    distanceKm = 2.1;
-    durationMin = 7;
-  }
-
-  const estimatedFare = Math.round((baseFare + distanceKm * 550) / 100) * 100;
-  const fareMin = Math.round((estimatedFare * 0.9) / 100) * 100;
-  const fareMax = Math.round((estimatedFare * 1.15) / 100) * 100;
-
+  // Prototipo: no se emiten cotizaciones ni distancias GPS simuladas sin validación real
   return {
-    fareEstimated: estimatedFare,
-    fareMin,
-    fareMax,
-    distanceKm: `${distanceKm.toFixed(1).replace('.', ',')} km`,
-    durationMin: `${durationMin} min`,
-    pickupEta: '3–6 min',
+    fareEstimated: 0,
+    fareLabel: 'Tarifa a coordinar con el servicio',
+    distanceKm: 'Recorrido de demostración',
+    durationMin: 'Tiempo a confirmar',
+    pickupEta: 'Tiempo a confirmar',
   };
 }
 
@@ -178,7 +148,7 @@ export function createTaxiTrip(
   requireValue(
     isValidArgentinePhone(cleanPhone),
     'INVALID_PHONE',
-    'Ingresá un número de teléfono de contacto válido (ej: 2942 551234).'
+    'Ingresá un número de teléfono de contacto válido (ej: 2942 000000).'
   );
 
   const estimate = estimateTaxiFare(cleanOrigin, cleanDest);

@@ -308,11 +308,11 @@ function home() {
         <div>
           <span class="module-badge module-badge-taxi">${renderIcon('taxi', 13)} MOVILIDAD LOCAL</span>
           <h3>Taxis de Aluminé</h3>
-          <p>Pedí un móvil habilitado en la localidad, conocé la tarifa estimada y seguí el trayecto en tiempo real desde tu celular.</p>
+          <p>Prototipo de movilidad local para coordinar viajes de cercanía y seguir el recorrido de demostración.</p>
         </div>
         <div class="module-card-actions">
           <a class="button" href="#taxi">Pedir un taxi →</a>
-          <a class="button secondary" href="#taxi-driver">Panel taxista</a>
+          <a class="button secondary" href="#taxi-driver">Panel chofer (demo)</a>
         </div>
       </div>
     </div>
@@ -489,15 +489,15 @@ function home() {
       </div>
       <div class="reality-card">
         <div class="reality-card-badge">05 · MOVILIDAD</div>
-        <h3>Taxis locales en tiempo real</h3>
-        <p>Solicitud de viaje, asignación de móvil habilitado, seguimiento del trayecto en mapa y cobro al chofer.</p>
+        <h3>Taxis locales en evaluación</h3>
+        <p>Prototipo para evaluar solicitud de viaje, asignación de móvil demo, recorrido esquemático y cobro al chofer.</p>
         <div class="reality-card-preview">
           <div class="rcp-header">
-            <span>Móvil 04 · Carlos Morales</span>
+            <span>Móvil DEMO · Conductor demo</span>
             <span class="rcp-tag" style="background:#edf5fa;color:#1d4e73">Asignado</span>
           </div>
           <div class="rcp-line">Plaza San Martín → Hospital</div>
-          <div class="rcp-meta">Demora: 4 min · Pago directo al chofer</div>
+          <div class="rcp-meta">Recorrido esquemático · Pago coordinado con el chofer</div>
         </div>
       </div>
     </div>
@@ -1046,27 +1046,27 @@ function manage() {
 
   <div class="section-heading" style="margin-top: 36px;">
     <div>
-      <span class="eyebrow">MÓDULO DE MOVILIDAD LOCAL</span>
+      <span class="eyebrow">MÓDULO DE MOVILIDAD LOCAL (PROTOTIPO)</span>
       <h2>Taxis de Aluminé</h2>
-      <p>Solicitud de viajes para vecinos y panel operativo de chofer habilitado.</p>
+      <p>Prototipo de movilidad local para evaluar la solicitud de viajes y el panel operativo del chofer.</p>
     </div>
   </div>
   <div class="stores">
     <section class="card">
       <span class="eyebrow">VECINO / PASAJERO</span>
       <h2>Pedir un taxi</h2>
-      <p class="quiet">Elegí origen y destino en Aluminé, estimá la tarifa y seguí el trayecto en el mapa.</p>
+      <p class="quiet">Elegí origen y destino en Aluminé y seguí el recorrido esquemático de demostración.</p>
       ${activeTaxi ? `<p class="microcopy" style="color:var(--mountain-blue);font-weight:600;">● Viaje activo en curso (${esc(TAXI_STATUS_LABELS[activeTaxi.status])})</p>` : ''}
       <div class="stack">
         <a class="button" href="#taxi">${activeTaxi ? 'Ver seguimiento del taxi' : 'Solicitar taxi'}</a>
       </div>
     </section>
     <section class="card">
-      <span class="eyebrow">CHOFER · MÓVIL 04</span>
-      <h2>Panel del taxista</h2>
-      <p class="quiet">Recepción de viajes, aceptación y avance secuencial de estados de traslado.</p>
+      <span class="eyebrow">CHOFER · MÓVIL DEMO</span>
+      <h2>Panel del chofer</h2>
+      <p class="quiet">Recepción de viajes, aceptación y avance secuencial de estados de traslado de demostración.</p>
       <div class="stack">
-        <a class="button secondary" href="#taxi-driver">Panel del taxista (Móvil 04)</a>
+        <a class="button secondary" href="#taxi-driver">Panel del chofer (Móvil DEMO)</a>
       </div>
     </section>
   </div>`;
@@ -1475,30 +1475,7 @@ function presentacion() {
 }
 
 function updateTaxiEstimateFromForm() {
-  const originInput = document.querySelector('#taxi-origin-input');
-  const destInput = document.querySelector('#taxi-destination-input');
-  const box = document.querySelector('#taxi-estimate-box');
-  if (!originInput || !destInput || !box) return;
-
-  const est = estimateTaxiFare(originInput.value, destInput.value);
-  box.innerHTML = `
-    <div class="taxi-estimate-item">
-      <span class="taxi-estimate-label">Tarifa estimada</span>
-      <span class="taxi-estimate-value">${money(est.fareEstimated)}</span>
-    </div>
-    <div class="taxi-estimate-item">
-      <span class="taxi-estimate-label">Distancia</span>
-      <span class="taxi-estimate-value">~${esc(est.distanceKm)}</span>
-    </div>
-    <div class="taxi-estimate-item">
-      <span class="taxi-estimate-label">Llegada del móvil</span>
-      <span class="taxi-estimate-value">${esc(est.pickupEta)}</span>
-    </div>
-    <div class="taxi-estimate-item">
-      <span class="taxi-estimate-label">Medio de pago</span>
-      <span class="taxi-estimate-value" style="font-size:14px;color:var(--ink)">Efectivo / Transfer</span>
-    </div>
-  `;
+  // Prototipo: no se emiten cotizaciones ni distancias GPS simuladas sin validación real
 }
 
 function taxiPage(tripId) {
@@ -1516,16 +1493,16 @@ function taxiPage(tripId) {
   return `${back('#home', 'Volver al inicio')}
   <div class="taxi-page-container">
     <header class="taxi-hero-header">
-      <span class="eyebrow">MOVILIDAD LOCAL · ALUMINÉ</span>
+      <span class="eyebrow">MOVILIDAD LOCAL · PROTOTIPO</span>
       <h1 class="page-title">Pedí un taxi</h1>
-      <p class="quiet">Móviles habilitados en la localidad con seguimiento en tiempo real y pago directo al chofer.</p>
+      <p class="quiet">Prototipo para evaluar la solicitud de viajes locales, recorrido esquemático y cobro directo con el chofer.</p>
     </header>
 
     <div class="taxi-form-card">
       <form data-form="taxi-request" id="taxi-request-form">
         <fieldset class="taxi-fieldset">
           <legend class="taxi-legend">${renderIcon('pin', 14)} Origen / Dónde te subís</legend>
-          <input class="taxi-input" type="text" name="origin" id="taxi-origin-input" required value="Plaza San Martín (Centro)" placeholder="Ej: Plaza San Martín, Hospital, Terminal...">
+          <input class="taxi-input" type="text" name="origin" id="taxi-origin-input" required value="Plaza San Martín" placeholder="Ej: Plaza San Martín, Hospital, Terminal...">
           <div class="taxi-shortcuts-row" aria-label="Lugares frecuentes de subida">
             ${ALUMINE_TAXI_LOCATIONS.slice(0, 4).map(loc => `<button type="button" class="taxi-chip" data-action="fill-taxi-origin" data-value="${esc(loc.name)}">${esc(TAXI_CHIP_LABELS[loc.id] || loc.name)}</button>`).join('')}
           </div>
@@ -1547,33 +1524,34 @@ function taxiPage(tripId) {
           <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;">
             <div>
               <label class="sr-only" for="taxi-passenger-name">Nombre del pasajero</label>
-              <input class="taxi-input" type="text" name="passengerName" id="taxi-passenger-name" required value="Vecino Demo" placeholder="Nombre completo">
+              <input class="taxi-input" type="text" name="passengerName" id="taxi-passenger-name" required value="Pasajero Demo" placeholder="Nombre completo">
             </div>
             <div>
               <label class="sr-only" for="taxi-passenger-phone">Teléfono de contacto</label>
-              <input class="taxi-input" type="tel" name="passengerPhone" id="taxi-passenger-phone" required value="2942 551234" placeholder="Teléfono de contacto">
+              <input class="taxi-input" type="tel" name="passengerPhone" id="taxi-passenger-phone" required value="2942 000000" placeholder="Teléfono de contacto para coordinar">
             </div>
           </div>
         </fieldset>
 
         <div class="taxi-estimate-box" id="taxi-estimate-box">
           <div class="taxi-estimate-item">
-            <span class="taxi-estimate-label">Tarifa estimada</span>
-            <span class="taxi-estimate-value">$ 3.400</span>
+            <span class="taxi-estimate-label">Tarifa del viaje</span>
+            <span class="taxi-estimate-value" style="font-size:15px;">Tarifa a coordinar con el servicio</span>
           </div>
           <div class="taxi-estimate-item">
-            <span class="taxi-estimate-label">Distancia</span>
-            <span class="taxi-estimate-value">~2,1 km</span>
+            <span class="taxi-estimate-label">Trayecto</span>
+            <span class="taxi-estimate-value" style="font-size:15px;">Recorrido de demostración</span>
           </div>
           <div class="taxi-estimate-item">
-            <span class="taxi-estimate-label">Llegada del móvil</span>
-            <span class="taxi-estimate-value">3–6 min</span>
+            <span class="taxi-estimate-label">Llegada estimada</span>
+            <span class="taxi-estimate-value" style="font-size:15px;">Tiempo a confirmar</span>
           </div>
           <div class="taxi-estimate-item">
-            <span class="taxi-estimate-label">Medio de pago</span>
-            <span class="taxi-estimate-value" style="font-size:14px;color:var(--ink)">Efectivo / Transfer</span>
+            <span class="taxi-estimate-label">Modalidad</span>
+            <span class="taxi-estimate-value" style="font-size:14px;color:var(--ink)">Efectivo / Transfer al chofer</span>
           </div>
         </div>
+        <p class="microcopy quiet" style="margin: -8px 0 16px; text-align: center;">Demostración funcional · Sin asignación ni geolocalización real</p>
 
         <button type="submit" class="button button-primary full" style="min-height:48px;font-size:16px;">
           ${renderIcon('taxi', 16)} Solicitar taxi en Aluminé
@@ -1583,10 +1561,10 @@ function taxiPage(tripId) {
 
     <div class="taxi-driver-banner">
       <div>
-        <strong>¿Tenés un taxi o remís habilitado en Aluminé?</strong>
-        <p>Sumate al piloto de movilidad para recibir solicitudes de vecinos desde CAUCE.</p>
+        <strong>¿Sos taxista o prestador de transporte en Aluminé?</strong>
+        <p>Sumate al diálogo sobre este prototipo para evaluar juntos cómo adaptarlo a la realidad local.</p>
       </div>
-      <a class="button secondary" href="${esc(whatsAppUrl || '#home')}" ${whatsAppUrl ? 'target="_blank" rel="noopener noreferrer"' : ''} data-action="commercial-contact">Sumarme como chofer</a>
+      <a class="button secondary" href="${esc(whatsAppUrl || '#home')}" ${whatsAppUrl ? 'target="_blank" rel="noopener noreferrer"' : ''} data-action="commercial-contact">Sumarme a la conversación</a>
     </div>
 
     ${pastTrips.length > 0 ? `
@@ -1597,7 +1575,7 @@ function taxiPage(tripId) {
             <div class="card" style="padding: 14px 18px; display:flex; justify-content:space-between; align-items:center;">
               <div>
                 <strong>${esc(t.origin)} → ${esc(t.destination)}</strong>
-                <div class="microcopy">${esc(t.driver?.mobileNumber || 'Móvil')} · ${esc(t.driver?.name || 'Chofer')} · ${esc(TAXI_STATUS_LABELS[t.status])}</div>
+                <div class="microcopy">${esc(t.driver?.mobileNumber || 'Móvil DEMO')} · ${esc(t.driver?.name || 'Conductor demo')} · ${esc(TAXI_STATUS_LABELS[t.status])}</div>
               </div>
               <div>
                 <a class="link-button" href="#taxi/${esc(t.id)}">Ver detalle</a>
@@ -1625,8 +1603,8 @@ function taxiTrackingPage(tripId) {
     origin: trip.origin,
     destination: trip.destination,
     status: trip.status,
-    driverName: trip.driver?.name || 'Carlos Morales',
-    mobileNumber: trip.driver?.mobileNumber || 'Móvil 04',
+    driverName: trip.driver?.name || 'Conductor demo',
+    mobileNumber: trip.driver?.mobileNumber || 'Móvil DEMO',
   });
 
   const timelineSteps = [
@@ -1642,7 +1620,7 @@ function taxiTrackingPage(tripId) {
     <div class="taxi-tracking-header">
       <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap: 12px; margin-bottom: 12px;">
         <div>
-          <span class="eyebrow">SEGUIMIENTO DE TAXI · ALUMINÉ</span>
+          <span class="eyebrow">SEGUIMIENTO DE VIAJE (PROTOTIPO) · ALUMINÉ</span>
           <h1 class="page-title" style="margin:4px 0 6px;">${esc(trip.origin)} → ${esc(trip.destination)}</h1>
           <p class="quiet" style="margin:0;">${esc(statusDesc)}</p>
         </div>
@@ -1659,18 +1637,15 @@ function taxiTrackingPage(tripId) {
     </div>
 
     ${mapSvg}
+    <p class="microcopy quiet" style="text-align:center;margin:6px 0 14px;">Recorrido esquemático · Demostración funcional sin geolocalización real</p>
 
     <div class="taxi-driver-card">
       <div class="taxi-driver-avatar" aria-hidden="true">🚖</div>
       <div class="taxi-driver-info">
         <div style="display:flex; align-items:center; gap: 8px;">
-          <span class="taxi-driver-name">${esc(trip.driver?.name || 'Carlos Morales')}</span>
-          <span class="availability" style="font-size:10px;padding:2px 8px;">Habilitado</span>
+          <span class="taxi-driver-name">${esc(trip.driver?.name || 'Conductor demo')}</span>
         </div>
-        <p class="taxi-driver-vehicle">${esc(trip.driver?.mobileNumber || 'Móvil 04')} · ${esc(trip.driver?.vehicle || 'Chevrolet Classic')} (${esc(trip.driver?.plate || 'AA 842 CD')})</p>
-        <div class="microcopy" style="color:var(--muted); margin-top:2px;">
-          ⭐ Calificación ${esc(trip.driver?.rating || '4.9')} · Tel: <a href="tel:${esc(trip.driver?.phone || '2942-551234')}" style="color:var(--mountain-blue);font-weight:600;">${esc(trip.driver?.phone || '2942-551234')}</a>
-        </div>
+        <p class="taxi-driver-vehicle">${esc(trip.driver?.mobileNumber || 'Móvil DEMO')} · ${esc(trip.driver?.vehicle || 'Vehículo de demostración')} (${esc(trip.driver?.plate || 'Patente DEMO')})</p>
       </div>
     </div>
 
@@ -1684,16 +1659,16 @@ function taxiTrackingPage(tripId) {
         <span class="taxi-detail-value">${esc(trip.destination)}</span>
       </div>
       <div class="taxi-detail-item">
-        <span class="taxi-detail-label">Tarifa estimada</span>
-        <span class="taxi-detail-value">${money(trip.estimate?.fareEstimated || 3400)}</span>
+        <span class="taxi-detail-label">Tarifa</span>
+        <span class="taxi-detail-value">A coordinar con el chofer</span>
       </div>
       <div class="taxi-detail-item">
         <span class="taxi-detail-label">Forma de pago</span>
-        <span class="taxi-detail-value">${esc(trip.paymentLabel || 'Efectivo demo al chofer')}</span>
+        <span class="taxi-detail-value">Efectivo / Transferencia al chofer</span>
       </div>
       <div class="taxi-detail-item">
         <span class="taxi-detail-label">Pasajero</span>
-        <span class="taxi-detail-value">${esc(trip.passenger?.name || 'Pasajero')} (${esc(trip.passenger?.phone || '')})</span>
+        <span class="taxi-detail-value">${esc(trip.passenger?.name || 'Pasajero')}</span>
       </div>
       <div class="taxi-detail-item">
         <span class="taxi-detail-label">Identificador</span>
@@ -1731,18 +1706,17 @@ function taxiDriverPage() {
   const activeTrip = getActiveTaxiTrip();
   const nextAction = activeTrip ? getDriverNextAction(activeTrip.status) : null;
   const completedTrips = listTaxiTrips().filter(t => t.status === 'completed');
-  const totalFares = completedTrips.reduce((sum, t) => sum + (t.estimate?.fareEstimated || 3400), 0);
 
   return `${back('#manage', 'Todos los paneles demo')}
   <div class="taxi-driver-panel">
     <div class="taxi-driver-status-card">
       <div>
-        <span class="eyebrow">PANEL DE TAXI · DEMOSTRACIÓN OPERATIVA</span>
-        <h1 class="page-title" style="margin:4px 0 6px;">Móvil 04 · Carlos Morales</h1>
-        <p class="quiet" style="margin:0;">Chevrolet Classic blanco (AA 842 CD) · Radio Taxi Aluminé</p>
+        <span class="eyebrow">PANEL DEL CHOFER · DEMOSTRACIÓN OPERATIVA</span>
+        <h1 class="page-title" style="margin:4px 0 6px;">Móvil DEMO · Conductor demo</h1>
+        <p class="quiet" style="margin:0;">Vehículo de demostración (Patente DEMO) · Demostración operativa</p>
       </div>
       <div>
-        <span class="taxi-driver-badge-live">En servicio</span>
+        <span class="taxi-driver-badge-live">En servicio demo</span>
       </div>
     </div>
 
@@ -1752,7 +1726,7 @@ function taxiDriverPage() {
           <div>
             <span class="eyebrow" style="color:var(--mountain-blue);">VIAJE ASIGNADO</span>
             <h2 style="margin:4px 0 6px; font-size:20px;">${esc(activeTrip.origin)} → ${esc(activeTrip.destination)}</h2>
-            <p class="quiet" style="margin:0;">Pasajero: <strong>${esc(activeTrip.passenger?.name)}</strong> · <a href="tel:${esc(activeTrip.passenger?.phone)}" style="color:var(--mountain-blue)">${esc(activeTrip.passenger?.phone)}</a></p>
+            <p class="quiet" style="margin:0;">Pasajero: <strong>${esc(activeTrip.passenger?.name)}</strong> · <span class="quiet">${esc(activeTrip.passenger?.phone)}</span></p>
           </div>
           <span class="taxi-status-badge taxi-status-${esc(activeTrip.status)}">
             ${esc(TAXI_STATUS_LABELS[activeTrip.status])}
@@ -1769,12 +1743,12 @@ function taxiDriverPage() {
             <div style="font-weight:600;font-size:14px;">${esc(activeTrip.destination)}</div>
           </div>
           <div>
-            <span class="quiet microcopy">Tarifa a cobrar:</span>
-            <div style="font-weight:700;font-size:16px;color:var(--mountain-blue)">${money(activeTrip.estimate?.fareEstimated || 3400)}</div>
+            <span class="quiet microcopy">Tarifa del viaje:</span>
+            <div style="font-weight:700;font-size:15px;color:var(--mountain-blue)">Informada por el chofer</div>
           </div>
           <div>
             <span class="quiet microcopy">Medio:</span>
-            <div style="font-weight:600;font-size:14px;">Efectivo demo / Transfer</div>
+            <div style="font-weight:600;font-size:14px;">Efectivo / Transferencia al chofer</div>
           </div>
         </div>
 
@@ -1813,16 +1787,12 @@ function taxiDriverPage() {
       <h2 style="font-size: 16px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); margin-bottom: 14px;">Resumen del turno demo</h2>
       <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px;">
         <div class="card" style="padding: 16px;">
-          <span class="quiet microcopy">Viajes completados</span>
+          <span class="quiet microcopy">Viajes de demostración</span>
           <strong style="font-size: 22px; color: var(--ink); display:block; margin-top:4px;">${completedTrips.length}</strong>
         </div>
         <div class="card" style="padding: 16px;">
-          <span class="quiet microcopy">Recaudación estimada</span>
-          <strong style="font-size: 22px; color: var(--forest); display:block; margin-top:4px;">${money(totalFares)}</strong>
-        </div>
-        <div class="card" style="padding: 16px;">
-          <span class="quiet microcopy">Calificación promedio</span>
-          <strong style="font-size: 22px; color: var(--mountain-blue); display:block; margin-top:4px;">4.9 ★</strong>
+          <span class="quiet microcopy">Modalidad operativa</span>
+          <strong style="font-size: 16px; color: var(--mountain-blue); display:block; margin-top:4px;">Prototipo local</strong>
         </div>
       </div>
     </div>
@@ -2128,10 +2098,10 @@ async function doAction(button) {
 
   if (action === 'demo-create-taxi-trip') {
     createTaxiTrip({
-      origin: 'Plaza San Martín (Centro)',
+      origin: 'Plaza San Martín',
       destination: 'Hospital de Aluminé',
-      passengerName: 'Vecino Demo',
-      passengerPhone: '2942 551234',
+      passengerName: 'Pasajero Demo',
+      passengerPhone: '2942 000000',
     });
     toast('¡Viaje de prueba creado! El chofer ya puede gestionarlo.');
     render();

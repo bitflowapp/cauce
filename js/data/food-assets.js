@@ -282,8 +282,8 @@ export function getAlumineTaxiMapSvg({
   origin = 'Origen',
   destination = 'Destino',
   status = 'requested',
-  driverName = 'Carlos Morales',
-  mobileNumber = 'Móvil 04',
+  driverName = 'Conductor demo',
+  mobileNumber = 'Móvil DEMO',
 } = {}) {
   const isCompleted = status === 'completed';
   const isCanceled = status === 'canceled';
@@ -313,7 +313,7 @@ export function getAlumineTaxiMapSvg({
     taxiLabel = 'DESTINO';
   }
 
-  return `<div class="alumine-tracking-map taxi-tracking-map" role="img" aria-label="Mapa esquemático del viaje de taxi en Aluminé">
+  return `<div class="alumine-tracking-map taxi-tracking-map" role="img" aria-label="Recorrido esquemático del viaje de taxi en Aluminé">
     <svg viewBox="0 0 600 280" class="map-canvas">
       <defs>
         <linearGradient id="riverGradTaxi" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#6ba396"/><stop offset="100%" stop-color="#467e72"/></linearGradient>
@@ -376,7 +376,7 @@ export function getAlumineTaxiMapSvg({
     <div class="map-legend">
       <span><strong class="dot origin" style="background:#1d4e73"></strong> Origen: ${origin}</span>
       <span><strong class="dot ${isCompleted ? 'origin' : 'destination'}"></strong> Destino: ${destination}</span>
-      <span class="quiet">${isCompleted ? 'Viaje completado en Aluminé' : isCanceled ? 'Viaje cancelado' : `${mobileNumber} (${driverName})`}</span>
+      <span class="quiet">${isCompleted ? 'Viaje completado (Demostración)' : isCanceled ? 'Viaje cancelado' : `${mobileNumber} · ${driverName}`}</span>
     </div>
   </div>`;
 }

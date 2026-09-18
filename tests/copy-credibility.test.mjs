@@ -38,6 +38,21 @@ test('ausencia de afirmaciones infladas o no demostradas en el copy de la aplica
     'dinamiza el empleo',
     'PILOTO 90 DÍAS',
     '90 días',
+    'carlos morales',
+    'móvil 04',
+    'aa 842 cd',
+    'móviles habilitados',
+    'chofer habilitado',
+    'transporte habilitado',
+    'infraestructura pública',
+    'infraestructura comunitaria',
+    'homologación',
+    'homologado',
+    'sin intermediarios',
+    'comisiones desmedidas',
+    'predatorias',
+    'tarifas dinámicas',
+    'comisiones bancarias extranjeras',
   ];
 
   for (const expr of forbiddenExpressions) {
