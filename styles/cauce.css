@@ -4825,10 +4825,444 @@ footer.footer, footer {
     flex-direction: column;
     width: 100%;
   }
-  .button-closing-primary,
-  .button-closing-secondary {
-    width: 100%;
-  }
+}
+
+/* ==========================================================================
+   MÓDULO DE MOVILIDAD Y TAXIS · ALUMINÉ
+   Coherencia con el Design System de CAUCE (Aluminé Cordillerano)
+   ========================================================================== */
+.modules-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+  margin: 20px 0 32px;
+}
+
+.module-card {
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  box-shadow: var(--shadow-sm);
+  position: relative;
+  overflow: hidden;
+}
+
+.module-card-primary {
+  border-color: #c9ded5;
+  background: linear-gradient(180deg, #ffffff 0%, #f4f8f6 100%);
+}
+
+.module-card-taxi {
+  border-color: var(--mountain-blue-border);
+  background: linear-gradient(180deg, #ffffff 0%, var(--mountain-blue-soft) 100%);
+}
+
+.module-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  width: fit-content;
+  margin-bottom: 10px;
+}
+
+.module-badge-food {
+  background: var(--forest-tint);
+  color: var(--forest);
+}
+
+.module-badge-taxi {
+  background: #e1eff8;
+  color: var(--mountain-blue);
+}
+
+.module-card h3 {
+  margin: 0 0 6px;
+  font-size: 18px;
+  color: var(--ink);
+}
+
+.module-card p {
+  margin: 0 0 16px;
+  font-size: 14px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.module-card-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* Formulario de Taxi */
+.taxi-page-container {
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 16px 16px 40px;
+}
+
+.taxi-hero-header {
+  margin-bottom: 24px;
+}
+
+.taxi-hero-header h1 {
+  font-size: clamp(24px, 4vw, 32px);
+  margin: 8px 0;
+  color: var(--ink);
+}
+
+.taxi-form-card {
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 24px;
+  box-shadow: var(--shadow-sm);
+  margin-bottom: 24px;
+}
+
+.taxi-fieldset {
+  border: none;
+  padding: 0;
+  margin: 0 0 20px;
+}
+
+.taxi-legend {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.taxi-input {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-xs);
+  font-size: 15px;
+  min-height: 44px;
+  color: var(--ink);
+  background: var(--white);
+  font-family: inherit;
+}
+
+.taxi-input:focus {
+  outline: 2px solid var(--mountain-blue);
+  outline-offset: 1px;
+  border-color: var(--mountain-blue);
+}
+
+.taxi-shortcuts-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.taxi-chip {
+  background: var(--sand);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  padding: 6px 12px;
+  font-size: 12px;
+  color: var(--ink-light);
+  cursor: pointer;
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  font-family: inherit;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.taxi-chip:hover, .taxi-chip:focus {
+  background: var(--mountain-blue-soft);
+  border-color: var(--mountain-blue-border);
+  color: var(--mountain-blue);
+}
+
+.taxi-estimate-box {
+  background: var(--sand-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 16px;
+  margin: 20px 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 12px;
+}
+
+.taxi-estimate-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.taxi-estimate-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.taxi-estimate-value {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--mountain-blue);
+}
+
+.taxi-driver-banner {
+  background: var(--mountain-blue-soft);
+  border: 1px solid var(--mountain-blue-border);
+  border-radius: var(--radius-sm);
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 24px;
+}
+
+.taxi-driver-banner p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-light);
+}
+
+/* Seguimiento de Taxi */
+.taxi-tracking-header {
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 20px;
+  box-shadow: var(--shadow-sm);
+  margin-bottom: 20px;
+}
+
+.taxi-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: var(--radius-pill);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  width: fit-content;
+}
+
+.taxi-status-requested, .taxi-status-searching {
+  background: var(--amber-soft);
+  color: var(--amber);
+  border: 1px solid #f1d5b3;
+}
+
+.taxi-status-accepted, .taxi-status-driver_on_way {
+  background: var(--mountain-blue-soft);
+  color: var(--mountain-blue);
+  border: 1px solid var(--mountain-blue-border);
+}
+
+.taxi-status-driver_arrived, .taxi-status-passenger_on_board, .taxi-status-in_trip {
+  background: var(--forest-tint);
+  color: var(--forest);
+  border: 1px solid #b8dfcd;
+}
+
+.taxi-status-completed {
+  background: var(--forest-tint);
+  color: var(--forest);
+  border: 1px solid #b8dfcd;
+}
+
+.taxi-status-canceled {
+  background: var(--clay-soft);
+  color: var(--clay);
+  border: 1px solid #f3d1c7;
+}
+
+.taxi-driver-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  box-shadow: var(--shadow-xs);
+  margin-top: 16px;
+}
+
+.taxi-driver-avatar {
+  width: 50px;
+  height: 50px;
+  border-radius: var(--radius-pill);
+  background: var(--mountain-blue-soft);
+  color: var(--mountain-blue);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  flex-shrink: 0;
+  border: 1px solid var(--mountain-blue-border);
+}
+
+.taxi-driver-info {
+  flex: 1;
+}
+
+.taxi-driver-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--ink);
+  margin: 0 0 3px;
+}
+
+.taxi-driver-vehicle {
+  font-size: 13px;
+  color: var(--muted);
+  margin: 0;
+}
+
+.taxi-details-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  margin-top: 16px;
+}
+
+.taxi-detail-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.taxi-detail-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+  margin-bottom: 2px;
+}
+
+.taxi-detail-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.taxi-demo-controls {
+  background: #f8fafc;
+  border: 1px dashed #94a3b8;
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+  margin-top: 24px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.taxi-demo-controls-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #475569;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+/* Panel del Taxista */
+.taxi-driver-panel {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 16px 16px 40px;
+}
+
+.taxi-driver-status-card {
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 20px;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.taxi-driver-badge-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--forest);
+  background: var(--forest-tint);
+  padding: 4px 12px;
+  border-radius: var(--radius-pill);
+}
+
+.taxi-driver-badge-live::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  background: var(--forest);
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.taxi-driver-action-card {
+  background: var(--white);
+  border: 2px solid var(--mountain-blue);
+  border-radius: var(--radius);
+  padding: 24px;
+  box-shadow: var(--shadow-md);
+  margin-bottom: 24px;
+}
+
+.taxi-action-big-btn {
+  width: 100%;
+  min-height: 52px;
+  font-size: 17px;
+  font-weight: 700;
+  background: var(--mountain-blue);
+  color: var(--white);
+  border: none;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 18px;
+  box-shadow: var(--shadow-sm);
+  transition: background 0.15s ease;
+}
+
+.taxi-action-big-btn:hover {
+  background: var(--mountain-blue-hover);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -4838,3 +5272,4 @@ footer.footer, footer {
     animation: none !important;
   }
 }
+

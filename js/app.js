@@ -7,11 +7,31 @@ import { confirmedPrice, isCommerciallyPurchasable } from './core/commercial.js'
 import { createBusinessSoundService } from './business/sound-service.js';
 import { calculateBusinessMetrics } from './core/business-metrics.js';
 import { buildKitchenTicket } from './core/kitchen-ticket.js';
-import { getProductSvg, getAlumineMapSvg } from './data/food-assets.js';
+import { getProductSvg, getAlumineMapSvg, getAlumineTaxiMapSvg } from './data/food-assets.js';
 import { renderPublicOrderTimeline, renderOrderTimeline } from './core/order-timeline.js';
 import { formatDeliveryCode } from './core/delivery-code.js';
 import { getRiderQueueOrder, getRiderStateLabel, getRouteProgress, isAwaitingPreparation } from './core/rider.js';
 import { isValidArgentinePhone, formatArgentinePhone } from './core/validators.js';
+import {
+  TAXI_STATUS_LABELS,
+  TAXI_STATUS_DESCRIPTIONS,
+  isTaxiCancelable,
+  isTaxiActive,
+  getDriverNextAction,
+  getPassengerTimelineIndex,
+} from './core/taxi-workflow.js';
+import {
+  DEFAULT_TAXI_DRIVER,
+  ALUMINE_TAXI_LOCATIONS,
+  estimateTaxiFare,
+  createTaxiTrip,
+  getActiveTaxiTrip,
+  getTaxiTripById,
+  listTaxiTrips,
+  advanceTaxiTrip,
+  cancelTaxiTrip,
+  resetTaxiState,
+} from './core/taxi.js';
 
 const main = document.querySelector('#main');
 const modalContainer = document.querySelector('#modal-container');
@@ -22,6 +42,17 @@ const customerActor = { kind:'customer', id:DEMO_CUSTOMER_ID };
 const searchState = { query:'', category:'Todos', onlyOpen:false };
 const formValues = new Map();
 const soundService = createBusinessSoundService();
+
+const TAXI_CHIP_LABELS = {
+  plaza: 'Plaza San Martín',
+  hospital: 'Hospital',
+  terminal: 'Terminal',
+  costanera: 'Costanera Río',
+  puente: 'Acceso Puente',
+  artesanos: 'Paseo Artesanos',
+  pampa: 'Bº La Pampa',
+  polideportivo: 'Polideportivo'
+};
 
 let repository;
 let toastTimer;
@@ -71,6 +102,14 @@ function renderIcon(name, size = 16, className = '') {
       return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7.5" cy="15.5" r="4.5"/><path d="m21 3-9.5 9.5"/><path d="m15.5 7.5 3 3"/></svg>`;
     case 'receipt':
       return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M8 7h8"/><path d="M8 11h8"/><path d="M8 15h5"/></svg>`;
+    case 'taxi':
+      return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9C1.5 11.2 1 12 1 13v3c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/></svg>`;
+    case 'phone':
+      return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>`;
+    case 'user':
+      return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`;
+    case 'shield-check':
+      return `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>`;
     default:
       return '';
   }
@@ -81,6 +120,8 @@ function renderSticker(name, size = 48, className = '') {
   switch (name) {
     case 'wave':
       return `<svg class="${cls} sticker-wave" width="${size}" height="${size}" viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M4 11C8 7 12 15 16 11C20 7 24 15 28 11" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 21C8 17 12 25 16 21C20 17 24 25 28 21" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+    case 'taxi':
+      return `<svg class="${cls} sticker-taxi" width="${size}" height="${size}" viewBox="0 0 80 80" fill="none" aria-hidden="true"><rect x="12" y="32" width="56" height="24" rx="6" fill="#ffffff" stroke="#111817" stroke-width="4"/><path d="M22 32L30 18H50L58 32" fill="#ffffff" stroke="#111817" stroke-width="4" stroke-linejoin="round"/><circle cx="26" cy="56" r="8" fill="#111817"/><circle cx="26" cy="56" r="3" fill="#ffffff"/><circle cx="54" cy="56" r="8" fill="#111817"/><circle cx="54" cy="56" r="3" fill="#ffffff"/><rect x="34" y="12" width="12" height="6" rx="2" fill="#1d4e73" stroke="#111817" stroke-width="2"/><path d="M28 38H52" stroke="#1d4e73" stroke-width="3" stroke-linecap="round" stroke-dasharray="4 3"/></svg>`;
     case 'coffee':
       return `<svg class="${cls} sticker-coffee" width="${size}" height="${size}" viewBox="0 0 64 64" fill="none" aria-hidden="true"><path d="M12 24H44V42C44 49.7 37.7 56 30 56H26C18.3 56 12 49.7 12 42V24Z" fill="#ffffff" stroke="#111817" stroke-width="4" stroke-linejoin="round"/><path d="M44 28H48C52.4 28 56 31.6 56 36C56 40.4 52.4 44 48 44H44" fill="#ffffff" stroke="#111817" stroke-width="4" stroke-linecap="round"/><ellipse cx="28" cy="24" rx="14" ry="4" fill="#143d34"/><path d="M22 16C20 12 24 9 22 5" stroke="#111817" stroke-width="3" stroke-linecap="round"/><path d="M30 15C28 11 32 8 30 4" stroke="#111817" stroke-width="3" stroke-linecap="round"/><path d="M38 16C36 12 40 9 38 5" stroke="#111817" stroke-width="3" stroke-linecap="round"/></svg>`;
     case 'scooter':
@@ -247,6 +288,33 @@ function home() {
       <svg class="hero-curve-divider" viewBox="0 0 1440 64" preserveAspectRatio="none" aria-hidden="true">
         <path d="M0,24 C320,64 720,4 1120,44 L1440,20 L1440,64 L0,64 Z" fill="var(--paper)"/>
       </svg>
+    </div>
+  </section>
+
+  <section class="modules-overview-section" aria-label="Módulos locales de CAUCE">
+    <div class="modules-overview-grid">
+      <div class="module-card module-card-primary">
+        <div>
+          <span class="module-badge module-badge-food">${renderIcon('store', 13)} COMERCIO LOCAL</span>
+          <h3>Gastronomía & Comercios</h3>
+          <p>Explorá los locales de Aluminé con cartas digitales, fotos reales y pedidos para retiro en mostrador o delivery propio.</p>
+        </div>
+        <div class="module-card-actions">
+          <button class="button" type="button" data-action="scroll-to" data-target="stores-section">Ver comercios ↓</button>
+          <a class="button secondary" href="#carts">Mi pedido</a>
+        </div>
+      </div>
+      <div class="module-card module-card-taxi">
+        <div>
+          <span class="module-badge module-badge-taxi">${renderIcon('taxi', 13)} MOVILIDAD LOCAL</span>
+          <h3>Taxis de Aluminé</h3>
+          <p>Prototipo de movilidad local para coordinar viajes de cercanía y seguir el recorrido de demostración.</p>
+        </div>
+        <div class="module-card-actions">
+          <a class="button" href="#taxi">Pedir un taxi →</a>
+          <a class="button secondary" href="#taxi-driver">Panel chofer (demo)</a>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -417,6 +485,19 @@ function home() {
             <strong class="rcp-code-val">48 · 21</strong>
           </div>
           <div class="rcp-delivery-status">En camino a Av. San Martín 450</div>
+        </div>
+      </div>
+      <div class="reality-card">
+        <div class="reality-card-badge">05 · MOVILIDAD</div>
+        <h3>Taxis locales en evaluación</h3>
+        <p>Prototipo para evaluar solicitud de viaje, asignación de móvil demo, recorrido esquemático y cobro al chofer.</p>
+        <div class="reality-card-preview">
+          <div class="rcp-header">
+            <span>Móvil DEMO · Conductor demo</span>
+            <span class="rcp-tag" style="background:#edf5fa;color:#1d4e73">Asignado</span>
+          </div>
+          <div class="rcp-line">Plaza San Martín → Hospital</div>
+          <div class="rcp-meta">Recorrido esquemático · Pago coordinado con el chofer</div>
         </div>
       </div>
     </div>
@@ -947,11 +1028,47 @@ function orderCard(order, actor) {
 }
 
 function manage() {
+  const activeTaxi = getActiveTaxiTrip();
   return `${back()}
   <h1 class="page-title">Paneles de demostración</h1>
   ${demoNotice()}
+
+  <div class="section-heading" style="margin-top: 20px;">
+    <div>
+      <span class="eyebrow">MÓDULO DE COMERCIO LOCAL</span>
+      <h2>Gastronomía y comercios</h2>
+      <p>Bandejas de cocina, administración de cartas y reparto propio para locales de Aluminé.</p>
+    </div>
+  </div>
   <div class="stores">
     ${repository.snapshot().businesses.map(b => `<section class="card"><span class="eyebrow">COMERCIO FICTICIO</span><h2>${esc(b.name)}</h2><p class="quiet">Probá la bandeja, los productos y la apertura del local.</p><div class="stack"><a class="button" href="#business/${esc(b.id)}">Panel del comercio</a>${b.deliveryEnabled ? `<a class="button secondary" href="#rider/${esc(b.id)}">Panel de reparto</a>` : ''}</div></section>`).join('')}
+  </div>
+
+  <div class="section-heading" style="margin-top: 36px;">
+    <div>
+      <span class="eyebrow">MÓDULO DE MOVILIDAD LOCAL (PROTOTIPO)</span>
+      <h2>Taxis de Aluminé</h2>
+      <p>Prototipo de movilidad local para evaluar la solicitud de viajes y el panel operativo del chofer.</p>
+    </div>
+  </div>
+  <div class="stores">
+    <section class="card">
+      <span class="eyebrow">VECINO / PASAJERO</span>
+      <h2>Pedir un taxi</h2>
+      <p class="quiet">Elegí origen y destino en Aluminé y seguí el recorrido esquemático de demostración.</p>
+      ${activeTaxi ? `<p class="microcopy" style="color:var(--mountain-blue);font-weight:600;">● Viaje activo en curso (${esc(TAXI_STATUS_LABELS[activeTaxi.status])})</p>` : ''}
+      <div class="stack">
+        <a class="button" href="#taxi">${activeTaxi ? 'Ver seguimiento del taxi' : 'Solicitar taxi'}</a>
+      </div>
+    </section>
+    <section class="card">
+      <span class="eyebrow">CHOFER · MÓVIL DEMO</span>
+      <h2>Panel del chofer</h2>
+      <p class="quiet">Recepción de viajes, aceptación y avance secuencial de estados de traslado de demostración.</p>
+      <div class="stack">
+        <a class="button secondary" href="#taxi-driver">Panel del chofer (Móvil DEMO)</a>
+      </div>
+    </section>
   </div>`;
 }
 
@@ -1357,6 +1474,331 @@ function presentacion() {
   </div>`;
 }
 
+function updateTaxiEstimateFromForm() {
+  // Prototipo: no se emiten cotizaciones ni distancias GPS simuladas sin validación real
+}
+
+function taxiPage(tripId) {
+  if (tripId) {
+    return taxiTrackingPage(tripId);
+  }
+  const activeTrip = getActiveTaxiTrip();
+  if (activeTrip && isTaxiActive(activeTrip.status)) {
+    return taxiTrackingPage(activeTrip.id);
+  }
+
+  const pastTrips = listTaxiTrips().filter(t => !isTaxiActive(t.status));
+  const whatsAppUrl = buildMerchantWhatsAppUrl();
+
+  return `${back('#home', 'Volver al inicio')}
+  <div class="taxi-page-container">
+    <header class="taxi-hero-header">
+      <span class="eyebrow">MOVILIDAD LOCAL · PROTOTIPO</span>
+      <h1 class="page-title">Pedí un taxi</h1>
+      <p class="quiet">Prototipo para evaluar la solicitud de viajes locales, recorrido esquemático y cobro directo con el chofer.</p>
+    </header>
+
+    <div class="taxi-form-card">
+      <form data-form="taxi-request" id="taxi-request-form">
+        <fieldset class="taxi-fieldset">
+          <legend class="taxi-legend">${renderIcon('pin', 14)} Origen / Dónde te subís</legend>
+          <input class="taxi-input" type="text" name="origin" id="taxi-origin-input" required value="Plaza San Martín" placeholder="Ej: Plaza San Martín, Hospital, Terminal...">
+          <div class="taxi-shortcuts-row" aria-label="Lugares frecuentes de subida">
+            ${ALUMINE_TAXI_LOCATIONS.slice(0, 4).map(loc => `<button type="button" class="taxi-chip" data-action="fill-taxi-origin" data-value="${esc(loc.name)}">${esc(TAXI_CHIP_LABELS[loc.id] || loc.name)}</button>`).join('')}
+          </div>
+          <div style="margin-top: 10px;">
+            <input class="taxi-input" type="text" name="originNote" placeholder="Referencia opcional (ej: puerta principal, esquina...)">
+          </div>
+        </fieldset>
+
+        <fieldset class="taxi-fieldset">
+          <legend class="taxi-legend">${renderIcon('delivery', 14)} Destino / Dónde vas</legend>
+          <input class="taxi-input" type="text" name="destination" id="taxi-destination-input" required value="Hospital de Aluminé" placeholder="¿A qué lugar o calle vas en Aluminé?">
+          <div class="taxi-shortcuts-row" aria-label="Lugares frecuentes de destino">
+            ${ALUMINE_TAXI_LOCATIONS.slice(1, 5).map(loc => `<button type="button" class="taxi-chip" data-action="fill-taxi-destination" data-value="${esc(loc.name)}">${esc(TAXI_CHIP_LABELS[loc.id] || loc.name)}</button>`).join('')}
+          </div>
+        </fieldset>
+
+        <fieldset class="taxi-fieldset">
+          <legend class="taxi-legend">${renderIcon('user', 14)} Pasajero y contacto</legend>
+          <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;">
+            <div>
+              <label class="sr-only" for="taxi-passenger-name">Nombre del pasajero</label>
+              <input class="taxi-input" type="text" name="passengerName" id="taxi-passenger-name" required value="Pasajero Demo" placeholder="Nombre completo">
+            </div>
+            <div>
+              <label class="sr-only" for="taxi-passenger-phone">Teléfono de contacto</label>
+              <input class="taxi-input" type="tel" name="passengerPhone" id="taxi-passenger-phone" required value="2942 000000" placeholder="Teléfono de contacto para coordinar">
+            </div>
+          </div>
+        </fieldset>
+
+        <div class="taxi-estimate-box" id="taxi-estimate-box">
+          <div class="taxi-estimate-item">
+            <span class="taxi-estimate-label">Tarifa del viaje</span>
+            <span class="taxi-estimate-value" style="font-size:15px;">Tarifa a coordinar con el servicio</span>
+          </div>
+          <div class="taxi-estimate-item">
+            <span class="taxi-estimate-label">Trayecto</span>
+            <span class="taxi-estimate-value" style="font-size:15px;">Recorrido de demostración</span>
+          </div>
+          <div class="taxi-estimate-item">
+            <span class="taxi-estimate-label">Llegada estimada</span>
+            <span class="taxi-estimate-value" style="font-size:15px;">Tiempo a confirmar</span>
+          </div>
+          <div class="taxi-estimate-item">
+            <span class="taxi-estimate-label">Modalidad</span>
+            <span class="taxi-estimate-value" style="font-size:14px;color:var(--ink)">Efectivo / Transfer al chofer</span>
+          </div>
+        </div>
+        <p class="microcopy quiet" style="margin: -8px 0 16px; text-align: center;">Demostración funcional · Sin asignación ni geolocalización real</p>
+
+        <button type="submit" class="button button-primary full" style="min-height:48px;font-size:16px;">
+          ${renderIcon('taxi', 16)} Solicitar taxi en Aluminé
+        </button>
+      </form>
+    </div>
+
+    <div class="taxi-driver-banner">
+      <div>
+        <strong>¿Sos taxista o prestador de transporte en Aluminé?</strong>
+        <p>Sumate al diálogo sobre este prototipo para evaluar juntos cómo adaptarlo a la realidad local.</p>
+      </div>
+      <a class="button secondary" href="${esc(whatsAppUrl || '#home')}" ${whatsAppUrl ? 'target="_blank" rel="noopener noreferrer"' : ''} data-action="commercial-contact">Sumarme a la conversación</a>
+    </div>
+
+    ${pastTrips.length > 0 ? `
+      <section style="margin-top: 32px;">
+        <h2 style="font-size: 16px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); margin-bottom: 12px;">Viajes anteriores</h2>
+        <div style="display:flex; flex-direction:column; gap: 10px;">
+          ${pastTrips.slice(0, 3).map(t => `
+            <div class="card" style="padding: 14px 18px; display:flex; justify-content:space-between; align-items:center;">
+              <div>
+                <strong>${esc(t.origin)} → ${esc(t.destination)}</strong>
+                <div class="microcopy">${esc(t.driver?.mobileNumber || 'Móvil DEMO')} · ${esc(t.driver?.name || 'Conductor demo')} · ${esc(TAXI_STATUS_LABELS[t.status])}</div>
+              </div>
+              <div>
+                <a class="link-button" href="#taxi/${esc(t.id)}">Ver detalle</a>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </section>
+    ` : ''}
+  </div>`;
+}
+
+function taxiTrackingPage(tripId) {
+  const trip = tripId ? getTaxiTripById(tripId) : getActiveTaxiTrip();
+  if (!trip) {
+    return `${back('#taxi', 'Volver a movilidad')}
+    ${empty('Viaje no encontrado', 'No se encontró el viaje solicitado o ya fue cerrado.', '#taxi', 'Pedir un taxi')}`;
+  }
+
+  const statusLabel = TAXI_STATUS_LABELS[trip.status] || trip.status;
+  const statusDesc = TAXI_STATUS_DESCRIPTIONS[trip.status] || '';
+  const nextAction = getDriverNextAction(trip.status);
+  const cancelable = isTaxiCancelable(trip.status);
+  const mapSvg = getAlumineTaxiMapSvg({
+    origin: trip.origin,
+    destination: trip.destination,
+    status: trip.status,
+    driverName: trip.driver?.name || 'Conductor demo',
+    mobileNumber: trip.driver?.mobileNumber || 'Móvil DEMO',
+  });
+
+  const timelineSteps = [
+    { label: 'Solicitud', done: ['accepted', 'driver_on_way', 'driver_arrived', 'passenger_on_board', 'in_trip', 'completed'].includes(trip.status), active: ['requested', 'searching'].includes(trip.status) },
+    { label: 'Asignado', done: ['driver_on_way', 'driver_arrived', 'passenger_on_board', 'in_trip', 'completed'].includes(trip.status), active: trip.status === 'accepted' },
+    { label: 'En camino', done: ['passenger_on_board', 'in_trip', 'completed'].includes(trip.status), active: ['driver_on_way', 'driver_arrived'].includes(trip.status) },
+    { label: 'En viaje', done: trip.status === 'completed', active: ['passenger_on_board', 'in_trip'].includes(trip.status) },
+    { label: 'Destino', done: trip.status === 'completed', active: false },
+  ];
+
+  return `${back('#home', 'Volver al inicio')}
+  <div class="taxi-page-container">
+    <div class="taxi-tracking-header">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap: 12px; margin-bottom: 12px;">
+        <div>
+          <span class="eyebrow">SEGUIMIENTO DE VIAJE (PROTOTIPO) · ALUMINÉ</span>
+          <h1 class="page-title" style="margin:4px 0 6px;">${esc(trip.origin)} → ${esc(trip.destination)}</h1>
+          <p class="quiet" style="margin:0;">${esc(statusDesc)}</p>
+        </div>
+        <div>
+          <span class="taxi-status-badge taxi-status-${esc(trip.status)}">
+            ● ${esc(statusLabel)}
+          </span>
+        </div>
+      </div>
+
+      <ol class="timeline" aria-label="Progreso del viaje" style="margin: 20px 0 12px;">
+        ${timelineSteps.map(s => `<li class="${s.done ? 'done' : s.active ? 'active' : ''}"><span>${s.done ? '✓' : s.active ? '●' : '○'}</span> ${esc(s.label)}</li>`).join('')}
+      </ol>
+    </div>
+
+    ${mapSvg}
+    <p class="microcopy quiet" style="text-align:center;margin:6px 0 14px;">Recorrido esquemático · Demostración funcional sin geolocalización real</p>
+
+    <div class="taxi-driver-card">
+      <div class="taxi-driver-avatar" aria-hidden="true">🚖</div>
+      <div class="taxi-driver-info">
+        <div style="display:flex; align-items:center; gap: 8px;">
+          <span class="taxi-driver-name">${esc(trip.driver?.name || 'Conductor demo')}</span>
+        </div>
+        <p class="taxi-driver-vehicle">${esc(trip.driver?.mobileNumber || 'Móvil DEMO')} · ${esc(trip.driver?.vehicle || 'Vehículo de demostración')} (${esc(trip.driver?.plate || 'Patente DEMO')})</p>
+      </div>
+    </div>
+
+    <div class="taxi-details-grid">
+      <div class="taxi-detail-item">
+        <span class="taxi-detail-label">Punto de subida</span>
+        <span class="taxi-detail-value">${esc(trip.origin)} ${trip.originNote ? `<span class="quiet">(${esc(trip.originNote)})</span>` : ''}</span>
+      </div>
+      <div class="taxi-detail-item">
+        <span class="taxi-detail-label">Destino</span>
+        <span class="taxi-detail-value">${esc(trip.destination)}</span>
+      </div>
+      <div class="taxi-detail-item">
+        <span class="taxi-detail-label">Tarifa</span>
+        <span class="taxi-detail-value">A coordinar con el chofer</span>
+      </div>
+      <div class="taxi-detail-item">
+        <span class="taxi-detail-label">Forma de pago</span>
+        <span class="taxi-detail-value">Efectivo / Transferencia al chofer</span>
+      </div>
+      <div class="taxi-detail-item">
+        <span class="taxi-detail-label">Pasajero</span>
+        <span class="taxi-detail-value">${esc(trip.passenger?.name || 'Pasajero')}</span>
+      </div>
+      <div class="taxi-detail-item">
+        <span class="taxi-detail-label">Identificador</span>
+        <span class="taxi-detail-value"><code>${esc(trip.id.slice(0, 14))}</code></span>
+      </div>
+    </div>
+
+    <div style="margin-top: 20px; display:flex; gap: 12px; flex-wrap:wrap; align-items:center;">
+      ${cancelable ? `
+        <button type="button" class="button secondary" data-action="cancel-taxi-trip" data-trip-id="${esc(trip.id)}">
+          Cancelar viaje
+        </button>
+      ` : ''}
+      ${trip.status === 'completed' ? `
+        <a class="button button-primary" href="#taxi">Pedir otro taxi</a>
+      ` : ''}
+      <a class="button secondary" href="#taxi-driver">Ir al panel del chofer</a>
+    </div>
+
+    ${nextAction ? `
+      <div class="taxi-demo-controls">
+        <div>
+          <span class="taxi-demo-controls-label">Demostración en vivo:</span>
+          <span style="font-size:13px; color:#334155; margin-left:6px;">Próxima acción: <strong>${esc(nextAction.label)}</strong></span>
+        </div>
+        <button type="button" class="button" data-action="demo-advance-taxi" data-trip-id="${esc(trip.id)}" style="min-height:38px;padding:6px 14px;font-size:13px;">
+          Avanzar a "${esc(nextAction.label)}" →
+        </button>
+      </div>
+    ` : ''}
+  </div>`;
+}
+
+function taxiDriverPage() {
+  const activeTrip = getActiveTaxiTrip();
+  const nextAction = activeTrip ? getDriverNextAction(activeTrip.status) : null;
+  const completedTrips = listTaxiTrips().filter(t => t.status === 'completed');
+
+  return `${back('#manage', 'Todos los paneles demo')}
+  <div class="taxi-driver-panel">
+    <div class="taxi-driver-status-card">
+      <div>
+        <span class="eyebrow">PANEL DEL CHOFER · DEMOSTRACIÓN OPERATIVA</span>
+        <h1 class="page-title" style="margin:4px 0 6px;">Móvil DEMO · Conductor demo</h1>
+        <p class="quiet" style="margin:0;">Vehículo de demostración (Patente DEMO) · Demostración operativa</p>
+      </div>
+      <div>
+        <span class="taxi-driver-badge-live">En servicio demo</span>
+      </div>
+    </div>
+
+    ${activeTrip ? `
+      <div class="taxi-driver-action-card">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom: 14px;">
+          <div>
+            <span class="eyebrow" style="color:var(--mountain-blue);">VIAJE ASIGNADO</span>
+            <h2 style="margin:4px 0 6px; font-size:20px;">${esc(activeTrip.origin)} → ${esc(activeTrip.destination)}</h2>
+            <p class="quiet" style="margin:0;">Pasajero: <strong>${esc(activeTrip.passenger?.name)}</strong> · <span class="quiet">${esc(activeTrip.passenger?.phone)}</span></p>
+          </div>
+          <span class="taxi-status-badge taxi-status-${esc(activeTrip.status)}">
+            ${esc(TAXI_STATUS_LABELS[activeTrip.status])}
+          </span>
+        </div>
+
+        <div style="background:var(--paper); border:1px solid var(--line); border-radius:var(--radius-sm); padding:14px; margin: 14px 0; display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+          <div>
+            <span class="quiet microcopy">Subida:</span>
+            <div style="font-weight:600;font-size:14px;">${esc(activeTrip.origin)} ${activeTrip.originNote ? `(${esc(activeTrip.originNote)})` : ''}</div>
+          </div>
+          <div>
+            <span class="quiet microcopy">Bajada:</span>
+            <div style="font-weight:600;font-size:14px;">${esc(activeTrip.destination)}</div>
+          </div>
+          <div>
+            <span class="quiet microcopy">Tarifa del viaje:</span>
+            <div style="font-weight:700;font-size:15px;color:var(--mountain-blue)">Informada por el chofer</div>
+          </div>
+          <div>
+            <span class="quiet microcopy">Medio:</span>
+            <div style="font-weight:600;font-size:14px;">Efectivo / Transferencia al chofer</div>
+          </div>
+        </div>
+
+        ${nextAction ? `
+          <button type="button" class="taxi-action-big-btn" data-action="driver-advance-taxi" data-trip-id="${esc(activeTrip.id)}">
+            ${esc(nextAction.label)} (${esc(nextAction.description)}) →
+          </button>
+        ` : ''}
+
+        <div style="margin-top: 16px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+          <a class="link-button" href="#taxi/${esc(activeTrip.id)}">Ver vista del pasajero</a>
+          ${isTaxiCancelable(activeTrip.status) ? `
+            <button type="button" class="button secondary" data-action="cancel-taxi-trip" data-trip-id="${esc(activeTrip.id)}" style="min-height:36px;padding:4px 12px;font-size:13px;">
+              Rechazar / Cancelar viaje
+            </button>
+          ` : ''}
+        </div>
+      </div>
+    ` : `
+      <div class="taxi-form-card" style="text-align:center; padding: 36px 20px;">
+        <div style="font-size: 40px; margin-bottom: 12px;">🚖</div>
+        <h2>Sin viajes activos en este momento</h2>
+        <p class="quiet" style="max-width: 440px; margin: 0 auto 20px;">
+          Los nuevos pedidos de taxi solicitados por vecinos de Aluminé aparecerán aquí para que el chofer los acepte e inicie el recorrido.
+        </p>
+        <div style="display:flex; justify-content:center; gap:12px; flex-wrap:wrap;">
+          <button type="button" class="button button-primary" data-action="demo-create-taxi-trip">
+            Crear viaje de prueba en Aluminé
+          </button>
+          <a class="button secondary" href="#taxi">Ir a pedir un taxi</a>
+        </div>
+      </div>
+    `}
+
+    <div style="margin-top: 32px;">
+      <h2 style="font-size: 16px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); margin-bottom: 14px;">Resumen del turno demo</h2>
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px;">
+        <div class="card" style="padding: 16px;">
+          <span class="quiet microcopy">Viajes de demostración</span>
+          <strong style="font-size: 22px; color: var(--ink); display:block; margin-top:4px;">${completedTrips.length}</strong>
+        </div>
+        <div class="card" style="padding: 16px;">
+          <span class="quiet microcopy">Modalidad operativa</span>
+          <strong style="font-size: 16px; color: var(--mountain-blue); display:block; margin-top:4px;">Prototipo local</strong>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
 function render({ focus = false } = {}) {
   if (!repository) return;
   try {
@@ -1376,6 +1818,8 @@ function render({ focus = false } = {}) {
       manage,
       business: () => businessPanel(id),
       rider: () => riderPanel(id),
+      taxi: () => taxiPage(id),
+      'taxi-driver': taxiDriverPage,
       presentacion
     };
     main.innerHTML = Object.hasOwn(pages, page) ? pages[page]() : empty('Página no encontrada', 'Volvé al inicio para seguir explorando.');
@@ -1608,6 +2052,62 @@ async function doAction(button) {
     return;
   }
 
+  if (action === 'fill-taxi-origin') {
+    const input = document.querySelector('#taxi-origin-input');
+    if (input) {
+      input.value = button.dataset.value;
+      updateTaxiEstimateFromForm();
+    }
+    return;
+  }
+
+  if (action === 'fill-taxi-destination') {
+    const input = document.querySelector('#taxi-destination-input');
+    if (input) {
+      input.value = button.dataset.value;
+      updateTaxiEstimateFromForm();
+    }
+    return;
+  }
+
+  if (action === 'demo-advance-taxi') {
+    const tripId = button.dataset.tripId;
+    advanceTaxiTrip(tripId);
+    toast('Viaje de taxi avanzado.');
+    render();
+    return;
+  }
+
+  if (action === 'driver-advance-taxi') {
+    const tripId = button.dataset.tripId;
+    advanceTaxiTrip(tripId);
+    toast('Estado de viaje actualizado por el chofer.');
+    render();
+    return;
+  }
+
+  if (action === 'cancel-taxi-trip') {
+    if (confirm('¿Deseás cancelar este viaje de taxi?')) {
+      const tripId = button.dataset.tripId;
+      cancelTaxiTrip(tripId, { reason: 'Cancelado por el usuario' });
+      toast('El viaje de taxi ha sido cancelado.');
+      render();
+    }
+    return;
+  }
+
+  if (action === 'demo-create-taxi-trip') {
+    createTaxiTrip({
+      origin: 'Plaza San Martín',
+      destination: 'Hospital de Aluminé',
+      passengerName: 'Pasajero Demo',
+      passengerPhone: '2942 000000',
+    });
+    toast('¡Viaje de prueba creado! El chofer ya puede gestionarlo.');
+    render();
+    return;
+  }
+
   if (action === 'toggle-sound') {
     soundService.setMuted(!soundService.muted);
     if (!soundService.muted) {
@@ -1787,6 +2287,9 @@ main.addEventListener('input', event => {
     const results = document.querySelector('#stores-results');
     if (results) results.innerHTML = storesMarkup();
   }
+  if (event.target.id === 'taxi-origin-input' || event.target.id === 'taxi-destination-input') {
+    updateTaxiEstimateFromForm();
+  }
   rememberForm(event.target.closest('form'));
 });
 
@@ -1837,6 +2340,17 @@ main.addEventListener('submit', async event => {
       go(`order/${order.id}`);
       if (!soundService.muted) await soundService.playNewOrder();
       toast('Pedido de prueba creado. No se envió a ningún comercio.');
+    } else if (form.dataset.form === 'taxi-request') {
+      const trip = createTaxiTrip({
+        origin: values.origin,
+        originNote: values.originNote,
+        destination: values.destination,
+        passengerName: values.passengerName,
+        passengerPhone: values.passengerPhone,
+      });
+      go(`taxi/${trip.id}`);
+      render();
+      toast('¡Viaje solicitado! Buscando móvil en Aluminé...');
     } else if (form.dataset.form === 'product') {
       const b = repository.business(form.dataset.business);
       await repository.updateProduct(
@@ -1886,6 +2400,7 @@ async function resetDemonstration() {
     } else {
       localStorage.removeItem(DEMO_STORAGE_KEY);
     }
+    resetTaxiState();
     formValues.clear();
     repository = createRepository(CONFIG, { storage: localStorage });
     go('home');
