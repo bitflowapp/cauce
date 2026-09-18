@@ -1,4 +1,4 @@
-﻿// Ilustraciones visuales apetitosas y mapa temático de Aluminé.
+// Ilustraciones visuales apetitosas y mapa temático de Aluminé.
 // Creadas en SVG puro y autónomo: sin red, sin dependencias, 100% compatibles con CSP y bundle offline.
 
 export function getProductSvg(dishType = 'burger') {
@@ -277,3 +277,107 @@ export function getAlumineMapSvg({ merchantName = 'Comercio', customerAddress = 
     </div>
   </div>`;
 }
+
+export function getAlumineTaxiMapSvg({
+  origin = 'Origen',
+  destination = 'Destino',
+  status = 'requested',
+  driverName = 'Carlos Morales',
+  mobileNumber = 'Móvil 04',
+} = {}) {
+  const isCompleted = status === 'completed';
+  const isCanceled = status === 'canceled';
+  const isInTrip = status === 'in_trip';
+  const isOnWay = status === 'driver_on_way';
+  const isArrived = status === 'driver_arrived';
+  const isBoarded = status === 'passenger_on_board';
+  const isAccepted = status === 'accepted';
+
+  // Progreso del taxi visualmente en el mapa
+  let taxiProgress = 5;
+  let taxiLabel = 'ASIGNADO';
+  if (isOnWay) {
+    taxiProgress = 35;
+    taxiLabel = 'EN CAMINO';
+  } else if (isArrived) {
+    taxiProgress = 20;
+    taxiLabel = 'EN ORIGEN';
+  } else if (isBoarded) {
+    taxiProgress = 25;
+    taxiLabel = 'ABORDO';
+  } else if (isInTrip) {
+    taxiProgress = 70;
+    taxiLabel = 'EN VIAJE';
+  } else if (isCompleted) {
+    taxiProgress = 100;
+    taxiLabel = 'DESTINO';
+  }
+
+  return `<div class="alumine-tracking-map taxi-tracking-map" role="img" aria-label="Mapa esquemático del viaje de taxi en Aluminé">
+    <svg viewBox="0 0 600 280" class="map-canvas">
+      <defs>
+        <linearGradient id="riverGradTaxi" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#6ba396"/><stop offset="100%" stop-color="#467e72"/></linearGradient>
+        <linearGradient id="routeGradTaxi" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#1d4e73"/><stop offset="100%" stop-color="#b85437"/></linearGradient>
+        <filter id="taxiShadow" x="-10%" y="-10%" width="130%" height="130%"><feDropShadow dx="0" dy="4" stdDeviation="6" flood-opacity="0.18"/></filter>
+      </defs>
+
+      <!-- Fondo y territorio de Aluminé -->
+      <rect x="0" y="0" width="600" height="280" fill="#e9ecdf" rx="16"/>
+
+      <!-- Río Aluminé curvado -->
+      <path d="M -20 70 C 140 80, 220 180, 360 210 C 470 230, 540 200, 620 220 L 620 280 L -20 280 Z" fill="url(#riverGradTaxi)" opacity="0.35"/>
+      <path d="M -20 70 C 140 80, 220 180, 360 210 C 470 230, 540 200, 620 220" fill="none" stroke="#528a7e" stroke-width="28" stroke-linecap="round" opacity="0.75"/>
+      <text x="310" y="246" font-size="11" font-weight="600" fill="#2d5950" letter-spacing="2">RÍO ALUMINÉ</text>
+
+      <!-- Calles principales -->
+      <line x1="50" y1="40" x2="550" y2="100" stroke="#d5d8ca" stroke-width="14" stroke-linecap="round"/>
+      <text x="70" y="32" font-size="9" fill="#758273" letter-spacing="1">AV. 4 DE FEBRERO</text>
+
+      <line x1="80" y1="180" x2="520" y2="60" stroke="#d5d8ca" stroke-width="12" stroke-linecap="round"/>
+      <text x="440" y="52" font-size="9" fill="#758273" letter-spacing="1">RP 23</text>
+
+      <!-- Manzanas y plazas de Aluminé -->
+      <rect x="250" y="70" width="70" height="45" rx="6" fill="#ccd6be" opacity="0.8"/>
+      <text x="285" y="96" text-anchor="middle" font-size="8" font-weight="bold" fill="#4d6244">PLAZA</text>
+      <rect x="110" y="65" width="48" height="32" rx="4" fill="#dde1d3"/>
+      <rect x="175" y="65" width="55" height="32" rx="4" fill="#dde1d3"/>
+      <rect x="340" y="75" width="50" height="35" rx="4" fill="#dde1d3"/>
+      <rect x="410" y="85" width="55" height="35" rx="4" fill="#dde1d3"/>
+
+      <!-- Trazado de ruta de taxi -->
+      <path id="taxiRoute" d="M 120 135 Q 240 100, 330 90 T 480 120" fill="none" stroke="url(#routeGradTaxi)" stroke-width="5" stroke-dasharray="${isCompleted ? 'none' : '8 5'}" stroke-linecap="round"/>
+
+      <!-- Punto A: Origen del viaje -->
+      <g transform="translate(120, 135)" filter="url(#taxiShadow)">
+        <circle cx="0" cy="0" r="16" fill="#1d4e73"/>
+        <circle cx="0" cy="0" r="7" fill="#ffffff"/>
+        <rect x="-65" y="22" width="130" height="22" rx="6" fill="#1d4e73"/>
+        <text x="0" y="36" text-anchor="middle" font-size="9" font-weight="bold" fill="#ffffff">${origin.slice(0, 18)}</text>
+      </g>
+
+      <!-- Punto B: Destino del viaje -->
+      <g transform="translate(480, 120)" filter="url(#taxiShadow)">
+        <circle cx="0" cy="0" r="16" fill="${isCompleted ? '#143d34' : '#b85437'}"/>
+        <circle cx="0" cy="0" r="7" fill="#ffffff"/>
+        <rect x="-65" y="22" width="130" height="22" rx="6" fill="#ffffff" stroke="#cbd5e1"/>
+        <text x="0" y="36" text-anchor="middle" font-size="9" font-weight="bold" fill="#0f172a">${destination.slice(0, 18)}</text>
+      </g>
+
+      ${!isCompleted && !isCanceled ? `
+      <!-- Taxi en movimiento -->
+      <g transform="translate(${120 + (480 - 120) * (taxiProgress / 100)}, ${135 + (120 - 135) * (taxiProgress / 100) - (isInTrip || isOnWay ? 18 : 0)})" filter="url(#taxiShadow)">
+        <circle cx="0" cy="0" r="19" fill="#ffffff" stroke="#1d4e73" stroke-width="3"/>
+        <text x="0" y="6" text-anchor="middle" font-size="16">🚖</text>
+        <rect x="-42" y="-32" width="84" height="20" rx="4" fill="#1d4e73"/>
+        <text x="0" y="-18" text-anchor="middle" font-size="9" font-weight="bold" fill="#ffffff">${mobileNumber} · ${taxiLabel}</text>
+      </g>
+      ` : ''}
+    </svg>
+    <div class="map-legend">
+      <span><strong class="dot origin" style="background:#1d4e73"></strong> Origen: ${origin}</span>
+      <span><strong class="dot ${isCompleted ? 'origin' : 'destination'}"></strong> Destino: ${destination}</span>
+      <span class="quiet">${isCompleted ? 'Viaje completado en Aluminé' : isCanceled ? 'Viaje cancelado' : `${mobileNumber} (${driverName})`}</span>
+    </div>
+  </div>`;
+}
+
