@@ -1,7 +1,7 @@
 // Portado y desacoplado de js/core/pricing.js de La Taba.
 // Ver docs/PROVENANCE.md y comentarios históricos de hardening.
 
-export const PRICE_PENDING_TITLE = 'Precio próximamente';
+export const PRICE_PENDING_TITLE = 'Precio a confirmar';
 export const PRICE_PENDING_DETAIL = 'Este producto todavía no está disponible para compra.';
 
 export function normalizeDeliveryMode(value) {

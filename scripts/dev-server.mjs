@@ -29,7 +29,9 @@ const MAX_BODY_BYTES = 256 * 1024;
 const SIGN_IN_WINDOW_MS = 15 * 60 * 1000;
 const SIGN_IN_MAX_ATTEMPTS = 10;
 
-const CSP = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-ancestors 'none'";
+const CSP = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-ancestors 'none'";
+// El service worker hereda la CSP de su propia respuesta, no la del documento.
+const WORKER_CSP = "default-src 'self'; connect-src 'self'; base-uri 'none'; object-src 'none'";
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -177,7 +179,8 @@ export function createDevServer({ database = openDatabase(), root = ROOT, apiBas
   };
 
   const server = createServer(async (request, response) => {
-    response.setHeader('Content-Security-Policy', CSP);
+    const isWorker = (request.url || '').startsWith('/service-worker.js');
+    response.setHeader('Content-Security-Policy', isWorker ? WORKER_CSP : CSP);
     response.setHeader('X-Content-Type-Options', 'nosniff');
     response.setHeader('Referrer-Policy', 'no-referrer');
     response.setHeader('Cache-Control', 'no-store');
@@ -351,7 +354,11 @@ export function createDevServer({ database = openDatabase(), root = ROOT, apiBas
       if (path === '/index.html') {
         // El documento versionado bloquea toda conexión (es el que se publica).
         // Acá se habilita únicamente el mismo origen, para hablar con esta API.
-        content = Buffer.from(String(content).replace("connect-src 'none'", "connect-src 'self'"), 'utf8');
+        // El indicador de entorno se corrige en el HTML servido para que no
+        // aparezca "Demostración" ni por un instante antes de que corra el script.
+        content = Buffer.from(String(content)
+          .replace("connect-src 'none'", "connect-src 'self'")
+          .replace(/(<span class="env-chip"[^>]*>)[^<]*(<\/span>)/, '$1Pruebas$2'), 'utf8');
       }
       response.statusCode = 200;
       response.setHeader('Content-Type', mime);

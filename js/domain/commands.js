@@ -408,7 +408,9 @@ const cartCommands = {
     const product = state.products.find(candidate => candidate.id === payload?.productId);
     requireValue(Boolean(product), 'PRODUCT_NOT_FOUND', 'No se encontró el producto.');
     requireValue(business.status === 'active', 'BUSINESS_NOT_ACTIVE', 'El comercio no está publicado.');
-    const next = changeQuantity(cartOf(state, ownerId, business), product, Number(payload?.quantity));
+    // Sin coerción: una cantidad que llega como texto es un error de quien llama,
+    // no algo para adivinar. changeQuantity exige un entero seguro.
+    const next = changeQuantity(cartOf(state, ownerId, business), product, payload?.quantity);
     state.carts[cartKey(ownerId, business)] = next;
     return next;
   },
@@ -778,4 +780,3 @@ export function runCommand(state, name, context, payload) {
   return clone(result);
 }
 
-export { CauceError };

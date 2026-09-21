@@ -116,14 +116,26 @@ async function openPage(port, { width = 390, height = 844, mobile = true } = {})
   await send('Runtime.enable');
   await send('Log.enable');
   await send('Network.enable');
-  await setViewport(send, { width, height, mobile });
+  const viewport = { width, height, mobile };
+  await setViewport(send, viewport);
 
   const page = {
     targetId: target.id,
     send,
     consoleErrors,
-    async setViewport(size) { return setViewport(send, { mobile, width, height, ...size }); },
+    get viewport() { return { ...viewport }; },
+    // Chrome no calcula layout en pestañas de segundo plano: sin esto, innerText
+    // y getBoundingClientRect devuelven valores vacíos en cualquier pestaña que
+    // no sea la activa. Para sesiones independientes conviene un navegador por sesión.
+    async focusTab() { await send('Page.bringToFront').catch(() => {}); },
+    async setViewport(size) {
+      Object.assign(viewport, size);
+      return setViewport(send, viewport);
+    },
     async goto(url) {
+      // Una pestaña en segundo plano no hace layout: innerText y las medidas
+      // vuelven vacías. Traerla al frente antes de navegar evita ese falso vacío.
+      await send('Page.bringToFront').catch(() => {});
       const loaded = waitForEvent(listeners, message => message.method === 'Page.loadEventFired', 25000);
       await send('Page.navigate', { url });
       await loaded.catch(() => {});
@@ -137,13 +149,13 @@ async function openPage(port, { width = 390, height = 844, mobile = true } = {})
       await page.waitForFunction('document.readyState === "complete"');
       await sleep(150);
     },
+    // El argumento es SIEMPRE una expresión, y su valor es lo que se devuelve.
+    // Para varias sentencias, pasá una función que se invoque a sí misma:
+    //   page.evaluate('(() => { ...; return valor; })()')
     async evaluate(expression) {
-      const body = expression.trim();
-      const wrapped = /^(return|const|let|var|if|for|while|try|await)\b/.test(body) || body.includes(';\n')
-        ? `(async () => { ${body} })()`
-        : `(async () => (${body}))()`;
       const result = await send('Runtime.evaluate', {
-        expression: wrapped, awaitPromise: true, returnByValue: true, userGesture: true,
+        expression: `(async () => (${expression.trim()}))()`,
+        awaitPromise: true, returnByValue: true, userGesture: true,
       });
       if (result.exceptionDetails) {
         throw new Error(`Error al evaluar: ${result.exceptionDetails.exception?.description || result.exceptionDetails.text}`);
@@ -161,6 +173,7 @@ async function openPage(port, { width = 390, height = 844, mobile = true } = {})
       throw new Error(`Timeout esperando: ${expression} · último valor: ${JSON.stringify(last)}`);
     },
     async click(selector) {
+      await page.focusTab();
       await page.waitForFunction(`!!document.querySelector(${JSON.stringify(selector)})`);
       const box = await page.evaluate(`(() => {
         const element = document.querySelector(${JSON.stringify(selector)});
@@ -187,9 +200,11 @@ async function openPage(port, { width = 390, height = 844, mobile = true } = {})
       })()`);
     },
     async text(selector = 'body') {
+      await page.focusTab();
       return page.evaluate(`(document.querySelector(${JSON.stringify(selector)})?.innerText || '')`);
     },
     async screenshot(path, { fullPage = false } = {}) {
+      await page.focusTab();
       const params = { format: 'png', captureBeyondViewport: fullPage };
       if (fullPage) {
         const metrics = await send('Page.getLayoutMetrics');
@@ -201,6 +216,9 @@ async function openPage(port, { width = 390, height = 844, mobile = true } = {})
         };
       }
       const shot = await send('Page.captureScreenshot', params);
+      // Capturar la página completa redimensiona el layout: hay que devolverlo
+      // a la medida del dispositivo o innerText y getBoundingClientRect mienten.
+      if (fullPage) await setViewport(send, viewport);
       await mkdir(dirname(path), { recursive: true });
       await writeFile(path, Buffer.from(shot.data, 'base64'));
       return path;
@@ -225,7 +243,8 @@ async function setViewport(send, { width, height, mobile }) {
     width, height, deviceScaleFactor: 1, mobile,
     screenWidth: width, screenHeight: height,
   });
-  await send('Emulation.setTouchEmulationEnabled', { enabled: Boolean(mobile), maxTouchPoints: mobile ? 5 : 0 });
+  // maxTouchPoints debe estar entre 1 y 16 aunque la emulación táctil esté apagada.
+  await send('Emulation.setTouchEmulationEnabled', { enabled: Boolean(mobile), maxTouchPoints: mobile ? 5 : 1 });
 }
 
 function waitForEvent(listeners, predicate, timeout) {
