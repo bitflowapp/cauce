@@ -534,6 +534,7 @@ const orderCommands = {
       requireValue(Boolean(rider), 'RIDER_REQUIRED', 'Elegí un repartidor del comercio.');
       assertScope(rider, order);
       order.riderId = rider.id;
+      order.riderName = rider.name;
     }
     if (nextStatus === 'delivered' && order.deliveryCode) {
       order.deliveryCode = buildDeliveryCode(order.deliveryCode.code, {
@@ -780,4 +781,3 @@ export function runCommand(state, name, context, payload) {
   const result = COMMANDS[name](state, context, payload);
   return clone(result);
 }
-

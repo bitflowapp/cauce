@@ -317,6 +317,7 @@ async function main() {
     }
     await visit(customer, orderHash);
     await customer.waitForFunction(`/avance estimado/i.test(document.querySelector('#main').innerText)`);
+    await customer.waitForFunction(`document.querySelector('#main').innerText.includes('Reparto propio')`);
     await showcase(customer, 'showcase-05-pedido-en-camino-390', '.route-card');
     for (const label of ['Llegó a destino', 'Marcar entregado']) {
       await clickByLabel(merchant, '.order-panel-actions button', label);
