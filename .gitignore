@@ -12,6 +12,7 @@ dist/
 /CAUCE-demo.html
 /STATUS.md
 /status.json
+/tmp/
 
 # Datos y credenciales del entorno local de pruebas: nunca se versionan.
 .local/

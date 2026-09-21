@@ -99,9 +99,15 @@ async function main() {
     step('El entorno local se identifica en la cabecera', chip);
     await shot(visitor, '00-inicio');
     await showcase(visitor, 'showcase-01-home-390');
+    await visitor.setViewport({ width: 430, height: 932, mobile: true });
+    await showcase(visitor, 'showcase-01-home-430');
     await visitor.setViewport({ width: 1440, height: 900, mobile: false });
     await showcase(visitor, 'showcase-01-home-desktop');
     await visitor.setViewport({ width: 390, height: 844, mobile: true });
+    await visit(visitor, '#alta-comercio');
+    await showcase(visitor, 'showcase-12-alta-comercio-390');
+    await visit(visitor, '#carrito');
+    await showcase(visitor, 'showcase-13-estado-vacio-390');
 
     // ───────── recorrido 1: alta y publicación de un comercio ─────────
     console.log('\nRecorrido 1 · alta y publicación de un comercio');
@@ -225,6 +231,7 @@ async function main() {
     await visitor.waitForFunction(`document.body.innerText.includes('Almacén El Pehuén')`);
     step('El comercio aparece publicado para cualquier visitante');
     await shot(visitor, '05-comercios-publicado');
+    await showcase(visitor, 'showcase-02-comercios-390');
 
     // ───────── recorrido 2: compra y gestión ─────────
     console.log('\nRecorrido 2 · compra con envío y gestión del pedido');
@@ -328,7 +335,9 @@ async function main() {
     await visit(customer, '#actividad');
     await customer.waitForFunction(`/entregado/i.test(document.querySelector('#main').innerText)`);
     step('La clienta ve el pedido entregado en su propia sesión');
+    await showcase(customer, 'showcase-11-mi-actividad-390');
     await visit(customer, orderHash);
+    await showcase(customer, 'showcase-07-pedido-entregado-390', '.route-card');
     await showcase(customer, 'showcase-09-historial-detalle-imagenes-390', '.route-card');
 
     // ───────── recorrido 3: taxi ─────────
@@ -398,6 +407,9 @@ async function main() {
     await visit(passenger, '#taxi');
     await passenger.waitForFunction(`/acercándose al punto de encuentro/i.test(document.querySelector('#main').innerText)`);
     await showcase(passenger, 'showcase-08-taxi-acercandose-390', '.route-card');
+    await passenger.setViewport({ width: 430, height: 932, mobile: true });
+    await showcase(passenger, 'showcase-08-taxi-acercandose-430', '.route-card');
+    await passenger.setViewport({ width: 390, height: 844, mobile: true });
 
     for (const label of ['Llegué al origen', 'Pasajero a bordo', 'Iniciar viaje a destino', 'Finalizar viaje']) {
       await clickByLabel(driver, '[data-action="trip-advance"]', label);
