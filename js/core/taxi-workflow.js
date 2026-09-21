@@ -10,6 +10,8 @@ export const TAXI_STATUSES = Object.freeze([
   'in_trip',
   'completed',
   'canceled',
+  'expired',
+  'no_availability',
 ]);
 
 export const TAXI_STATUS_LABELS = Object.freeze({
@@ -22,6 +24,8 @@ export const TAXI_STATUS_LABELS = Object.freeze({
   in_trip: 'Viaje en curso',
   completed: 'Viaje finalizado',
   canceled: 'Viaje cancelado',
+  expired: 'Solicitud vencida',
+  no_availability: 'Sin taxis disponibles',
 });
 
 export const TAXI_STATUS_DESCRIPTIONS = Object.freeze({
@@ -34,11 +38,13 @@ export const TAXI_STATUS_DESCRIPTIONS = Object.freeze({
   in_trip: 'En viaje directo hacia el destino indicado.',
   completed: 'Llegaron a destino. Cobro coordinado con el chofer.',
   canceled: 'El viaje fue cancelado.',
+  expired: 'Ningún conductor respondió dentro del plazo de la solicitud.',
+  no_availability: 'No hay conductores disponibles en este momento.',
 });
 
 const ALLOWED_TRANSITIONS = Object.freeze({
-  requested: Object.freeze(['searching', 'accepted', 'canceled']),
-  searching: Object.freeze(['accepted', 'canceled']),
+  requested: Object.freeze(['searching', 'accepted', 'canceled', 'expired', 'no_availability']),
+  searching: Object.freeze(['accepted', 'canceled', 'expired', 'no_availability']),
   accepted: Object.freeze(['driver_on_way', 'canceled']),
   driver_on_way: Object.freeze(['driver_arrived', 'canceled']),
   driver_arrived: Object.freeze(['passenger_on_board', 'canceled']),
@@ -46,6 +52,8 @@ const ALLOWED_TRANSITIONS = Object.freeze({
   in_trip: Object.freeze(['completed']),
   completed: Object.freeze([]),
   canceled: Object.freeze([]),
+  expired: Object.freeze([]),
+  no_availability: Object.freeze([]),
 });
 
 export function canTransitionTaxi(fromStatus, toStatus) {
@@ -84,8 +92,20 @@ export function isTaxiCancelable(status) {
   ].includes(status);
 }
 
+export const TERMINAL_TAXI_STATUSES = Object.freeze(['completed', 'canceled', 'expired', 'no_availability']);
+
 export function isTaxiActive(status) {
-  return !['completed', 'canceled'].includes(status);
+  return !TERMINAL_TAXI_STATUSES.includes(status);
+}
+
+// Estados en los que la solicitud sigue abierta para que un conductor responda.
+export function isTaxiOpenForOffers(status) {
+  return status === 'requested' || status === 'searching';
+}
+
+// Un conductor no puede tomar otro viaje mientras tenga uno en curso.
+export function isTaxiEngagingForDriver(status) {
+  return ['accepted', 'driver_on_way', 'driver_arrived', 'passenger_on_board', 'in_trip'].includes(status);
 }
 
 export function getDriverNextAction(status) {
