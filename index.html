@@ -3,101 +3,100 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#204940">
-  <meta name="description" content="CAUCE · Aluminé. Demostración comercial de pedidos a comercios gastronómicos locales.">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'">
+  <meta name="theme-color" content="#143d34">
+  <meta name="description" content="CAUCE · Aluminé. Comprá en comercios de Aluminé y pedí un taxi desde un mismo lugar.">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'none'; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
   <title>CAUCE · Aluminé</title>
   <link rel="icon" href="styles/favicon.svg" type="image/svg+xml">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="assets/images/icon-192.png">
   <link rel="stylesheet" href="styles/cauce.css">
   <link rel="preload" as="image" href="assets/images/territory/alumine-hero-panoramica.webp" fetchpriority="high">
-  <link rel="modulepreload" href="js/data/demo.js">
-  <link rel="modulepreload" href="js/core/cart.js">
-  <link rel="modulepreload" href="js/core/order-workflow.js">
+  <link rel="modulepreload" href="js/runtime-env.js">
+  <link rel="modulepreload" href="js/domain/commands.js">
+  <link rel="modulepreload" href="js/repositories/repository-factory.js">
   <script type="module" src="js/app.js"></script>
 </head>
 <body>
   <a class="skip" href="#main">Saltar al contenido</a>
+
   <header class="header">
-    <div class="brand-group">
-      <a class="brand" href="#home" aria-label="CAUCE · Aluminé, inicio">
-        <svg class="brand-wave" viewBox="0 0 32 32" width="22" height="22" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M4 11C8 7 12 15 16 11C20 7 24 15 28 11"/>
-          <path d="M4 21C8 17 12 25 16 21C20 17 24 25 28 21"/>
-        </svg>
-        <span class="brand-title">CAUCE <span class="brand-sep">·</span> Aluminé</span>
-      </a>
-      <button class="demo-pill" id="header-demo-pill" type="button" data-action="open-demo-modal" aria-label="Información de la demostración">DEMO</button>
+    <a class="brand" href="#inicio" aria-label="CAUCE · Aluminé, inicio">
+      <svg class="brand-wave" viewBox="0 0 32 32" width="22" height="22" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M4 11C8 7 12 15 16 11C20 7 24 15 28 11"/>
+        <path d="M4 21C8 17 12 25 16 21C20 17 24 25 28 21"/>
+      </svg>
+      <span class="brand-title">CAUCE <span class="brand-sep">·</span> Aluminé</span>
+    </a>
+    <div class="header-right">
+      <span class="env-chip" id="env-chip" title="Este entorno no genera pedidos, viajes ni cobros reales">Demostración</span>
+      <a class="account-link" id="account-link" href="#cuenta">Ingresar</a>
     </div>
-    <nav aria-label="Navegación principal">
-      <a href="#home">Inicio</a>
-      <a href="#home" data-action="scroll-to" data-target="stores-section">Comercios</a>
-      <a href="#taxi">Taxi</a>
-      <a href="#presentacion" class="nav-institutional">Impacto</a>
-      <a href="https://wa.me/5492996209136?text=Hola%2C%20vi%20CAUCE%20%C2%B7%20Alumin%C3%A9%20y%20me%20interesa%20conocer%20c%C3%B3mo%20podr%C3%ADa%20sumar%20mi%20comercio." class="nav-merchant-cta" target="_blank" rel="noopener noreferrer" data-action="commercial-contact">Sumar mi comercio</a>
-      <a href="#orders" id="orders-link">Mis pedidos</a>
-      <a href="#carts" class="cart-nav" id="cart-nav">Carrito <span id="cart-count">0</span></a>
-    </nav>
   </header>
-  <main id="main" tabindex="-1"></main>
+
+  <main id="main" tabindex="-1" aria-busy="false"></main>
+
   <footer class="footer">
     <div class="footer-top">
       <div class="footer-brand">
-        <svg class="footer-wave" viewBox="0 0 32 32" width="26" height="26" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <svg class="footer-wave" viewBox="0 0 32 32" width="24" height="24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M4 11C8 7 12 15 16 11C20 7 24 15 28 11"/>
           <path d="M4 21C8 17 12 25 16 21C20 17 24 25 28 21"/>
         </svg>
         <div>
           <strong class="footer-name">CAUCE · Aluminé</strong>
-          <span class="footer-sub">Comida local. Comunidad que avanza.</span>
+          <span class="footer-sub">Comprá local. Movete por Aluminé.</span>
         </div>
       </div>
       <div class="footer-territory">
-        <span>NEUQUÉN</span>
-        <span class="sep">|</span>
-        <span>PATAGONIA</span>
-        <span class="sep">|</span>
-        <span>ARGENTINA</span>
+        <span>ALUMINÉ</span><span class="sep">|</span><span>NEUQUÉN</span><span class="sep">|</span><span>PATAGONIA</span>
       </div>
     </div>
     <div class="footer-actions">
-      <p class="footer-note">Demostración comercial · Aluminé, Neuquén</p>
+      <p class="footer-note" id="footer-env">Entorno de demostración · Plataforma local de LUNA. Los comercios de ejemplo son ficticios.</p>
       <div class="footer-links">
-        <a class="link-button" href="#presentacion">Presentación institucional</a>
-        <a class="link-button" href="#taxi">Pedir un taxi</a>
-        <a class="link-button" href="#manage">Paneles demo</a>
-        <button class="link-button" id="reset-demo" type="button">Reiniciar datos de demostración</button>
+        <a class="link-button" href="#institucional">Qué es CAUCE</a>
+        <a class="link-button" href="#alta-comercio">Sumar mi comercio</a>
+        <a class="link-button" href="#taxista">Registrarme como taxista</a>
       </div>
     </div>
   </footer>
-  <nav class="bottom-nav" aria-label="Navegación móvil">
-    <a href="#home" class="bottom-nav-item" id="bnav-home">
+
+  <nav class="bottom-nav" aria-label="Navegación principal">
+    <a href="#inicio" class="bottom-nav-item" id="bnav-inicio">
       <span class="bottom-nav-icon">
         <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5V20a1.5 1.5 0 0 1-1.5 1.5H4.5A1.5 1.5 0 0 1 3 20v-9.5z"/><path d="M9 21v-7h6v7"/></svg>
       </span>
       <span>Inicio</span>
     </a>
-    <a href="#home" class="bottom-nav-item" id="bnav-search" data-action="focus-search">
+    <a href="#comercios" class="bottom-nav-item" id="bnav-comercios">
       <span class="bottom-nav-icon">
-        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
       </span>
-      <span>Buscar</span>
+      <span>Comercios</span>
     </a>
-    <a href="#orders" class="bottom-nav-item" id="bnav-orders">
+    <a href="#taxi" class="bottom-nav-item" id="bnav-taxi">
+      <span class="bottom-nav-icon">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9C1.5 11.2 1 12 1 13v3c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/></svg>
+      </span>
+      <span>Taxi</span>
+    </a>
+    <a href="#actividad" class="bottom-nav-item" id="bnav-actividad">
       <span class="bottom-nav-icon">
         <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 2H8a2 2 0 0 0-2 2v16l3-1.5 3 1.5 3-1.5 3 1.5 3-1.5V4a2 2 0 0 0-2-2z"/><path d="M9 7h6M9 11h6M9 15h4"/></svg>
       </span>
-      <span>Pedidos</span>
+      <span>Mi actividad</span>
     </a>
-    <a href="#carts" class="bottom-nav-item" id="bnav-carts">
+    <a href="#carrito" class="bottom-nav-item" id="bnav-carrito" hidden>
       <span class="bottom-nav-icon">
         <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h14l-2 10H8L6 3z"/><circle cx="9" cy="19" r="1.5"/><circle cx="17" cy="19" r="1.5"/><path d="M2 3h4"/></svg>
-        <span class="bnav-badge" id="bnav-cart-badge" hidden>0</span>
+        <span class="bnav-badge" hidden>0</span>
       </span>
       <span>Carrito</span>
     </a>
   </nav>
-  <dialog id="modal-container" aria-label="CAUCE"></dialog>
+
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
-  <noscript>Esta demostración necesita JavaScript para funcionar.</noscript>
+  <noscript>CAUCE necesita JavaScript para funcionar.</noscript>
 </body>
 </html>

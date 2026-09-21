@@ -4,11 +4,16 @@ import { resolve, extname, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const ROOT = fileURLToPath(new URL('../', import.meta.url));
-const CSP = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-ancestors 'none'";
+const CSP = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'none'; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-ancestors 'none'";
+const WORKER_CSP = "default-src 'self'; connect-src 'self'; base-uri 'none'; object-src 'none'";
 export function createStaticServer({ root = ROOT } = {}) {
   const base = resolve(root);
   return createServer(async (req, res) => {
-    res.setHeader('Content-Security-Policy', CSP);
+    // La CSP del documento no aplica al service worker: el worker hereda la de
+    // SU PROPIA respuesta. Servirle `connect-src 'none'` le bloquea todos los
+    // fetch y deja la aplicación rota en la segunda pestaña.
+    const isWorker = (req.url || '').startsWith('/service-worker.js');
+    res.setHeader('Content-Security-Policy', isWorker ? WORKER_CSP : CSP);
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Referrer-Policy', 'no-referrer');
     res.setHeader('Cache-Control', 'no-store');
@@ -20,12 +25,13 @@ export function createStaticServer({ root = ROOT } = {}) {
       let path = decodeURIComponent(parsed.pathname);
       if (path === '/') path = '/index.html';
       if (path.includes('\0') || path.includes('\\') || path.split('/').some(part=>part==='..'||part==='.')) return finish(400,'Ruta inválida.');
-      if (!(path === '/index.html' || /^\/(js|styles|assets)\//.test(path))) return finish(404,'No encontrado.');
+      const allowed = path === '/index.html' || path === '/manifest.webmanifest' || path === '/service-worker.js' || /^\/(js|styles|assets)\//.test(path);
+      if (!allowed) return finish(404,'No encontrado.');
       const target = resolve(base, `.${path}`);
       if (!target.startsWith(base + sep)) return finish(403,'Ruta no permitida.');
       const actual = await realpath(target);
       if (!actual.startsWith(base + sep)) return finish(403,'Ruta no permitida.');
-      const mime = {'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.webp':'image/webp','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.avif':'image/avif'}[extname(actual)];
+      const mime = {'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.webmanifest':'application/manifest+json; charset=utf-8','.svg':'image/svg+xml','.webp':'image/webp','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.avif':'image/avif'}[extname(actual)];
       if (!mime || !(await stat(actual)).isFile()) return finish(404,'No encontrado.');
       res.setHeader('Content-Type',mime);
       if (req.method==='HEAD') return finish(200,'');

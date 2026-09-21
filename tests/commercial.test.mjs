@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { initialDemoState } from '../js/data/demo.js';
-import { createDemoRepository } from '../js/repositories/demo-repository.js';
+import { initialState } from '../js/domain/state.js';
+import { createLocalRepository } from '../js/repositories/local-repository.js';
 import { calculateBusinessMetrics } from '../js/core/business-metrics.js';
 import { buildKitchenTicket } from '../js/core/kitchen-ticket.js';
 import { createBusinessSoundService } from '../js/business/sound-service.js';
@@ -12,7 +13,7 @@ function setupRepo() {
   const storage = { getItem: k => values.get(k) ?? null, setItem: (k, v) => values.set(k, v) };
   let counter = 0;
   const uuid = () => `00000000-0000-4000-8000-${String(++counter).padStart(12, '0')}`;
-  const repo = createDemoRepository({ storage, uuid, locks: null, seed: initialDemoState, clock: () => new Date().toISOString() });
+  const repo = createLocalRepository({ storage, uuid, locks: null, seed: initialState, clock: () => new Date().toISOString() });
   return { repo, storage, values };
 }
 
@@ -105,27 +106,24 @@ test('servicio sonoro Web Audio respeta silenciado y muting', async () => {
   assert.equal(playedWhileMuted, false);
 });
 
-test('actualización de configuración del comercio modifica horario y demora', async () => {
+test('el comercio actualiza su demora y su costo de envío desde su propia sesión', async () => {
   const { repo } = setupRepo();
-  const actor = { kind: 'merchant', ...scopeOf(repo.business('orilla')) };
-  await repo.updateBusinessConfig('orilla', { eta: '45–60 min', deliveryFee: 2000 }, actor);
-  const updated = repo.business('orilla');
+  await repo.signInAsDemoIdentity('acc-orilla');
+  await repo.command('business.update', {
+    businessId: 'orilla', patch: { eta: '45–60 min', deliveryFee: 2000 },
+  });
+  const updated = await repo.query('business', { businessId: 'orilla' });
   assert.equal(updated.eta, '45–60 min');
   assert.equal(updated.deliveryFee, 2000);
 });
 
-test('registro de interesados comerciales (leads) se persiste con UUID y fecha', async () => {
+test('el alta de un comercio queda registrada con estado, no como un interesado suelto', async () => {
   const { repo } = setupRepo();
-  await repo.addMerchantLead({
-    name: 'Ana Rossi',
-    businessName: 'Dulces del Río',
-    category: 'Repostería',
-    phone: '2942-889900',
-    notes: 'Quiero sumarme al catálogo digital',
-  });
-  const leads = repo.merchantLeads();
-  assert.equal(leads.length, 1);
-  assert.equal(leads[0].businessName, 'Dulces del Río');
-  assert.ok(leads[0].id);
-  assert.ok(leads[0].at);
+  await repo.register({ email: 'nueva@ejemplo.test', name: 'Ana Rossi', phone: '2942889900' });
+  const business = await repo.command('business.create', { name: 'Dulces del Río', category: 'Repostería' });
+  assert.equal(business.status, 'draft');
+  assert.equal(business.ownerName, 'Ana Rossi');
+  const mine = await repo.query('myBusinesses');
+  assert.equal(mine.length, 1);
+  assert.equal(mine[0].id, business.id);
 });

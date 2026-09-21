@@ -1,0 +1,24 @@
+{
+  "name": "CAUCE · Aluminé",
+  "short_name": "CAUCE",
+  "description": "Comprá en comercios de Aluminé y pedí un taxi desde un mismo lugar.",
+  "start_url": "./index.html#inicio",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f8fafc",
+  "theme_color": "#143d34",
+  "lang": "es-AR",
+  "dir": "ltr",
+  "categories": ["shopping", "food", "travel"],
+  "icons": [
+    { "src": "assets/images/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "assets/images/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "assets/images/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Ver comercios", "url": "./index.html#comercios" },
+    { "name": "Pedir un taxi", "url": "./index.html#taxi" },
+    { "name": "Mi actividad", "url": "./index.html#actividad" }
+  ]
+}

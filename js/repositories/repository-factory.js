@@ -1,8 +1,33 @@
 import { CauceError } from '../core/errors.js';
-import { createDemoRepository } from './demo-repository.js';
-export function createRepository(config, options) {
+import { createLocalRepository } from './local-repository.js';
+import { createHttpRepository } from './http-repository.js';
+
+// La compuerta de producción se mantiene: esta entrega no habilita pedidos ni
+// pagos reales en ningún entorno. `mode: 'demo'` con `liveOrders`/`livePayments`
+// en false es un requisito, no un interruptor que se pueda apagar para "que funcione".
+export function assertNonProductionConfig(config) {
   if (config?.mode !== 'demo' || config?.liveOrders !== false || config?.livePayments !== false) {
-    throw new CauceError('PRODUCTION_NOT_IMPLEMENTED', 'Esta entrega no incluye un backend productivo verificado. No se habilitarán pedidos ni pagos reales.');
+    throw new CauceError('PRODUCTION_NOT_IMPLEMENTED',
+      'Esta entrega no incluye una operación productiva verificada. No se habilitarán pedidos ni pagos reales.');
   }
-  return createDemoRepository(options);
+}
+
+/**
+ * Selecciona el repositorio según el entorno resuelto en tiempo de compilación.
+ * No hay detección automática ni degradación de backend a simulación: si el
+ * entorno declara `local-backend`, se usa el backend y sus errores se propagan.
+ */
+export function createRepository(config, options = {}) {
+  assertNonProductionConfig(config);
+  const runtime = options.runtime;
+  if (!runtime || typeof runtime.environment !== 'string') {
+    throw new CauceError('RUNTIME_ENV_MISSING', 'No se pudo determinar el entorno de ejecución.');
+  }
+  if (runtime.environment === 'local-backend') {
+    return createHttpRepository({ apiBase: runtime.apiBase || '/api', fetchImpl: options.fetchImpl });
+  }
+  if (runtime.environment === 'demo') {
+    return createLocalRepository(options);
+  }
+  throw new CauceError('UNKNOWN_ENVIRONMENT', `Entorno de ejecución desconocido: ${runtime.environment}.`);
 }

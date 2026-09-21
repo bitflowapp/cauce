@@ -11,8 +11,10 @@ import {
   getPassengerTimelineIndex,
 } from '../js/core/taxi-workflow.js';
 
-test('estados de taxi definen exactamente los 9 estados requeridos', () => {
-  assert.equal(TAXI_STATUSES.length, 9);
+test('estados de taxi definen exactamente los 11 estados requeridos', () => {
+  // A los 9 estados del circuito se sumaron los dos cierres sin servicio que
+  // exige el piloto: una solicitud que vence y la falta de conductores.
+  assert.equal(TAXI_STATUSES.length, 11);
   const expected = [
     'requested',
     'searching',
@@ -23,6 +25,8 @@ test('estados de taxi definen exactamente los 9 estados requeridos', () => {
     'in_trip',
     'completed',
     'canceled',
+    'expired',
+    'no_availability',
   ];
   assert.deepEqual([...TAXI_STATUSES], expected);
   for (const status of TAXI_STATUSES) {

@@ -1,80 +1,153 @@
-# Arquitectura de la primera entrega
+# Arquitectura de CAUCE · Aluminé
 
-## Alcance implementado
+## Idea central: una aplicación, dos entornos
 
-Frontend web mobile-first sin dependencias npm de ejecución. Datos exclusivamente
-ficticios guardados en el navegador. El servidor Node sirve una lista limitada de
-archivos por loopback, nunca credenciales, tests, documentación ni scripts.
+El riesgo obvio de tener una demostración pública y un entorno con backend es
+terminar con **dos aplicaciones distintas** que se parecen. Para evitarlo, las
+reglas de negocio están separadas del transporte y del almacenamiento:
 
-`config` → `repository-factory` → repositorio demo → núcleo de comercio/pedido.
+```
+js/core/       reglas puras (carrito, estados, validación, altas, despacho)
+js/domain/     estado + comandos + consultas sobre ese estado
+js/repositories/
+   local-repository.js   ejecuta los comandos en el navegador (demostración)
+   http-repository.js    los envía al backend local (entorno de pruebas)
+   repository-factory.js elige según el entorno declarado
+scripts/dev-server.mjs   ejecuta los MISMOS comandos, en una transacción
+js/app.js                interfaz: no contiene reglas de negocio
+```
 
-La interfaz no realiza solicitudes de datos a servicios externos. La política
-CSP bloquea conexiones; `createRepository` rechaza cualquier configuración que
-pretenda habilitar producción. No hay un adaptador Supabase incompleto escondido
-tras una función vacía ni fallback silencioso de producción a demo.
+Un comando es una función pura `(state, context, payload) → resultado`. No sabe
+si corre en el navegador o en el servidor. El `context` trae el actor, el reloj y
+el generador de identificadores.
 
-## Reutilización y responsabilidades
+Consecuencia práctica: una regla nueva o una corrección se escribe una sola vez y
+vale para los dos entornos. Y lo que prueban `tests/local-repository.test.mjs` y
+`tests/backend-journeys.test.mjs` es el mismo dominio por dos caminos.
 
-`order-workflow.js`: máquina de estados y compatibilidad heredadas, sin cambios.
-`commercial.js`: comprobaciones comerciales extraídas del código real.
-`workflow-policy.js`: permisos funcionales del simulador, estados estrictos,
-entrega contra retiro y asignación de repartidor del comercio.
-`scope.js`: identidad explícita `localityId` + `businessId`.
-`cart.js`: cantidades, productos propios, cotización y pedido mínimo.
-`demo-repository.js`: persistencia de fixtures, idempotencia y operaciones demo.
-`app.js`: pantallas y eventos de interfaz; no contiene claves ni llamadas remotas.
+## Selección de entorno: explícita, sin degradación silenciosa
+
+`js/runtime-env.js`, tal como está versionado, declara el entorno de
+demostración. El servidor de desarrollo sirve una versión generada del mismo
+módulo que declara `local-backend`.
+
+No hay detección automática. Si el entorno dice `local-backend` y el servidor no
+responde, `http-repository` lanza `NETWORK_UNAVAILABLE` y la interfaz lo muestra.
+**Nunca** cae de vuelta a datos locales: eso convertiría una falla en una
+simulación silenciosa, que es justo lo que no puede pasar.
+
+`createRepository` además rechaza cualquier configuración que pretenda habilitar
+pedidos o pagos reales, en cualquier entorno.
+
+## Autorización: el actor se deriva, no se declara
+
+El navegador nunca envía quién es. El servidor lee la cookie de sesión, busca la
+cuenta y construye el actor con `actorFor(state, accountId)`. Lo mismo hace el
+repositorio local con su sesión guardada.
+
+De ahí se desprende todo lo demás:
+
+- Un comercio sólo ve y opera lo suyo: `requireBusinessOwnership` compara contra
+  `business.ownerId`, no contra un identificador que venga en el pedido.
+- La cola de revisión y las métricas exigen el rol `admin`.
+- Las ofertas de viaje se filtran por `offeredTo` y recortan los datos del
+  pasajero hasta que hay aceptación (`offerView`).
+- Los importes se recalculan siempre con `quoteCart` contra el catálogo
+  guardado. Un total enviado por el cliente se ignora, y hay una prueba que lo
+  verifica.
+
+## Concurrencia
+
+**Backend local.** Cada mutación corre dentro de `BEGIN IMMEDIATE` … `COMMIT`
+sobre SQLite. Dos conductores que aceptan el mismo viaje se serializan: el
+primero gana y el segundo recibe `TRIP_ALREADY_TAKEN`. Hay una prueba que lanza
+las dos aceptaciones en paralelo.
+
+**Demostración.** Se usa Web Locks cuando el navegador lo ofrece; si no, las
+operaciones de esa instancia se encolan. Entre pestañas sin Web Locks **no hay
+atomicidad garantizada**. Esa limitación es del navegador y no se traslada al
+backend.
+
+**Pedidos.** `requestId` durable por carrito: un reintento idéntico devuelve el
+mismo pedido sin descontar stock otra vez, y reutilizarlo con otros datos es un
+conflicto explícito. Los cambios de estado exigen la versión esperada del pedido.
+
+## Persistencia del backend local: qué es y qué no
+
+El estado se guarda como un documento JSON en una tabla de SQLite, y cada
+operación lo lee, aplica el comando y lo vuelve a escribir dentro de una
+transacción.
+
+**Por qué así.** Permite ejecutar exactamente el mismo dominio en los dos
+entornos, sin una capa de mapeo que pueda divergir de las reglas.
+
+**Qué no es.** No es un esquema normalizado ni tiene políticas de acceso por fila
+a nivel de base. La autorización la aplica el servidor en el comando, no el
+motor. Para un piloto real hace falta una base normalizada con políticas propias
+y pruebas negativas contra esas políticas. El cambio queda contenido: hay que
+reimplementar el almacenamiento del servidor, no la aplicación.
+
+**Escala.** Reescribir el documento completo en cada operación no escala. Es
+adecuado para un entorno de pruebas; no para producción.
+
+## Contenido y red
+
+El documento publicado declara `connect-src 'none'`: no puede abrir ninguna
+conexión. El servidor de desarrollo sirve el mismo documento con `connect-src
+'self'` para que hable con su propia API, y nada más.
+
+El service worker recibe una CSP **propia** (`default-src 'self'`), porque la
+política del documento no se le aplica: hereda la de su propia respuesta. Servirle
+la del documento lo dejaba sin poder hacer ningún `fetch`, con la caché vacía y
+la aplicación rota al abrir una segunda pestaña.
+
+El service worker **no difiere operaciones**. Guardar una confirmación para
+enviarla más tarde daría por recibido un pedido que ningún comercio vio. Sin
+conexión, la aplicación lo dice y bloquea la confirmación; `scripts/check.mjs`
+verifica que no aparezcan APIs de sincronización en segundo plano.
+
+`scripts/check.mjs` también limita el acceso a red: sólo
+`js/repositories/http-repository.js` puede usar `fetch`. En cualquier otro
+archivo del runtime es un error de compilación.
+
+## Reutilización de La Taba
+
+`js/core/order-workflow.js` y su prueba se conservan **byte a byte**, con hash
+verificado en cada `npm run check`. `commercial.js` es un subconjunto adaptado.
+El origen y los hashes están en `docs/PROVENANCE.md`.
+
+Sobre ese motor se construyó lo nuevo sin alterarlo. Por ejemplo, el rechazo de
+un pedido no agregó un estado: se registra como cancelación con
+`cancellation.kind = 'rejected'` y su motivo, de modo que la máquina de estados
+heredada sigue intacta y la interfaz igual distingue un rechazo de una
+cancelación.
 
 ## Decisiones acotadas
 
-Primera localidad: Aluminé. El modelo contiene una colección de localidades y
-las claves incluyen localidad; no hay gestión de localidades en la interfaz.
-Cada carrito y pedido pertenece a un único comercio. Cambiar de comercio conserva
-un carrito distinto; no existe checkout mezclado ni un cobro repartido.
-Delivery: repartidor del comercio. No se implementó una flota municipal ni un
-mercado global de repartidores. Se conserva únicamente la secuencia de estados.
-Los comercios y las categorías son fixtures: no hay alta de comercios ni CRUD
-completo de productos. El panel permite precio, stock, disponibilidad y apertura
-manual. Los horarios y tiempos mostrados son ejemplos, no promesas operativas.
+- **Una localidad: Aluminé.** El modelo incluye `localityId` en claves y ámbitos,
+  pero no hay gestión de localidades en la interfaz.
+- **Un pedido por comercio.** Cambiar de comercio conserva un carrito separado.
+  No hay checkout mezclado ni cobro repartido.
+- **El reparto es del comercio.** Se cargan como datos del comercio y opera la
+  persona responsable. No hay flota ni mercado de repartidores, ni acceso propio
+  para repartidores.
+- **Despacho de taxis simple y explícito** (`DISPATCH_POLICY`): la solicitud se
+  ofrece a todos los conductores aprobados y disponibles, y la toma el primero
+  que responde; vence a los 10 minutos; un conductor con viaje en curso no puede
+  tomar otro; una persona no acumula solicitudes abiertas. Es configurable en un
+  solo lugar, y deliberadamente no intenta optimizar asignaciones que no podemos
+  validar.
+- **Sin tarifas ni tiempos estimados.** No hay cuadro tarifario validado en
+  Aluminé ni datos de operación. Se dice que se coordinan con el conductor.
+- **Sin mapas de seguimiento.** No hay GPS; no se dibujan móviles en movimiento.
 
-## Seguridad: frontera explícita
+## Frontera de seguridad, dicha sin vueltas
 
-El repositorio demo NO es una frontera de autorización. El usuario puede abrir
-cualquier panel demo y examinar localStorage. Las comprobaciones por ámbito son
-invariantes funcionales para detectar mezclas accidentales, no autenticación ni
-RLS. Nunca usar este repositorio con datos personales, comercios reales o dinero.
+En la **demostración publicada**, el repositorio local **no es una frontera de
+autorización**: cualquiera puede abrir las herramientas del navegador y editar
+`localStorage`. Las comprobaciones de ámbito ahí son invariantes funcionales, no
+seguridad. Por eso la demostración usa exclusivamente datos ficticios.
 
-En producción, pedidos, precios, stock, membresías, asignaciones e idempotencia
-deberán ser autorizados y confirmados por el backend. El frontend solo podrá
-anticipar errores de UX. Las políticas de lectura y escritura, RPC privilegiadas
-y canales de realtime necesitan pruebas negativas con identidades separadas.
-
-## Persistencia y concurrencia del simulador
-
-Cada operación lee el documento, valida y lo guarda completo. Cuando el navegador
-dispone de Web Locks, se usa un lock por origen. Si no, se serializan las
-operaciones de esa instancia; NO se garantiza atomicidad entre pestañas sin Web
-Locks. Esa limitación no debe trasladarse al backend.
-
-Los pedidos usan requestId durable y rechazan reutilizarlo con otro payload.
-Una respuesta repetida devuelve el pedido existente sin descontar stock de nuevo.
-Se controlan versiones al cambiar estados. La cancelación terminal no repone dos
-veces el stock. Son propiedades locales del simulador, no garantías financieras.
-
-## Migración que sigue pendiente
-
-1. Obtener una copia íntegra y verificable del código y migraciones de la rama
-   elegida de La Taba; comparar con la rama commerce-v3 observada.
-2. Inventariar tablas, RPC, políticas, roles, Auth y canales reales. Mantener el
-   motor operativo que sea reutilizable, en vez de reemplazarlo por esta demo.
-3. Crear un proyecto Supabase NUEVO para CAUCE, sin restaurar datos de clientes ni
-   secretos de La Taba. Provisionarlo requiere autorización independiente.
-4. Añadir localidades y membresías solo donde el esquema real lo necesite;
-   generar migraciones con la CLI y ensayarlas en una base aislada.
-5. Adaptar repositorios, carrito, catálogo, panel y delivery a ámbitos reales;
-   cerrar el ciclo de vida anterior al cambiar de comercio.
-6. Portar pagos con seller por comercio, manteniendo toda operación monetaria
-   deshabilitada hasta probar propiedad, idempotencia, webhooks y reembolsos.
-7. Ejecutar la batería original completa, nuevos tests de RLS y E2E reales.
-
-Esta lista no representa funcionalidades terminadas. Los archivos de código son
-la primera entrega ejecutable para continuar esa migración, no su sustituto.
+En el **entorno local con backend**, la autorización sí ocurre del lado del
+servidor, con sesión real. Sigue siendo un entorno de desarrollo: escucha sólo en
+loopback, no tiene copias de resguardo y no debe recibir datos personales reales.

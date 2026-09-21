@@ -1,98 +1,168 @@
-# CAUCE · Aluminé — 0.1.0
+# CAUCE · Aluminé
 
-**Primera implementación local ejecutable. NO lista para producción.**
+Plataforma local de LUNA para comercio y movilidad en Aluminé (Neuquén).
 
-Esta entrega reutiliza el workflow real de La Taba y comprobaciones comerciales,
-y agrega una demostración de CAUCE con varios comercios. **No es el clon completo
-solicitado**: no incluye la integración operativa de Supabase, Auth, RLS, Mercado
-Pago, GPS ni el rider Android de La Taba. No publica nada ni modifica producción.
+Permite que un comercio se dé de alta y publique su catálogo, que una persona
+compre con retiro o con envío del propio comercio, que el comercio gestione sus
+pedidos y su reparto, que una persona solicite un taxi y un conductor lo acepte,
+y que administración revise las altas y supervise la operación.
 
-## Abrir
+**Estado: versión demostrable, no operativa.** No hay pagos reales, ni prestadores
+incorporados, ni convenio municipal. El detalle está en
+[docs/ESTADO-PILOTO.md](docs/ESTADO-PILOTO.md).
 
-Con Node.js 22 o posterior, dentro de esta carpeta:
+---
+
+## Dos entornos, una sola aplicación
+
+Las reglas de negocio viven en `js/domain/` y `js/core/`, y son **las mismas** en
+los dos entornos. Lo único que cambia es dónde se ejecutan y dónde se guardan los
+datos. El entorno se resuelve en tiempo de compilación (`js/runtime-env.js`): no
+hay detección automática ni degradación silenciosa de backend a simulación.
+
+| | Demostración (la que se publica) | Entorno local de pruebas |
+|---|---|---|
+| Persistencia | Navegador de cada persona (`localStorage`) | SQLite compartida (`.local/cauce-dev.sqlite`) |
+| Sesiones | Identidades de ejemplo, sin contraseña | Correo y contraseña, cookie `HttpOnly` |
+| Validación | En el navegador | En el servidor, dentro de una transacción |
+| Entre personas | No se comparte nada | Sí: varias sesiones sobre los mismos datos |
+| Red | `connect-src 'none'`: no puede abrir conexiones | Sólo el mismo origen |
+
+GitHub Pages **no aloja ningún backend**: sirve archivos estáticos. La operación
+compartida sólo existe en el entorno local.
+
+---
+
+## Cómo ejecutar
+
+Requiere Node.js 22 o posterior. No hace falta instalar dependencias.
+
+### Demostración (lo que se publica)
 
 ```powershell
 npm start
 ```
 
-Abrir `http://127.0.0.1:4173`. No es necesario instalar dependencias npm para
-arrancar o ejecutar las pruebas Node. Detener con Ctrl+C.
-En Windows también se puede ejecutar `INICIAR-CAUCE.cmd`.
+Abre <http://127.0.0.1:4173>. Todo queda en tu navegador.
 
-`CAUCE-demo.html` es una compilación autónoma, sin recursos de red. Su apertura
-como archivo depende de que el navegador permita almacenamiento local en archivos.
-La vía reproducible del proyecto es `npm start`. La apertura directa de archivos
-y la navegación HTTP del navegador no pudieron certificarse en este entorno.
-
-## Qué se puede probar
-
-Tres comercios y trece productos FICTICIOS, búsqueda, filtro de apertura, catálogo,
-carritos separados por comercio, cantidades, límites de stock, retiro y delivery
-de prueba, pedido mínimo, historial y estados del pedido. Panel demo para cambiar
-precios/stock/disponibilidad, abrir o cerrar el comercio y gestionar sus pedidos.
-Panel de reparto demo con asignación al repartidor del propio comercio.
-
-Circuito sugerido: La Orilla → agregar producto → carrito → pedido de prueba →
-panel demo del comercio → confirmar/preparar/listo → asignar repartidor → panel
-de reparto → entrega. Para retiro, el comercio entrega desde el estado listo.
-
-Los paneles son una simulación libre de roles, NO un sistema autenticado.
-No ingresar información personal real ni usarlo para vender.
-
-## Pruebas ejecutadas y límites
+### Entorno local de pruebas, con backend
 
 ```powershell
-npm run verify
+npm run dev:seed
 ```
 
-- Verificación de sintaxis, imports, configuración demo y dos hashes heredados.
-- 63 pruebas Node: 57 unitarias y 6 de HTTP local, todas aprobadas.
-- Build estático y empaquetado offline realizados.
-- 8 comprobaciones de DOM/visual offline en Chromium, con almacenamiento de prueba
-  en memoria: aprobadas. Esto NO es un E2E HTTP ni prueba persistencia de navegador.
-- E2E HTTP de navegador: **BLOQUEADO** por `ERR_BLOCKED_BY_ADMINISTRATOR` al navegar
-  al servidor local. No se deshabilitaron políticas del navegador para evitarlo.
-- Auth, RLS, Supabase, OAuth, webhooks, refunds, GPS y pruebas físicas: NO EJECUTADOS.
+Abre <http://127.0.0.1:4180>. La primera vez, `--seed` crea cuatro cuentas
+sintéticas (clienta, comercio, administración, taxista) con contraseñas
+generadas al azar y las escribe en `.local/dev-credentials.json`, que **no se
+versiona**. Para volver a empezar de cero, borrá la carpeta `.local/`.
 
-Las pruebas de navegador requieren Python, Playwright y un Chromium permitido.
-Para ejecutar el E2E en otro entorno, iniciar el servidor y correr:
+Después del primer arranque alcanza con `npm run dev`.
+
+Para demostrar operaciones entre personas distintas, abrí cada rol en un
+**navegador o perfil separado**: varias pestañas del mismo navegador comparten
+la misma cookie de sesión y no demuestran aislamiento.
+
+---
+
+## Recorridos de la presentación
+
+Los cuatro se ejecutan automáticamente con `npm run e2e`. A mano, en el entorno
+local con backend:
+
+**1. Alta y publicación de un comercio**
+Ingresar → *Sumar mi comercio* → crear cuenta → crear el comercio (queda en
+borrador) → completar datos y modalidades de entrega → *Catálogo* → cargar un
+producto → *Datos* → **Solicitar publicación**. Con la cuenta de administración,
+en otro navegador: *Administración* → devolver con observaciones o aprobar. Al
+aprobar, el comercio aparece en el listado público.
+
+**2. Compra con retiro y con envío**
+*Comercios* → elegir uno → agregar productos → *Carrito* → elegir retiro o
+envío → completar datos → confirmar. El comercio, en su sesión: *Aceptar* →
+*Informar preparación* → *Listo* → (envío) *Asignar reparto* → *Marcar salida* →
+*Marcar entregado*. El reparto se da de alta en la pestaña *Reparto*.
+
+**3. Solicitud y aceptación de taxi**
+Con una cuenta: *Registrarme como taxista* → completar el alta → administración
+la aprueba → el taxista se marca **disponible**. Desde otra sesión: *Taxi* →
+origen, destino, referencia y pasajeros → *Solicitar taxi*. El taxista ve la
+solicitud sin nombre ni teléfono, la acepta, y recién ahí recibe el contacto.
+
+**4. Revisión administrativa y supervisión**
+*Administración*: cola de altas pendientes y totales agregados de lo que
+efectivamente ocurrió en el entorno. Sin direcciones ni recorridos individuales.
+
+---
+
+## Qué usa persistencia remota y qué sigue siendo simulación
+
+| Capacidad | Demostración publicada | Entorno local con backend |
+|---|---|---|
+| Alta de comercios con revisión | Local al navegador | **Compartida y autenticada** |
+| Catálogo, carritos, pedidos | Local al navegador | **Compartida y autenticada** |
+| Estados de pedido y reparto | Local al navegador | **Compartida y autenticada** |
+| Taxis: alta, despacho, estados | Local al navegador | **Compartida y autenticada** |
+| Autenticación con contraseña | No: identidades de ejemplo | **Sí** (scrypt + cookie HttpOnly) |
+| Validación de importes y permisos | En el navegador | **En el servidor** |
+| Pagos en línea | **Deshabilitados** | **Deshabilitados** |
+| Ubicación GPS de móviles | **No existe** | **No existe** |
+| Notificaciones a prestadores | **No existen** | **No existen** |
+| Carga de fotos propias | **No implementada** | **No implementada** |
+
+---
+
+## Pruebas
 
 ```powershell
-python tests/browser_e2e.py
+npm run verify       # sintaxis, imports, compuertas, 158 pruebas Node, builds
+npm run verify:full  # lo anterior + recorridos de navegador + auditoría visual
 ```
 
-Este script no pasó en el entorno de entrega por el bloqueo de navegación; sus
-pasos posteriores necesitan ejecutarse y verificarse, no se asumen aprobados.
+Por separado:
 
-El smoke DOM offline usado aquí se puede reproducir con:
+| Comando | Qué hace |
+|---|---|
+| `npm test` | Pruebas de dominio, repositorio, backend y copy |
+| `npm run e2e` | Los tres recorridos en navegadores separados, contra el backend |
+| `npm run e2e:demo` | Recorrido sobre la demostración publicada |
+| `npm run audit:visual` | 360, 390, 430 y escritorio: desbordes, área táctil, contraste |
+| `npm run audit:visual:backend` | Lo mismo sobre el entorno con backend |
 
-```powershell
-node scripts/offline-bundle.mjs
-python tests/offline_dom.py
+Las pruebas de navegador usan el Chrome o Edge ya instalado mediante el
+protocolo DevTools (`tests/lib/cdp.mjs`): no descargan navegadores. Si hace
+falta, se indica la ruta con `CAUCE_CHROME_PATH`.
+
+**Son mediciones con emulación móvil en un navegador de escritorio, no pruebas
+en un teléfono físico.**
+
+Los resultados quedan en `evidence/`: `e2e-results.json`, `demo-results.json`,
+`audit-results.json` y las capturas correspondientes.
+
+---
+
+## Estructura
+
+```
+js/core/         reglas puras (carrito, estados, validación, altas, despacho)
+js/domain/       estado, comandos y consultas: el dominio compartido
+js/repositories/ local (navegador) y http (backend), misma interfaz
+js/ui/           formato e iconografía
+js/app.js        shell: enrutador por hash, vistas y acciones
+scripts/         servidor estático, backend local, build, íconos, comprobaciones
+tests/           pruebas Node, recorridos de navegador y auditoría visual
+docs/            arquitectura, procedencia, estado del piloto
 ```
 
-El script offline usa el Chromium de `/usr/bin/chromium` del entorno de revisión;
-para otra máquina se debe configurar la ruta del navegador mediante la variable
-`CAUCE_CHROMIUM_PATH` o usar el Chromium instalado por Playwright.
+## Seguridad y límites que no se apagan
 
-## Archivos relevantes
+- `mode: 'demo'` con `liveOrders` y `livePayments` en `false`: la fábrica de
+  repositorios se niega a construir nada si eso cambia.
+- El documento publicado bloquea toda conexión saliente (`connect-src 'none'`).
+- El actor de cada operación se deriva de la sesión, nunca de lo que envía el
+  navegador; los importes se recalculan contra el catálogo guardado.
+- Sin acceso administrativo por parámetro de URL.
+- Sin credenciales en el repositorio, en el frontend ni en las capturas.
 
-- `docs/PROVENANCE.md`: reutilización exacta, hashes y commit de origen.
-- `docs/AUDIT.md`: inspección inicial y límites de lo efectivamente leído.
-- `docs/ARCHITECTURE.md`: decisiones, límites de seguridad y migración pendiente.
-- `STATUS.md`: estado técnico de esta entrega.
-- `evidence/verification.log`: resultado real de las pruebas Node/build.
-- `evidence/offline-dom-results.json`: comprobaciones offline.
-- `evidence/browser-results.json`: bloqueo real del E2E HTTP.
-- `evidence/*.png`: capturas obtenidas del render sin conexión.
-
-## Git y datos
-
-El repositorio remoto `bitflowapp/cauce` NO se creó. La rama y commits incluidos
-son únicamente locales. No hay un remote apuntando al repositorio original.
-No se ejecutaron scripts, migraciones o llamadas financieras de La Taba.
-
-El estado local se guarda bajo `cauce:demo:database:v1`. El botón del pie de página
-reinicia únicamente los datos de esta demostración, previa confirmación.
-El contenido de localStorage permanece en el navegador; no existe sincronización
-entre personas o dispositivos, ni backups de servidor.
+Más detalle en [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md),
+[docs/ESTADO-PILOTO.md](docs/ESTADO-PILOTO.md) y
+[docs/PROVENANCE.md](docs/PROVENANCE.md).
