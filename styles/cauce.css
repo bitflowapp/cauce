@@ -6141,3 +6141,24 @@ main {
   font-weight: 800;
   letter-spacing: 0.04em;
 }
+
+/* La etiqueta de una casilla puede ser larga: tiene que envolver, no recortarse.
+   La regla original heredaba `white-space: nowrap`, y el texto quedaba cortado. */
+.check-label {
+  align-items: flex-start;
+  padding: 10px 0;
+  white-space: normal;
+  flex-shrink: 1;
+}
+
+.check-label > span {
+  flex: 1;
+  min-width: 0;
+  white-space: normal;
+  line-height: 1.45;
+}
+
+.check-label input { margin-top: 1px; }
+
+/* En la barra de búsqueda la casilla sigue en una sola línea. */
+.search-bar .check-label { align-items: center; padding: 0; }

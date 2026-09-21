@@ -103,6 +103,24 @@ const AUDIT = `(() => {
     })
     .filter(entry => entry && entry.ratio < entry.required);
 
+  // Texto cortado: el contenido no entra y no está previsto que se recorte.
+  // Se excluyen los carruseles horizontales y lo que use puntos suspensivos a propósito.
+  const clipped = [...document.querySelectorAll('#main p, #main li, #main label, #main span, #main h1, #main h2, #main h3, .check-label > span')]
+    .filter(visible)
+    .filter(element => !element.closest('.category-nav-bar, .tabs, .op-card-body'))
+    // Las etiquetas sólo para lectores de pantalla miden 1 px a propósito.
+    .filter(element => !element.classList.contains('visually-hidden') && element.clientWidth > 4)
+    .filter(element => {
+      const style = getComputedStyle(element);
+      if (style.textOverflow === 'ellipsis' || style.overflowX === 'auto' || style.overflowX === 'scroll') return false;
+      return element.scrollWidth > element.clientWidth + 2 && element.clientWidth > 0;
+    })
+    .map(element => ({
+      text: (element.textContent || '').trim().slice(0, 40),
+      visible: element.clientWidth,
+      needed: element.scrollWidth,
+    }));
+
   // Imágenes sin medidas declaradas: provocan saltos de layout al cargar.
   const unsizedImages = [...document.querySelectorAll('img')]
     .filter(image => !image.getAttribute('width') || !image.getAttribute('height'))
@@ -129,6 +147,7 @@ const AUDIT = `(() => {
     horizontalOverflowPx: document.documentElement.scrollWidth - document.documentElement.clientWidth,
     smallTargets,
     lowContrast,
+    clipped,
     unsizedImages,
     navHeight: Math.round(navHeight),
     bodyPaddingBottom: Math.round(bodyPadding),
@@ -181,6 +200,10 @@ async function main() {
         if (report.lowContrast.length) {
           findings.push(`${width}px ${hash}: ${report.lowContrast.length} textos con contraste bajo`
             + ` (${report.lowContrast.slice(0, 3).map(item => `"${item.text}" ${item.ratio}:1 < ${item.required}`).join('; ')})`);
+        }
+        if (report.clipped.length) {
+          findings.push(`${width}px ${hash}: ${report.clipped.length} textos cortados`
+            + ` (${report.clipped.slice(0, 3).map(item => `"${item.text}" ${item.visible}px de ${item.needed}px`).join('; ')})`);
         }
         if (report.unsizedImages.length) {
           findings.push(`${width}px ${hash}: ${report.unsizedImages.length} imágenes sin width/height`);

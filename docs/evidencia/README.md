@@ -45,6 +45,7 @@ navega con el teclado.
 | Archivo | Ancho |
 |---|---|
 | `ancho-360-comercios.png` | 360 px |
+| `ancho-360-confirmacion.png` | 360 px · confirmación con la etiqueta de zona envolviendo completa |
 | `despues-390-inicio.png` | 390 px |
 | `ancho-430-comercio.png` | 430 px |
 | `escritorio-1440-inicio.png` | 1440 px |

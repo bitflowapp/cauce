@@ -141,6 +141,8 @@ un navegador real y recorrerla.
 | Indicador de entorno con contraste 3,61:1 y texto recortado | Poco legible, justo el dato que no puede pasar desapercibido | Color más oscuro y etiqueta corta, con el detalle en el `title` |
 | Enlaces y controles por debajo de 44 px | Difíciles de tocar en móvil | Altura mínima en enlaces de retroceso, pastillas de rubro, cuenta y marca |
 | Un comercio nuevo no tenía a quién asignar el reparto | El circuito de envío se cortaba en "asignado" | Alta de personas de reparto en el panel del comercio |
+| `white-space: nowrap` heredado en las casillas | La confirmación de zona de reparto se cortaba a media frase, justo el dato que define la cobertura | La etiqueta envuelve; la auditoría ahora detecta texto cortado |
+| Productos cargados por el comercio heredaban una ilustración de hamburguesa | Un pan y una limonada se mostraban como hamburguesas | Marca neutra con iniciales cuando no hay fotografía |
 
 ## 7. Supuestos tomados en esta entrega
 
