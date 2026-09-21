@@ -310,14 +310,15 @@ async function main() {
     await visit(driver, '#taxista');
     await driver.waitForFunction(`document.body.innerText.includes('Plaza San Martín')`);
     const offerText = await driver.text('.order-panel-card');
-    if (offerText.includes('2942666666') || offerText.includes('Marta Pasajera')) {
+    if (offerText.replace(/\D/g, '').includes('2942666666') || offerText.includes('Marta Pasajera')) {
       throw new Error('La solicitud abierta expone datos del pasajero');
     }
     step('Antes de aceptar, el conductor no ve nombre ni teléfono');
     await shot(driver, '13-taxista-solicitud');
 
     await driver.click('[data-action="trip-accept"]');
-    await driver.waitForFunction(`document.body.innerText.includes('2942666666')`);
+    await driver.waitForFunction(
+      `document.body.innerText.replace(/[^0-9]/g, '').includes('2942666666')`);
     step('Al aceptar, recibe el contacto para coordinar');
 
     // Con un viaje en curso, la pestaña Taxi muestra el seguimiento de ese viaje.

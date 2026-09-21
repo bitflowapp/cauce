@@ -25,7 +25,6 @@ import { confirmedPrice, isCommerciallyPurchasable, knownStock } from './core/co
 import { formatArgentinePhone } from './core/validators.js';
 
 const main = document.querySelector('#main');
-const modalContainer = document.querySelector('#modal-container');
 
 const app = {
   repository: null,

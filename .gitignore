@@ -6,6 +6,8 @@ dist/
 *.log
 .DS_Store
 
+# Las corridas completas de evidencia no se versionan; en docs/evidencia/ queda
+# un conjunto curado y explicado.
 /evidence/
 /CAUCE-demo.html
 /STATUS.md

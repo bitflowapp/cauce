@@ -6091,3 +6091,16 @@ body.is-offline .header { box-shadow: inset 0 3px 0 var(--clay); }
 .field .link-button { padding: 0; }
 
 .check-label input { width: 24px; height: 24px; }
+
+/* Áreas seguras de iPhone: con viewport-fit=cover el contenido llega al borde,
+   así que la cabecera respeta la muesca y la barra inferior el indicador. */
+.header {
+  padding-top: calc(10px + env(safe-area-inset-top, 0px));
+  padding-left: max(24px, env(safe-area-inset-left, 0px));
+  padding-right: max(24px, env(safe-area-inset-right, 0px));
+}
+
+main {
+  padding-left: max(0px, env(safe-area-inset-left, 0px));
+  padding-right: max(0px, env(safe-area-inset-right, 0px));
+}
