@@ -93,6 +93,10 @@ export function quoteCart(cart, business, products, fulfillment = 'pickup') {
       productId: product.id,
       variantId: variant ? variant.id : null,
       name: variant ? `${product.name} · ${variant.name}` : product.name,
+      // La imagen queda fotografiada con el pedido igual que el nombre y el
+      // precio. Así el historial no cambia si luego se edita el catálogo.
+      image: product.image || '',
+      dishType: product.dishType || '',
       quantity: line.quantity,
       unitPrice,
       total: unitPrice * line.quantity,

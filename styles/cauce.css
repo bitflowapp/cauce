@@ -6162,3 +6162,241 @@ main {
 
 /* En la barra de búsqueda la casilla sigue en una sola línea. */
 .search-bar .check-label { align-items: center; padding: 0; }
+
+/* --- Identidad visual de comercios y productos ----------------------- */
+
+.merchant-cover-wrap { position: relative; }
+
+.merchant-avatar {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  overflow: hidden;
+  border: 3px solid var(--white);
+  border-radius: 50%;
+  background: var(--forest-deep);
+  color: var(--white);
+  font-size: 14px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  box-shadow: var(--shadow-sm);
+}
+
+.merchant-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+.merchant-avatar-card { position: absolute; right: 14px; bottom: -18px; }
+.catalog-merchant-content { padding-top: 24px; }
+
+.shop-header { padding: 0; overflow: hidden; }
+.shop-cover { position: relative; height: 150px; background: var(--forest-tint); }
+.shop-cover > img { width: 100%; height: 100%; display: block; object-fit: cover; }
+.shop-cover::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, transparent 45%, rgba(11, 37, 31, 0.4));
+}
+.shop-cover-fallback { width: 100%; height: 100%; background: linear-gradient(135deg, var(--forest-tint), var(--sand)); }
+.merchant-avatar-shop { position: absolute; z-index: 1; left: 18px; bottom: -24px; width: 58px; height: 58px; }
+.shop-header-text { padding: 34px 18px 18px; }
+
+.product-thumb {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  flex: 0 0 52px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xs);
+  background: var(--forest-tint);
+}
+
+.product-thumb img { position: absolute; inset: 0; width: 100%; height: 100%; display: block; object-fit: cover; }
+.product-thumb-fallback { color: var(--forest); font-size: 12px; font-weight: 900; letter-spacing: 0.04em; }
+.op-card-thumb { width: 42px; height: 42px; flex-basis: 42px; }
+
+/* --- Seguimiento operativo, deliberadamente esquemático -------------- */
+
+.route-card {
+  margin: 0 0 14px;
+  padding: 18px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: linear-gradient(145deg, var(--white), #f3f6f0);
+  box-shadow: var(--shadow-sm);
+}
+
+.route-card-taxi { background: linear-gradient(145deg, var(--white), var(--mountain-blue-soft)); }
+
+.route-card-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.route-kicker { display: block; margin-bottom: 3px; color: var(--muted); font-size: 10px; font-weight: 900; letter-spacing: 0.11em; }
+.route-card h2 { margin: 0; color: var(--forest-deep); font-size: 21px; line-height: 1.15; }
+
+.estimate-chip {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  padding: 5px 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--ink-light);
+  font-size: 10px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.route-visual { --route-progress: 12%; position: relative; height: 76px; margin: 12px 8px 0; }
+.route-visual.progress-12 { --route-progress: 12%; }
+.route-visual.progress-16 { --route-progress: 16%; }
+.route-visual.progress-32 { --route-progress: 32%; }
+.route-visual.progress-52 { --route-progress: 52%; }
+.route-visual.progress-58 { --route-progress: 58%; }
+.route-visual.progress-68 { --route-progress: 68%; }
+.route-visual.progress-72 { --route-progress: 72%; }
+.route-visual.progress-92 { --route-progress: 92%; }
+.route-visual.progress-94 { --route-progress: 94%; }
+.route-visual.progress-100 { --route-progress: 100%; }
+
+.route-line,
+.route-line-complete {
+  position: absolute;
+  top: 38px;
+  left: 18px;
+  right: 18px;
+  height: 4px;
+  border-radius: 4px;
+}
+
+.route-line { overflow: hidden; background: repeating-linear-gradient(90deg, var(--line-strong) 0 9px, transparent 9px 14px); }
+.route-line-complete { top: 0; left: 0; right: auto; width: var(--route-progress); background: var(--forest); }
+.route-card-taxi .route-line-complete { background: var(--mountain-blue); }
+
+.route-node {
+  position: absolute;
+  z-index: 2;
+  top: 38px;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 3px solid var(--white);
+  border-radius: 50%;
+  background: var(--forest-deep);
+  color: var(--white);
+  box-shadow: var(--shadow-xs);
+  transform: translateY(-50%);
+}
+
+.route-node-start { left: 0; }
+.route-node-end { right: 0; background: var(--clay); }
+
+.route-vehicle {
+  position: absolute;
+  z-index: 3;
+  top: 38px;
+  left: var(--route-progress);
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--white);
+  box-shadow: var(--shadow-sm);
+  transform: translate(-50%, -50%);
+}
+
+.route-vehicle .sticker { width: 39px; height: 39px; }
+.route-visual.is-moving .route-vehicle { animation: route-advance 1.8s cubic-bezier(0.22, 0.75, 0.25, 1) both; }
+.route-visual.progress-100 .route-vehicle { display: none; }
+.route-visual.progress-100 .route-node-end { background: var(--forest); }
+
+@keyframes route-advance {
+  from { transform: translate(calc(-50% - 34px), -50%); opacity: 0.72; }
+  to { transform: translate(-50%, -50%); opacity: 1; }
+}
+
+.route-places { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.route-places > span { display: grid; min-width: 0; }
+.route-places > span:last-child { text-align: right; }
+.route-places small { margin-bottom: 2px; color: var(--muted); font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; }
+.route-places strong { overflow-wrap: anywhere; color: var(--ink); font-size: 12px; }
+
+.route-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 13px;
+  border-top: 1px solid var(--line);
+}
+
+.route-summary > span { display: flex; align-items: center; gap: 7px; min-width: 0; color: var(--ink-light); font-size: 12px; line-height: 1.35; }
+.route-summary .icon { flex: none; color: var(--forest); }
+.route-disclaimer { margin: 12px 0 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
+
+.taxi-search-visual { position: relative; display: grid; place-items: center; height: 112px; margin-top: 4px; color: var(--mountain-blue); }
+.taxi-search-visual span,
+.taxi-search-visual span::before {
+  content: "";
+  position: absolute;
+  width: 76px;
+  height: 76px;
+  border: 2px solid var(--mountain-blue-border);
+  border-radius: 50%;
+  animation: taxi-search-pulse 1.4s ease-out 2 both;
+}
+.taxi-search-visual span::before { inset: -2px; animation-delay: 0.35s; }
+.taxi-search-visual .icon { position: relative; z-index: 1; }
+.route-status-copy { margin: 0; color: var(--ink-light); font-size: 13px; text-align: center; }
+
+/* La línea continua pertenece al componente completo; se anulan los puntos
+   decorativos heredados para no duplicar cada hito del timeline. */
+.timeline { position: relative; }
+.timeline::before {
+  content: "";
+  position: absolute;
+  top: 16px;
+  bottom: 16px;
+  left: 6px;
+  width: 2px;
+  background: var(--line-strong);
+}
+.timeline .timeline-step { margin-left: 0; padding: 9px 0; border-left: 0; }
+.timeline .timeline-step::before { display: none; }
+.timeline .timeline-dot { position: relative; z-index: 1; }
+
+@keyframes taxi-search-pulse {
+  from { opacity: 0.72; transform: scale(0.55); }
+  to { opacity: 0; transform: scale(1.42); }
+}
+
+@media (max-width: 430px) {
+  .route-card { padding: 16px; }
+  .route-card-heading { display: grid; }
+  .estimate-chip { justify-self: start; }
+  .route-summary { grid-template-columns: 1fr; }
+  .shop-cover { height: 132px; }
+}
+
+@media (max-width: 380px) {
+  .route-card h2 { font-size: 19px; }
+  .route-visual { margin-inline: 2px; }
+  .route-places { gap: 10px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .route-visual.is-moving .route-vehicle,
+  .taxi-search-visual span,
+  .taxi-search-visual span::before { animation: none !important; }
+}

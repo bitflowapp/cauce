@@ -42,6 +42,126 @@ const actor = () => app.session?.actor || null;
 const isSignedIn = () => actor()?.kind === 'account';
 const hasRole = role => Boolean(actor()?.roles?.includes(role));
 
+function productThumb(item, name = '', className = '') {
+  const label = name || item?.name || 'Producto';
+  const fallback = `<span class="product-thumb-fallback" aria-hidden="true">${esc(initialsOf(label))}</span>`;
+  return `<span class="product-thumb ${className}" aria-hidden="true">
+    ${fallback}${item?.image ? `<img src="${esc(item.image)}" alt="" loading="lazy" width="96" height="96">` : ''}
+  </span>`;
+}
+
+function merchantAvatar(business, className = '') {
+  const initials = business.initials || initialsOf(business.name);
+  return `<span class="merchant-avatar ${className}" aria-hidden="true">
+    ${business.logoImage
+      ? `<img src="${esc(business.logoImage)}" alt="" loading="lazy" width="72" height="72">`
+      : `<span>${esc(initials)}</span>`}
+  </span>`;
+}
+
+const DELIVERY_TRACK_PROGRESS = Object.freeze({
+  assigned: 12,
+  picked_up: 32,
+  on_the_way: 68,
+  arrived: 94,
+  delivered: 100,
+});
+
+function renderDeliveryTracking(order, business) {
+  const progress = DELIVERY_TRACK_PROGRESS[order.status];
+  if (order.fulfillment !== 'delivery' || progress == null) return '';
+  const active = order.status === 'on_the_way';
+  const operationalEta = {
+    assigned: 'Salida pendiente',
+    picked_up: 'Pedido retirado del comercio',
+    on_the_way: 'Entrega próxima · sin ETA telemétrica',
+    arrived: 'El reparto informó que llegó',
+    delivered: 'Entrega completada',
+  }[order.status];
+  const riderLabel = order.riderName || `Reparto de ${business.name}`;
+  return `
+    <section class="route-card route-card-delivery" aria-labelledby="delivery-tracking-title">
+      <div class="route-card-heading">
+        <div>
+          <span class="route-kicker">AVANCE ESTIMADO</span>
+          <h2 id="delivery-tracking-title">${esc(orderStatusLabel(order))}</h2>
+        </div>
+        <span class="estimate-chip">Sin GPS en tiempo real</span>
+      </div>
+      <div class="route-visual progress-${progress} ${active ? 'is-moving' : ''}" aria-hidden="true">
+        <span class="route-line"><span class="route-line-complete"></span></span>
+        <span class="route-node route-node-start">${renderIcon('store', 15)}</span>
+        <span class="route-vehicle">${renderSticker('scooter', 42)}</span>
+        <span class="route-node route-node-end">${renderIcon('pin', 15)}</span>
+      </div>
+      <div class="route-places">
+        <span><small>Origen</small><strong>${esc(business.name)}</strong></span>
+        <span><small>Destino</small><strong>${esc(order.customer?.address || 'Dirección confirmada')}</strong></span>
+      </div>
+      <div class="route-summary">
+        <span>${renderIcon('delivery', 18)} <strong>${esc(riderLabel)}</strong></span>
+        <span>${renderIcon('clock', 18)} ${esc(operationalEta)}</span>
+      </div>
+      <p class="route-disclaimer">La posición ilustra el estado operativo informado por el comercio o el reparto; no representa coordenadas en vivo.</p>
+    </section>`;
+}
+
+const TAXI_TRACK_PROGRESS = Object.freeze({
+  accepted: 16,
+  driver_on_way: 58,
+  driver_arrived: 92,
+  passenger_on_board: 52,
+  in_trip: 72,
+  completed: 100,
+});
+
+function renderTaxiTracking(trip) {
+  if (trip.status === 'searching') {
+    return `
+      <section class="route-card taxi-search-card" aria-labelledby="taxi-search-title">
+        <div class="route-card-heading">
+          <div><span class="route-kicker">SOLICITUD ACTIVA</span><h2 id="taxi-search-title">Buscando respuesta</h2></div>
+          <span class="estimate-chip">Sin ubicación en vivo</span>
+        </div>
+        <div class="taxi-search-visual" aria-hidden="true"><span></span>${renderIcon('taxi', 30)}</div>
+        <p class="route-status-copy">Consultando conductores disponibles. La pantalla cambia cuando uno acepta.</p>
+      </section>`;
+  }
+  const progress = TAXI_TRACK_PROGRESS[trip.status];
+  if (!trip.driver || progress == null) return '';
+  const approaching = ['accepted', 'driver_on_way', 'driver_arrived'].includes(trip.status);
+  const statusCopy = {
+    accepted: 'Taxi confirmado · salida a coordinar',
+    driver_on_way: 'Acercándose al punto de encuentro',
+    driver_arrived: 'El conductor informó que llegó',
+    passenger_on_board: 'Pasajero a bordo',
+    in_trip: 'Viaje iniciado · sin ETA telemétrica',
+    completed: 'Viaje finalizado',
+  }[trip.status];
+  return `
+    <section class="route-card route-card-taxi" aria-labelledby="taxi-tracking-title">
+      <div class="route-card-heading">
+        <div><span class="route-kicker">AVANCE ESTIMADO</span><h2 id="taxi-tracking-title">${esc(tripStatusLabel(trip.status))}</h2></div>
+        <span class="estimate-chip">Demostración · sin GPS</span>
+      </div>
+      <div class="route-visual progress-${progress} ${trip.status === 'driver_on_way' ? 'is-moving' : ''}" aria-hidden="true">
+        <span class="route-line"><span class="route-line-complete"></span></span>
+        <span class="route-node route-node-start">${renderIcon('pin', 15)}</span>
+        <span class="route-vehicle route-vehicle-taxi">${renderSticker('taxi', 42)}</span>
+        <span class="route-node route-node-end">${renderIcon('pin', 15)}</span>
+      </div>
+      <div class="route-places">
+        <span><small>${approaching ? 'Punto de encuentro' : 'Origen'}</small><strong>${esc(trip.origin)}</strong></span>
+        <span><small>Destino</small><strong>${esc(trip.destination)}</strong></span>
+      </div>
+      <div class="route-summary">
+        <span>${renderIcon('user', 18)} <strong>${esc(trip.driver.displayName)}</strong></span>
+        <span>${renderIcon('clock', 18)} ${esc(statusCopy)}</span>
+      </div>
+      <p class="route-disclaimer">El automóvil se mueve según el estado informado por el conductor. No representa distancia, ETA ni posición exactas.</p>
+    </section>`;
+}
+
 // ───────────────────────── enrutador ─────────────────────────
 
 const ROUTE_ALIASES = Object.freeze({
@@ -225,7 +345,7 @@ function businessCard(business) {
     : `<div class="merchant-cover merchant-cover-fallback" aria-hidden="true"><span>${esc(business.initials || initialsOf(business.name))}</span></div>`;
   return `
     <a class="catalog-merchant-card" href="#comercio/${esc(business.id)}" data-theme="${esc(business.theme || 'sage')}">
-      <div class="merchant-cover-wrap">${cover}</div>
+      <div class="merchant-cover-wrap">${cover}${merchantAvatar(business, 'merchant-avatar-card')}</div>
       <div class="catalog-merchant-content">
         <div class="catalog-merchant-text">
           <h3>${esc(business.name)}</h3>
@@ -354,7 +474,7 @@ async function viewBusinesses() {
     ${offlineBanner()}
     <section class="page-header">
       <h1 class="page-title">Comercios de Aluminé</h1>
-      <p class="quiet">${pluralize(businesses.length, 'comercio publicado', 'comercios publicados')} en este entorno.</p>
+      <p class="quiet">${pluralize(businesses.length, 'comercio publicado', 'comercios publicados')} en este entorno · contenido ficticio de demostración.</p>
     </section>
 
     <form class="search-bar" data-form="search" role="search">
@@ -463,6 +583,12 @@ async function viewBusiness(businessId) {
     ${offlineBanner()}
     ${backLink('#comercios', 'Comercios')}
     <section class="shop-header" data-theme="${esc(business.theme || 'sage')}">
+      <div class="shop-cover">
+        ${business.coverImage
+          ? `<img src="${esc(business.coverImage)}" alt="" width="960" height="360">`
+          : `<div class="shop-cover-fallback" aria-hidden="true"></div>`}
+        ${merchantAvatar(business, 'merchant-avatar-shop')}
+      </div>
       <div class="shop-header-text">
         <h1 class="page-title">${esc(business.name)}</h1>
         <p class="quiet">${esc(business.subtitle || business.category || '')}</p>
@@ -571,9 +697,12 @@ async function viewCheckout(businessId) {
           const variantAttribute = line.variantId ? ` data-variant="${esc(line.variantId)}"` : '';
           return `
           <li class="cart-line">
-            <div class="cart-line-info">
-              <span class="cart-line-title">${esc(product?.name || 'Producto')}${variant ? ` · ${esc(variant.name)}` : ''}</span>
-              <span class="cart-line-unit-price">${money(unit)} c/u</span>
+            <div class="cart-line-product">
+              ${productThumb(product, product?.name)}
+              <div class="cart-line-info">
+                <span class="cart-line-title">${esc(product?.name || 'Producto')}${variant ? ` · ${esc(variant.name)}` : ''}</span>
+                <span class="cart-line-unit-price">${money(unit)} c/u</span>
+              </div>
             </div>
             <div class="cart-line-controls">
               <button class="qty-button" type="button" data-action="set-quantity" data-business="${esc(business.id)}"
@@ -700,14 +829,19 @@ async function viewOrder(orderId) {
           </li>`).join('')}
       </ol>`}
 
+    ${canceled ? '' : renderDeliveryTracking(order, business)}
+
     <section class="checkout-section">
       <h2 class="checkout-section-title">Detalle</h2>
       <ul class="cart-lines-list">
         ${order.lines.map(line => `
           <li class="cart-line">
-            <div class="cart-line-info">
-              <span class="cart-line-title">${esc(line.name)}</span>
-              <span class="cart-line-unit-price">${line.quantity} × ${money(line.unitPrice)}</span>
+            <div class="cart-line-product">
+              ${productThumb(line, line.name)}
+              <div class="cart-line-info">
+                <span class="cart-line-title">${esc(line.name)}</span>
+                <span class="cart-line-unit-price">${line.quantity} × ${money(line.unitPrice)}</span>
+              </div>
             </div>
             <span class="cart-line-total">${money(line.total)}</span>
           </li>`).join('')}
@@ -740,7 +874,9 @@ async function viewActivity() {
     <div class="stack">
       ${orders.map(order => `
         <a class="op-card" href="#pedido/${esc(order.id)}">
-          <span class="op-card-icon">${renderIcon('receipt', 18)}</span>
+          ${order.lines?.[0]?.image
+            ? productThumb(order.lines[0], order.lines[0].name, 'op-card-thumb')
+            : `<span class="op-card-icon">${renderIcon('receipt', 18)}</span>`}
           <span class="op-card-body">
             <strong>${esc(order.code)} · ${esc(nameOf(order.businessId))}</strong>
             <span class="quiet">${esc(shortDate(order.createdAt))} · ${money(order.total)}</span>
@@ -1494,6 +1630,8 @@ async function viewTrip(tripId, preloaded = null) {
     ${trip.status === 'canceled' ? `
       <div class="notice"><strong>Viaje cancelado.</strong> ${esc(trip.history.at(-1)?.note || '')}</div>` : ''}
 
+    ${renderTaxiTracking(trip)}
+
     ${closed ? '' : `
       <ol class="timeline" aria-label="Estado del viaje">
         ${steps.map(([key, label]) => `
@@ -1520,7 +1658,7 @@ async function viewTrip(tripId, preloaded = null) {
           ${trip.driver.mobileNumber ? `<li>Móvil: ${esc(trip.driver.mobileNumber)}</li>` : ''}
           ${trip.driver.phone ? `<li>Teléfono: ${esc(formatArgentinePhone(trip.driver.phone))}</li>` : ''}
         </ul>
-        <p class="microcopy">No se muestra la posición del vehículo: esta entrega no tiene seguimiento GPS.</p>
+        <p class="microcopy">Datos del entorno de prueba. La patente puede ser sintética y no identifica un servicio real.</p>
       </section>` : ''}
 
     <section class="checkout-section">
@@ -2246,4 +2384,3 @@ function registerServiceWorker() {
 }
 
 start();
-
