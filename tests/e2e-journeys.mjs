@@ -49,6 +49,16 @@ async function main() {
   };
 
   const shot = (page, name) => page.screenshot(`${SHOTS}/${name}.png`, { fullPage: true });
+  const showcase = async (page, name, focusSelector = '') => {
+    await page.evaluate(`(() => {
+      document.activeElement?.blur?.();
+      const target = ${JSON.stringify(focusSelector)} ? document.querySelector(${JSON.stringify(focusSelector)}) : null;
+      if (target) target.scrollIntoView({ block: 'start', behavior: 'instant' });
+      else window.scrollTo(0, 0);
+      return true;
+    })()`);
+    return page.screenshot(`${SHOTS}/${name}.png`);
+  };
 
   // Navegación completa (recarga real de la ruta), que además comprueba que
   // cada enlace directo funciona al abrirlo o recargarlo.
@@ -88,6 +98,10 @@ async function main() {
     if (!/pruebas/i.test(chip)) throw new Error(`El indicador de entorno dice "${chip}"`);
     step('El entorno local se identifica en la cabecera', chip);
     await shot(visitor, '00-inicio');
+    await showcase(visitor, 'showcase-01-home-390');
+    await visitor.setViewport({ width: 1440, height: 900, mobile: false });
+    await showcase(visitor, 'showcase-01-home-desktop');
+    await visitor.setViewport({ width: 390, height: 844, mobile: true });
 
     // ───────── recorrido 1: alta y publicación de un comercio ─────────
     console.log('\nRecorrido 1 · alta y publicación de un comercio');
@@ -136,6 +150,18 @@ async function main() {
     await merchant.click('[data-form="product-create"] button[type="submit"]');
     await merchant.waitForFunction(`document.querySelector('#toast')?.textContent.includes('catálogo')`);
     step('Carga un producto');
+
+    // El producto de prueba usa una fotografía incluida y documentada en el
+    // repositorio. Se configura en el fixture E2E porque el formulario de alta
+    // todavía no incorpora un selector de archivos.
+    {
+      const row = database.prepare('SELECT doc FROM domain_state WHERE id = 1').get();
+      const state = JSON.parse(row.doc);
+      const product = state.products.find(item => item.businessId === 'almacen-el-pehuen' && item.name === 'Pan casero de campo');
+      product.image = 'assets/images/dishes/pan-campo-hogaza.webp';
+      product.dishType = 'sandwich';
+      database.prepare('UPDATE domain_state SET doc = ? WHERE id = 1').run(JSON.stringify(state));
+    }
 
     // Un segundo producto con variantes simples.
     await merchant.fill('#prod-name', 'Limonada por tamaño');
@@ -219,6 +245,10 @@ async function main() {
     await customer.waitForFunction('document.querySelector("#main")?.getAttribute("aria-busy") === "false"');
     step('Elige una variante del producto que las tiene', `${variantButtons} opciones ofrecidas`);
     await shot(customer, '06-catalogo-cliente');
+    await showcase(customer, 'showcase-02-comercio-productos-390');
+    await customer.setViewport({ width: 360, height: 800, mobile: true });
+    await showcase(customer, 'showcase-02-comercio-productos-360');
+    await customer.setViewport({ width: 390, height: 844, mobile: true });
 
     const cartVisible = await customer.evaluate(
       `document.querySelector('#bnav-carrito')?.hidden === false`);
@@ -239,6 +269,7 @@ async function main() {
     if (!/Grande/.test(detalle)) throw new Error('La confirmación no identifica la variante elegida');
     step('La confirmación muestra el total antes de confirmar', total.replace(/\n/g, ' '));
     await shot(customer, '07-confirmacion');
+    await showcase(customer, 'showcase-03-carrito-imagenes-390');
 
     // Doble toque real sobre el botón de confirmar.
     await customer.evaluate(`(() => {
@@ -248,6 +279,7 @@ async function main() {
       return true;
     })()`);
     await customer.waitForFunction(`location.hash.startsWith('#pedido/')`);
+    const orderHash = await customer.evaluate('location.hash');
     const orderCount = database.prepare('SELECT doc FROM domain_state WHERE id = 1').get();
     const ordersInState = JSON.parse(orderCount.doc).orders.length;
     if (ordersInState !== 1) throw new Error(`El doble toque creó ${ordersInState} pedidos`);
@@ -259,9 +291,11 @@ async function main() {
     step('El pedido llega al panel del comercio, en otra sesión');
     await shot(merchant, '09-panel-pedido');
 
-    for (const label of ['Aceptar', 'Informar preparación', 'Listo para enviar']) {
-      await clickByLabel(merchant, '.order-panel-actions button', label);
-    }
+    for (const label of ['Aceptar', 'Informar preparación']) await clickByLabel(merchant, '.order-panel-actions button', label);
+    await visit(customer, orderHash);
+    await customer.waitForFunction(`/en preparaci/i.test(document.querySelector('#main').innerText)`);
+    await showcase(customer, 'showcase-04-pedido-preparacion-390');
+    await clickByLabel(merchant, '.order-panel-actions button', 'Listo para enviar');
     step('El comercio acepta, prepara y marca listo');
 
     await merchant.click('[data-action="set-panel-tab"][data-tab="reparto"]');
@@ -278,7 +312,13 @@ async function main() {
     await merchant.waitForFunction(`document.querySelector('#toast')?.textContent.includes('asignado')`);
     step('Asigna el reparto al pedido');
 
-    for (const label of ['Retirado por el reparto', 'Marcar salida', 'Llegó a destino', 'Marcar entregado']) {
+    for (const label of ['Retirado por el reparto', 'Marcar salida']) {
+      await clickByLabel(merchant, '.order-panel-actions button', label);
+    }
+    await visit(customer, orderHash);
+    await customer.waitForFunction(`/avance estimado/i.test(document.querySelector('#main').innerText)`);
+    await showcase(customer, 'showcase-05-pedido-en-camino-390', '.route-card');
+    for (const label of ['Llegó a destino', 'Marcar entregado']) {
       await clickByLabel(merchant, '.order-panel-actions button', label);
     }
     step('Marca salida y entrega');
@@ -287,6 +327,8 @@ async function main() {
     await visit(customer, '#actividad');
     await customer.waitForFunction(`/entregado/i.test(document.querySelector('#main').innerText)`);
     step('La clienta ve el pedido entregado en su propia sesión');
+    await visit(customer, orderHash);
+    await showcase(customer, 'showcase-09-historial-detalle-imagenes-390', '.route-card');
 
     // ───────── recorrido 3: taxi ─────────
     console.log('\nRecorrido 3 · solicitud y aceptación de taxi');
@@ -327,6 +369,8 @@ async function main() {
     await passenger.waitForFunction(`/buscando respuesta/i.test(document.body.innerText)`);
     step('La pasajera solicita el taxi');
     await shot(passenger, '12-taxi-solicitado');
+    await passenger.waitForFunction(`document.querySelector('#toast')?.hidden === true`, { timeout: 6000 });
+    await showcase(passenger, 'showcase-06-taxi-buscando-390');
 
     await visit(driver, '#taxista');
     await driver.waitForFunction(`document.body.innerText.includes('Plaza San Martín')`);
@@ -347,8 +391,14 @@ async function main() {
     await passenger.waitForFunction(`document.body.innerText.includes('AB 123 CD')`);
     step('La pasajera ve el vehículo asignado');
     await shot(passenger, '14-taxi-confirmado');
+    await showcase(passenger, 'showcase-07-taxi-confirmado-390', '.route-card');
 
-    for (const label of ['Voy hacia pasajero', 'Llegué al origen', 'Pasajero a bordo', 'Iniciar viaje a destino', 'Finalizar viaje']) {
+    await clickByLabel(driver, '[data-action="trip-advance"]', 'Voy hacia pasajero');
+    await visit(passenger, '#taxi');
+    await passenger.waitForFunction(`/acercándose al punto de encuentro/i.test(document.querySelector('#main').innerText)`);
+    await showcase(passenger, 'showcase-08-taxi-acercandose-390', '.route-card');
+
+    for (const label of ['Llegué al origen', 'Pasajero a bordo', 'Iniciar viaje a destino', 'Finalizar viaje']) {
       await clickByLabel(driver, '[data-action="trip-advance"]', label);
     }
     step('El taxista recorre todos los estados hasta finalizar');
