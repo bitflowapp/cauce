@@ -5,6 +5,7 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { initialDemoState } from '../js/data/demo.js';
 import { quoteCart } from '../js/core/cart.js';
+import { renderCharacter } from '../js/ui/brand-characters.js';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 
@@ -37,4 +38,19 @@ test('las animaciones de tracking son finitas y respetan movimiento reducido', a
   assert.match(css, /@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*\.route-visual\.is-moving/);
   assert.doesNotMatch(css, /route-advance[^;]*infinite/);
   assert.doesNotMatch(css, /taxi-search-pulse[^;]*infinite/);
+  assert.doesNotMatch(css, /brand-wheel-turn[^;]*infinite/);
+});
+
+test('los personajes de marca son SVG livianos, decorativos y contextuales', () => {
+  const names = ['shopper', 'courier', 'taxi-driver', 'merchant', 'search', 'celebrate'];
+  const drawings = names.map(name => renderCharacter(name, 96));
+  assert.equal(new Set(drawings).size, names.length);
+  for (const drawing of drawings) {
+    assert.match(drawing, /^<svg/);
+    assert.match(drawing, /class="brand-character/);
+    assert.match(drawing, /aria-hidden="true"/);
+    assert.match(drawing, /focusable="false"/);
+    assert.doesNotMatch(drawing, /<text\b/);
+    assert.ok(drawing.length < 5000, 'cada personaje debe seguir siendo un SVG compacto');
+  }
 });
