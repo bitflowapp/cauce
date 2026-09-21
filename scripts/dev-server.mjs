@@ -358,7 +358,9 @@ export function createDevServer({ database = openDatabase(), root = ROOT, apiBas
         // aparezca "Demostración" ni por un instante antes de que corra el script.
         content = Buffer.from(String(content)
           .replace("connect-src 'none'", "connect-src 'self'")
-          .replace(/(<span class="env-chip"[^>]*>)[^<]*(<\/span>)/, '$1Pruebas$2'), 'utf8');
+          .replace(/(<span class="env-chip"[^>]*>)[^<]*(<\/span>)/, '$1Pruebas$2')
+          .replace(/(<p class="footer-note" id="footer-env">)[^<]*(<\/p>)/,
+            '$1Entorno de pruebas local · Backend local con sesiones autenticadas y persistencia compartida.$2'), 'utf8');
       }
       response.statusCode = 200;
       response.setHeader('Content-Type', mime);

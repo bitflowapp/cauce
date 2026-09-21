@@ -172,9 +172,16 @@ function updateShell() {
 
   const envChip = document.querySelector('#env-chip');
   if (envChip) {
+    // En la cabecera va la forma corta, para que entre a 360 px sin recortarse;
+    // el pie lleva la frase completa y el detalle está en el título accesible.
     envChip.textContent = RUNTIME_ENV.environment === 'demo' ? 'Demostración' : 'Pruebas';
     envChip.title = `${RUNTIME_ENV.label}. ${RUNTIME_ENV.description}`;
     envChip.dataset.environment = RUNTIME_ENV.environment;
+  }
+
+  const footerEnv = document.querySelector('#footer-env');
+  if (footerEnv) {
+    footerEnv.textContent = `${RUNTIME_ENV.label} · ${RUNTIME_ENV.description}`;
   }
 
   const accountLink = document.querySelector('#account-link');
