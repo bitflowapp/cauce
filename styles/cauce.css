@@ -3424,6 +3424,14 @@ main:empty {
   filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.08));
 }
 
+.empty-character {
+  display: grid;
+  place-items: center;
+  min-height: 92px;
+}
+
+.empty-character .brand-character { width: 112px; height: auto; }
+
 .pres-card-icon {
   margin-bottom: 12px;
 }
@@ -5390,6 +5398,18 @@ footer.footer, footer {
   color: var(--white);
 }
 
+.home-hero-character {
+  position: absolute;
+  z-index: 2;
+  top: 16px;
+  right: 12px;
+  width: 96px;
+  pointer-events: none;
+  filter: drop-shadow(0 8px 14px rgba(6, 22, 18, 0.24));
+}
+
+.home-hero-character .brand-character { display: block; width: 100%; height: auto; }
+
 .home-hero-body .eyebrow { color: rgba(255, 255, 255, 0.86); }
 
 .home-hero-body h1 {
@@ -5399,6 +5419,7 @@ footer.footer, footer {
   line-height: 1.12;
   font-weight: 800;
   letter-spacing: -0.02em;
+  max-width: calc(100% - 92px);
 }
 
 .home-actions { display: grid; gap: 10px; }
@@ -6055,7 +6076,9 @@ footer.footer, footer {
   .product-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .home-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .home-secondary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .home-hero-body { padding: 48px 44px 44px; max-width: 640px; }
+  .home-hero-body { padding: 48px 44px 44px; max-width: 700px; }
+  .home-hero-body h1 { max-width: 500px; }
+  .home-hero-character { top: 18px; right: 46px; width: 205px; }
 }
 
 @media (max-width: 380px) {
@@ -6218,6 +6241,37 @@ main {
 .product-thumb-fallback { color: var(--forest); font-size: 12px; font-weight: 900; letter-spacing: 0.04em; }
 .op-card-thumb { width: 42px; height: 42px; flex-basis: 42px; }
 
+/* --- Identidad ilustrada aplicada a momentos operativos --------------- */
+
+.brand-intro,
+.brand-status-card {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 14px;
+  overflow: hidden;
+  margin-bottom: 16px;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: linear-gradient(135deg, var(--forest-tint), var(--white));
+  box-shadow: var(--shadow-xs);
+}
+
+.brand-intro > div,
+.brand-status-character { order: 2; width: 112px; align-self: end; }
+.brand-intro .brand-character,
+.brand-status-character .brand-character { display: block; width: 100%; height: auto; }
+.brand-intro p { display: grid; gap: 4px; margin: 0; color: var(--ink-light); font-size: 12px; line-height: 1.45; }
+.brand-intro strong { color: var(--forest-deep); font-size: 15px; }
+.brand-intro span { display: block; }
+
+.brand-status-card { min-height: 126px; background: linear-gradient(135deg, var(--white), var(--sand)); }
+.brand-status-copy { min-width: 0; }
+.brand-status-copy h2 { margin: 0; color: var(--forest-deep); font-size: 20px; }
+.brand-status-copy p { margin: 7px 0 0; color: var(--ink-light); font-size: 13px; line-height: 1.45; }
+
 /* --- Seguimiento operativo, deliberadamente esquemático -------------- */
 
 .route-card {
@@ -6256,7 +6310,7 @@ main {
   text-align: center;
 }
 
-.route-visual { --route-progress: 12%; position: relative; height: 76px; margin: 12px 8px 0; }
+.route-visual { --route-progress: 12%; position: relative; height: 104px; margin: 10px 8px 0; }
 .route-visual.progress-12 { --route-progress: 12%; }
 .route-visual.progress-16 { --route-progress: 16%; }
 .route-visual.progress-32 { --route-progress: 32%; }
@@ -6271,7 +6325,7 @@ main {
 .route-line,
 .route-line-complete {
   position: absolute;
-  top: 38px;
+  top: 58px;
   left: 18px;
   right: 18px;
   height: 4px;
@@ -6285,7 +6339,7 @@ main {
 .route-node {
   position: absolute;
   z-index: 2;
-  top: 38px;
+  top: 58px;
   display: grid;
   place-items: center;
   width: 34px;
@@ -6304,27 +6358,33 @@ main {
 .route-vehicle {
   position: absolute;
   z-index: 3;
-  top: 38px;
-  left: var(--route-progress);
+  top: 58px;
+  left: clamp(42px, var(--route-progress), calc(100% - 42px));
   display: grid;
   place-items: center;
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  background: var(--white);
-  box-shadow: var(--shadow-sm);
+  width: 86px;
+  height: 76px;
   transform: translate(-50%, -50%);
 }
 
-.route-vehicle .sticker { width: 39px; height: 39px; }
+.route-character-vehicle .brand-character { display: block; width: 86px; height: auto; filter: drop-shadow(0 5px 6px rgba(17, 24, 23, 0.12)); }
 .route-visual.is-moving .route-vehicle { animation: route-advance 1.8s cubic-bezier(0.22, 0.75, 0.25, 1) both; }
-.route-visual.progress-100 .route-vehicle { display: none; }
+.route-visual.is-moving .brand-character { animation: character-tilt 1.8s cubic-bezier(0.22, 0.75, 0.25, 1) both; }
+.route-visual.is-moving .brand-wheel { transform-box: fill-box; transform-origin: center; animation: brand-wheel-turn 1.8s linear 1 both; }
 .route-visual.progress-100 .route-node-end { background: var(--forest); }
 
 @keyframes route-advance {
   from { transform: translate(calc(-50% - 34px), -50%); opacity: 0.72; }
   to { transform: translate(-50%, -50%); opacity: 1; }
 }
+
+@keyframes character-tilt {
+  0% { transform: rotate(-2deg); }
+  65% { transform: rotate(1.5deg); }
+  100% { transform: rotate(0); }
+}
+
+@keyframes brand-wheel-turn { to { transform: rotate(540deg); } }
 
 .route-places { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
 .route-places > span { display: grid; min-width: 0; }
@@ -6345,7 +6405,7 @@ main {
 .route-summary .icon { flex: none; color: var(--forest); }
 .route-disclaimer { margin: 12px 0 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
 
-.taxi-search-visual { position: relative; display: grid; place-items: center; height: 112px; margin-top: 4px; color: var(--mountain-blue); }
+.taxi-search-visual { position: relative; display: grid; place-items: center; height: 122px; margin-top: 4px; color: var(--mountain-blue); }
 .taxi-search-visual span,
 .taxi-search-visual span::before {
   content: "";
@@ -6357,7 +6417,7 @@ main {
   animation: taxi-search-pulse 1.4s ease-out 2 both;
 }
 .taxi-search-visual span::before { inset: -2px; animation-delay: 0.35s; }
-.taxi-search-visual .icon { position: relative; z-index: 1; }
+.taxi-search-visual .brand-character { position: relative; z-index: 1; width: 104px; height: auto; filter: drop-shadow(0 5px 7px rgba(17, 24, 23, 0.12)); }
 .route-status-copy { margin: 0; color: var(--ink-light); font-size: 13px; text-align: center; }
 
 /* La línea continua pertenece al componente completo; se anulan los puntos
@@ -6387,6 +6447,10 @@ main {
   .estimate-chip { justify-self: start; }
   .route-summary { grid-template-columns: 1fr; }
   .shop-cover { height: 132px; }
+  .brand-intro,
+  .brand-status-card { grid-template-columns: 1fr 86px; padding: 14px 14px 14px 16px; }
+  .brand-intro > div,
+  .brand-status-character { width: 88px; }
 }
 
 @media (max-width: 380px) {
@@ -6397,6 +6461,8 @@ main {
 
 @media (prefers-reduced-motion: reduce) {
   .route-visual.is-moving .route-vehicle,
+  .route-visual.is-moving .brand-character,
+  .route-visual.is-moving .brand-wheel,
   .taxi-search-visual span,
   .taxi-search-visual span::before { animation: none !important; }
 }

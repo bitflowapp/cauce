@@ -9,6 +9,7 @@ import { RUNTIME_ENV } from './runtime-env.js';
 import { createRepository } from './repositories/repository-factory.js';
 import { isNetworkError } from './repositories/http-repository.js';
 import { renderIcon, renderSticker } from './ui/icons.js';
+import { renderCharacter } from './ui/brand-characters.js';
 import {
   esc, money, shortDate, timeOnly, relativeMinutes, orderStatusLabel, orderStatusTone,
   stepsFor, stepIndex, fulfillmentLabel, paymentLabel, businessStatusLabel, tripStatusLabel,
@@ -67,6 +68,20 @@ const DELIVERY_TRACK_PROGRESS = Object.freeze({
   delivered: 100,
 });
 
+function renderOrderMoment(order) {
+  const moment = {
+    received: ['merchant', 'Pedido recibido', 'El comercio ya puede revisarlo y confirmar si lo toma.'],
+    accepted: ['merchant', 'Pedido aceptado', 'El comercio confirmó que puede prepararlo.'],
+    preparing: ['merchant', 'Preparando tu pedido', 'El comercio está trabajando en los productos del pedido.'],
+    ready: ['shopper', 'Pedido listo', order.fulfillment === 'delivery' ? 'Está listo para asignar el reparto.' : 'Ya podés retirarlo por el comercio.'],
+  }[order.status];
+  if (!moment) return '';
+  return `<section class="brand-status-card" aria-labelledby="order-moment-title">
+    <div class="brand-status-copy"><span class="route-kicker">ESTADO ACTUAL</span><h2 id="order-moment-title">${esc(moment[1])}</h2><p>${esc(moment[2])}</p></div>
+    <div class="brand-status-character" aria-hidden="true">${renderCharacter(moment[0], 112)}</div>
+  </section>`;
+}
+
 function renderDeliveryTracking(order, business) {
   const progress = DELIVERY_TRACK_PROGRESS[order.status];
   if (order.fulfillment !== 'delivery' || progress == null) return '';
@@ -79,6 +94,7 @@ function renderDeliveryTracking(order, business) {
     delivered: 'Entrega completada',
   }[order.status];
   const riderLabel = order.riderName || `Reparto de ${business.name}`;
+  const character = order.status === 'delivered' ? 'celebrate' : 'courier';
   return `
     <section class="route-card route-card-delivery" aria-labelledby="delivery-tracking-title">
       <div class="route-card-heading">
@@ -91,7 +107,7 @@ function renderDeliveryTracking(order, business) {
       <div class="route-visual progress-${progress} ${active ? 'is-moving' : ''}" aria-hidden="true">
         <span class="route-line"><span class="route-line-complete"></span></span>
         <span class="route-node route-node-start">${renderIcon('store', 15)}</span>
-        <span class="route-vehicle">${renderSticker('scooter', 42)}</span>
+        <span class="route-vehicle route-character-vehicle">${renderCharacter(character, 82)}</span>
         <span class="route-node route-node-end">${renderIcon('pin', 15)}</span>
       </div>
       <div class="route-places">
@@ -116,6 +132,17 @@ const TAXI_TRACK_PROGRESS = Object.freeze({
 });
 
 function renderTaxiTracking(trip) {
+  const closedMoment = {
+    no_availability: ['Sin disponibilidad', 'No hubo conductores disponibles para tomar esta solicitud.'],
+    expired: ['Solicitud vencida', 'La búsqueda terminó sin una respuesta dentro del plazo.'],
+    canceled: ['Viaje cancelado', 'La solicitud se cerró y el vehículo dejó de avanzar.'],
+  }[trip.status];
+  if (closedMoment) {
+    return `<section class="brand-status-card brand-status-taxi" aria-labelledby="taxi-closed-title">
+      <div class="brand-status-copy"><span class="route-kicker">ESTADO DEL VIAJE</span><h2 id="taxi-closed-title">${esc(closedMoment[0])}</h2><p>${esc(closedMoment[1])}</p></div>
+      <div class="brand-status-character" aria-hidden="true">${renderCharacter(trip.status === 'canceled' ? 'taxi-driver' : 'search', 112)}</div>
+    </section>`;
+  }
   if (trip.status === 'searching') {
     return `
       <section class="route-card taxi-search-card" aria-labelledby="taxi-search-title">
@@ -123,7 +150,7 @@ function renderTaxiTracking(trip) {
           <div><span class="route-kicker">SOLICITUD ACTIVA</span><h2 id="taxi-search-title">Buscando respuesta</h2></div>
           <span class="estimate-chip">Sin ubicación en vivo</span>
         </div>
-        <div class="taxi-search-visual" aria-hidden="true"><span></span>${renderIcon('taxi', 30)}</div>
+        <div class="taxi-search-visual" aria-hidden="true"><span></span>${renderCharacter('search', 104)}</div>
         <p class="route-status-copy">Consultando conductores disponibles. La pantalla cambia cuando uno acepta.</p>
       </section>`;
   }
@@ -147,7 +174,7 @@ function renderTaxiTracking(trip) {
       <div class="route-visual progress-${progress} ${trip.status === 'driver_on_way' ? 'is-moving' : ''}" aria-hidden="true">
         <span class="route-line"><span class="route-line-complete"></span></span>
         <span class="route-node route-node-start">${renderIcon('pin', 15)}</span>
-        <span class="route-vehicle route-vehicle-taxi">${renderSticker('taxi', 42)}</span>
+        <span class="route-vehicle route-character-vehicle route-vehicle-taxi">${renderCharacter(trip.status === 'completed' ? 'celebrate' : 'taxi-driver', 86)}</span>
         <span class="route-node route-node-end">${renderIcon('pin', 15)}</span>
       </div>
       <div class="route-places">
@@ -218,9 +245,13 @@ function parseVariants(value) {
   }).filter(variant => variant.name);
 }
 
+const EMPTY_CHARACTERS = Object.freeze({
+  diner: 'search', bag: 'shopper', merchant: 'merchant', taxi: 'taxi-driver', wave: 'search',
+});
+
 const emptyState = (title, message, href = '#comercios', label = 'Ver comercios', sticker = 'diner') => `
   <section class="empty">
-    <div class="empty-sticker" aria-hidden="true">${renderSticker(sticker, 64)}</div>
+    <div class="empty-sticker empty-character" aria-hidden="true">${renderCharacter(EMPTY_CHARACTERS[sticker] || sticker, 112)}</div>
     <h2>${esc(title)}</h2>
     <p>${esc(message)}</p>
     <a class="button" href="${esc(href)}">${esc(label)}</a>
@@ -420,6 +451,7 @@ async function viewHome() {
           <a class="button button-hero-outline" href="#taxi">${renderIcon('taxi', 18)} Pedir un taxi</a>
         </div>
       </div>
+      <div class="home-hero-character" aria-hidden="true">${renderCharacter('shopper', 180)}</div>
     </section>
 
     ${operation}
@@ -829,6 +861,7 @@ async function viewOrder(orderId) {
           </li>`).join('')}
       </ol>`}
 
+    ${canceled ? '' : renderOrderMoment(order)}
     ${canceled ? '' : renderDeliveryTracking(order, business)}
 
     <section class="checkout-section">
@@ -1050,6 +1083,10 @@ async function viewBusinessSignup() {
         <h1 class="page-title">Sumar mi comercio</h1>
         <p class="quiet">El alta la hace el propio comercio: creás tu cuenta, cargás tus datos y tu catálogo, y solicitás la publicación.</p>
       </section>
+      <section class="brand-intro brand-intro-merchant">
+        <div>${renderCharacter('merchant', 128)}</div>
+        <p><strong>Tu vidriera, dentro de CAUCE.</strong><span>Cargá tus datos, fotos y productos. La publicación se activa después de la revisión de CAUCE.</span></p>
+      </section>
       <div class="notice"><strong>Primero necesitás una cuenta.</strong> Es la que después usás para gestionar tus pedidos.</div>
       <a class="button full" href="#cuenta">Ingresar o crear cuenta</a>
       <section class="checkout-section">
@@ -1070,6 +1107,10 @@ async function viewBusinessSignup() {
     <section class="page-header">
       <h1 class="page-title">Nuevo comercio</h1>
       <p class="quiet">Se crea como borrador. Vas a poder completar el resto y cargar productos antes de solicitar la publicación.</p>
+    </section>
+    <section class="brand-intro brand-intro-merchant">
+      <div>${renderCharacter('merchant', 112)}</div>
+      <p><strong>Empezá por lo esencial.</strong><span>Después vas a sumar identidad, catálogo y modalidades de entrega.</span></p>
     </section>
     <form class="checkout-form" data-form="business-create">
       ${BUSINESS_FORM_FIELDS}
