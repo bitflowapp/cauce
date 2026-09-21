@@ -14,17 +14,43 @@ export function validateQuantity(quantity) {
     'INVALID_QUANTITY', 'Elegí una cantidad entera entre 1 y 99.');
 }
 
-export function changeQuantity(cart, product, quantity) {
+// Una variante elegida forma parte de la identidad de la línea: dos variantes
+// del mismo producto son dos líneas distintas, no una que se pisa a la otra.
+export function resolveVariant(product, variantId) {
+  const variants = Array.isArray(product?.variants) ? product.variants : [];
+  if (variantId == null || variantId === '') {
+    // Si el producto exige elegir, no se puede agregar sin variante.
+    requireValue(variants.length === 0, 'VARIANT_REQUIRED', 'Elegí una opción del producto.');
+    return null;
+  }
+  const variant = variants.find(candidate => candidate.id === variantId);
+  requireValue(Boolean(variant), 'VARIANT_NOT_FOUND', 'Esa opción ya no está disponible.');
+  return variant;
+}
+
+export function lineUnitPrice(product, variant) {
+  const base = confirmedPrice(product);
+  const price = base + (variant ? Number(variant.priceDelta) || 0 : 0);
+  requireValue(Number.isSafeInteger(price) && price > 0, 'INVALID_PRICE', 'Precio inválido.');
+  return price;
+}
+
+const sameLine = (line, productId, variantId) =>
+  line.productId === productId && (line.variantId ?? null) === (variantId ?? null);
+
+export function changeQuantity(cart, product, quantity, variantId = null) {
   assertScope(product, cart);
   requireValue(Number.isSafeInteger(quantity) && quantity >= 0 && quantity <= MAX_QUANTITY, 'INVALID_QUANTITY', 'Cantidad inválida.');
+  const variant = quantity > 0 ? resolveVariant(product, variantId) : null;
   if (quantity > 0) {
     validateQuantity(quantity);
     requireValue(isCommerciallyPurchasable(product), 'PRODUCT_UNAVAILABLE', 'El producto no está disponible.');
     requireValue(quantity <= knownStock(product), 'INSUFFICIENT_STOCK', 'No hay stock suficiente.');
   }
   const next = clone(cart);
-  next.lines = next.lines.filter(line => line.productId !== product.id);
-  if (quantity > 0) next.lines.push({ productId: product.id, quantity });
+  const key = variant ? variant.id : (variantId || null);
+  next.lines = next.lines.filter(line => !sameLine(line, product.id, key));
+  if (quantity > 0) next.lines.push({ productId: product.id, quantity, variantId: variant ? variant.id : null });
   delete next.requestId;
   return next;
 }
@@ -47,18 +73,30 @@ export function quoteCart(cart, business, products, fulfillment = 'pickup') {
     'FULFILLMENT_DISABLED', 'La modalidad no está disponible.');
 
   const seen = new Set();
+  const stockUsed = new Map();
   const lines = cart.lines.map(line => {
-    requireValue(!seen.has(line.productId), 'DUPLICATE_PRODUCT', 'El carrito contiene un producto duplicado.');
-    seen.add(line.productId);
+    const identity = `${line.productId}|${line.variantId ?? ''}`;
+    requireValue(!seen.has(identity), 'DUPLICATE_PRODUCT', 'El carrito contiene un producto duplicado.');
+    seen.add(identity);
     validateQuantity(line.quantity);
     const product = products.find(p => p.id === line.productId);
     requireValue(Boolean(product), 'PRODUCT_MISSING', 'Un producto ya no está disponible.');
     assertScope(product, cart);
     requireValue(isCommerciallyPurchasable(product), 'PRODUCT_UNAVAILABLE', 'Un producto dejó de estar disponible.');
-    requireValue(line.quantity <= knownStock(product), 'INSUFFICIENT_STOCK', 'El stock cambió. Revisá tu carrito.');
-    const unitPrice = confirmedPrice(product);
-    requireValue(Number.isSafeInteger(unitPrice) && unitPrice > 0, 'INVALID_PRICE', 'Precio inválido.');
-    return { productId: product.id, name: product.name, quantity: line.quantity, unitPrice, total: unitPrice * line.quantity };
+    const variant = resolveVariant(product, line.variantId ?? null);
+    // El stock es del producto: varias variantes suyas comparten las existencias.
+    const used = (stockUsed.get(product.id) || 0) + line.quantity;
+    stockUsed.set(product.id, used);
+    requireValue(used <= knownStock(product), 'INSUFFICIENT_STOCK', 'El stock cambió. Revisá tu carrito.');
+    const unitPrice = lineUnitPrice(product, variant);
+    return {
+      productId: product.id,
+      variantId: variant ? variant.id : null,
+      name: variant ? `${product.name} · ${variant.name}` : product.name,
+      quantity: line.quantity,
+      unitPrice,
+      total: unitPrice * line.quantity,
+    };
   });
 
   const subtotal = lines.reduce((sum, line) => sum + line.total, 0);

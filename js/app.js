@@ -85,6 +85,19 @@ function draft(key, values) {
 
 const backLink = (href, label) => `<a class="back" href="${esc(href)}">← ${esc(label)}</a>`;
 
+// "Chica, Grande +2000, Familiar -500" -> variantes con su diferencia de precio.
+// La validación real la hace el dominio; acá sólo se interpreta lo escrito.
+function parseVariants(value) {
+  const text = String(value || '').trim();
+  if (!text) return [];
+  return text.split(',').map(part => {
+    const match = part.trim().match(/^(.*?)\s*([+\u2212-]\s*\d+)?$/);
+    const name = (match?.[1] || part).trim();
+    const raw = (match?.[2] || '').replace(/\s+/g, '').replace('\u2212', '-');
+    return { name, priceDelta: raw ? Number(raw) : 0 };
+  }).filter(variant => variant.name);
+}
+
 const emptyState = (title, message, href = '#comercios', label = 'Ver comercios', sticker = 'diner') => `
   <section class="empty">
     <div class="empty-sticker" aria-hidden="true">${renderSticker(sticker, 64)}</div>
@@ -217,13 +230,13 @@ function businessCard(business) {
     </a>`;
 }
 
-function filterBusinesses(businesses) {
+function filterBusinesses(businesses, catalogs = {}) {
   const query = app.search.query.trim().toLowerCase();
   return businesses.filter(business => {
     if (app.search.onlyOpen && !business.open) return false;
     if (app.search.category !== 'Todos' && business.category !== app.search.category) return false;
     if (!query) return true;
-    return [business.name, business.category, business.subtitle, business.description]
+    return [business.name, business.category, business.subtitle, business.description, catalogs[business.id]]
       .filter(Boolean).some(field => field.toLowerCase().includes(query));
   });
 }
@@ -320,7 +333,15 @@ async function viewHome() {
 async function viewBusinesses() {
   const businesses = await app.repository.query('publicBusinesses');
   const categories = ['Todos', ...new Set(businesses.map(business => business.category).filter(Boolean))];
-  const visible = filterBusinesses(businesses);
+  // Buscar "pizza" tiene que encontrar al comercio que vende pizza, no sólo al
+  // que se llama así: se consulta el catálogo de cada comercio publicado.
+  const catalogs = app.search.query.trim()
+    ? Object.fromEntries(await Promise.all(businesses.map(async business => [
+      business.id,
+      (await app.repository.query('products', { businessId: business.id })).map(product => product.name).join(' '),
+    ])))
+    : {};
+  const visible = filterBusinesses(businesses, catalogs);
 
   return `
     ${offlineBanner()}
@@ -349,7 +370,9 @@ async function viewBusinesses() {
 
     ${visible.length
       ? `<div class="merchant-grid">${visible.map(businessCard).join('')}</div>`
-      : emptyState('Sin resultados', 'Probá con otro rubro o quitá los filtros.', '#comercios', 'Limpiar búsqueda', 'bag')}`;
+      : emptyState('Sin resultados',
+        'La búsqueda mira el nombre del comercio, su rubro y sus productos. Probá con otra palabra o quitá los filtros.',
+        '#comercios', 'Ver todos los comercios', 'bag')}`;
 }
 
 async function viewBusiness(businessId) {
@@ -365,12 +388,18 @@ async function viewBusiness(businessId) {
   const count = cart.lines.reduce((total, line) => total + line.quantity, 0);
 
   const productCard = product => {
-    const quantity = lines.get(product.id) || 0;
+    const variants = Array.isArray(product.variants) ? product.variants : [];
+    // Con variantes, cada combinacion es una linea propia del carrito.
+    const quantity = variants.length
+      ? cart.lines.filter(line => line.productId === product.id).reduce((total, line) => total + line.quantity, 0)
+      : (lines.get(product.id) || 0);
     const stock = knownStock(product);
     const available = isCommerciallyPurchasable(product) && stock > 0;
     const image = product.image
       ? `<img src="${esc(product.image)}" alt="" loading="lazy" width="320" height="240">`
-      : getProductSvg(product.dishType);
+      : product.dishType
+        ? getProductSvg(product.dishType)
+        : `<span class="product-mark">${esc(initialsOf(product.name))}</span>`;
     return `
       <article class="product-card ${available ? '' : 'is-unavailable'}">
         <div class="product-media" aria-hidden="true">${image}</div>
@@ -380,6 +409,32 @@ async function viewBusiness(businessId) {
           <p class="product-price">${money(confirmedPrice(product))}</p>
           ${available ? '' : `<p class="product-flag">${stock <= 0 ? 'Sin stock' : 'No disponible'}</p>`}
         </div>
+        ${variants.length ? `
+          <div class="variant-list">
+            ${variants.map(variant => {
+              const line = cart.lines.find(item => item.productId === product.id && item.variantId === variant.id);
+              const count = line?.quantity || 0;
+              return `
+                <div class="variant-row">
+                  <span class="variant-name">${esc(variant.name)}${variant.priceDelta
+                    ? ` <span class="quiet">${variant.priceDelta > 0 ? '+' : '−'}${money(Math.abs(variant.priceDelta))}</span>` : ''}</span>
+                  ${available ? (count > 0 ? `
+                    <div class="qty-control" role="group" aria-label="Cantidad de ${esc(product.name)} ${esc(variant.name)}">
+                      <button class="qty-button" type="button" data-action="set-quantity" data-business="${esc(business.id)}"
+                        data-product="${esc(product.id)}" data-variant="${esc(variant.id)}" data-quantity="${count - 1}"
+                        aria-label="Quitar una unidad">−</button>
+                      <span class="qty-value" aria-live="polite">${count}</span>
+                      <button class="qty-button" type="button" data-action="set-quantity" data-business="${esc(business.id)}"
+                        data-product="${esc(product.id)}" data-variant="${esc(variant.id)}" data-quantity="${count + 1}"
+                        ${quantity >= stock ? 'disabled' : ''} aria-label="Agregar una unidad">+</button>
+                    </div>` : `
+                    <button class="button secondary add-btn" type="button" data-action="set-quantity" data-business="${esc(business.id)}"
+                      data-product="${esc(product.id)}" data-variant="${esc(variant.id)}" data-quantity="1">Agregar</button>`)
+                    : '<span class="quiet">No disponible</span>'}
+                </div>`;
+            }).join('')}
+          </div>`
+        : `
         <div class="product-actions">
           ${available ? (quantity > 0 ? `
             <div class="qty-control" role="group" aria-label="Cantidad de ${esc(product.name)}">
@@ -393,7 +448,7 @@ async function viewBusiness(businessId) {
             <button class="button add-btn" type="button" data-action="set-quantity" data-business="${esc(business.id)}"
               data-product="${esc(product.id)}" data-quantity="1">Agregar</button>`)
             : '<span class="quiet">No disponible</span>'}
-        </div>
+        </div>`}
       </article>`;
   };
 
@@ -489,7 +544,8 @@ async function viewCheckout(businessId) {
 
   const detail = cart.lines.map(line => {
     const product = products.find(candidate => candidate.id === line.productId);
-    return { line, product };
+    const variant = (product?.variants || []).find(item => item.id === line.variantId) || null;
+    return { line, product, variant };
   });
 
   return `
@@ -503,21 +559,25 @@ async function viewCheckout(businessId) {
     <section class="checkout-section">
       <h2 class="checkout-section-title">Tu pedido</h2>
       <ul class="cart-lines-list">
-        ${detail.map(({ line, product }) => `
+        ${detail.map(({ line, product, variant }) => {
+          const unit = confirmedPrice(product || {}) + (variant ? Number(variant.priceDelta) || 0 : 0);
+          const variantAttribute = line.variantId ? ` data-variant="${esc(line.variantId)}"` : '';
+          return `
           <li class="cart-line">
             <div class="cart-line-info">
-              <span class="cart-line-title">${esc(product?.name || 'Producto')}</span>
-              <span class="cart-line-unit-price">${money(confirmedPrice(product || {}))} c/u</span>
+              <span class="cart-line-title">${esc(product?.name || 'Producto')}${variant ? ` · ${esc(variant.name)}` : ''}</span>
+              <span class="cart-line-unit-price">${money(unit)} c/u</span>
             </div>
             <div class="cart-line-controls">
               <button class="qty-button" type="button" data-action="set-quantity" data-business="${esc(business.id)}"
-                data-product="${esc(line.productId)}" data-quantity="${line.quantity - 1}" aria-label="Quitar una unidad">−</button>
+                data-product="${esc(line.productId)}"${variantAttribute} data-quantity="${line.quantity - 1}" aria-label="Quitar una unidad">−</button>
               <span class="qty-value">${line.quantity}</span>
               <button class="qty-button" type="button" data-action="set-quantity" data-business="${esc(business.id)}"
-                data-product="${esc(line.productId)}" data-quantity="${line.quantity + 1}" aria-label="Agregar una unidad">+</button>
+                data-product="${esc(line.productId)}"${variantAttribute} data-quantity="${line.quantity + 1}" aria-label="Agregar una unidad">+</button>
             </div>
-            <span class="cart-line-total">${money(confirmedPrice(product || {}) * line.quantity)}</span>
-          </li>`).join('')}
+            <span class="cart-line-total">${money(unit * line.quantity)}</span>
+          </li>`;
+        }).join('')}
       </ul>
     </section>
 
@@ -1063,6 +1123,13 @@ function merchantCatalogTab(business, products) {
             ${PRODUCT_CATEGORIES_SUGGESTED.map(category => `<option value="${esc(category)}"></option>`).join('')}
           </datalist>
         </div>
+        <div class="field">
+          <label for="prod-variants">Variantes (opcional)</label>
+          <input id="prod-variants" name="variants" type="text" maxlength="200"
+            placeholder="Chica, Grande +2000, Familiar +5000">
+          <p class="microcopy">Separadas por coma. El número suma o resta sobre el precio base.
+            Si cargás variantes, quien compra elige una.</p>
+        </div>
         <p class="microcopy">Las fotos se toman de las imágenes incluidas en el proyecto. La carga de fotos propias no está implementada en esta entrega.</p>
         <button class="button full" type="submit" ${app.online ? '' : 'disabled'}>Agregar al catálogo</button>
       </form>
@@ -1075,6 +1142,10 @@ function merchantCatalogTab(business, products) {
           <div class="catalog-row-main">
             <strong>${esc(product.name)}</strong>
             <span class="quiet">${esc(product.category)} · ${money(product.price)} · stock ${product.stock}</span>
+            ${(product.variants || []).length
+              ? `<span class="quiet">Variantes: ${esc((product.variants || []).map(variant =>
+                  variant.priceDelta ? `${variant.name} ${variant.priceDelta > 0 ? '+' : '−'}${Math.abs(variant.priceDelta)}` : variant.name).join(', '))}</span>`
+              : ''}
             ${product.archived ? '<span class="status-chip cancelled">Dado de baja</span>'
               : product.available ? '' : '<span class="status-chip received">Agotado</span>'}
           </div>
@@ -1712,8 +1783,10 @@ async function runCommand(name, payload) {
 
 const ACTIONS = {
   async 'set-quantity'(element) {
-    const { business, product, quantity } = element.dataset;
-    await runCommand('cart.setQuantity', { businessId: business, productId: product, quantity: Number(quantity) });
+    const { business, product, quantity, variant } = element.dataset;
+    await runCommand('cart.setQuantity', {
+      businessId: business, productId: product, quantity: Number(quantity), variantId: variant || null,
+    });
     await render();
   },
   async 'clear-cart'(element) {
@@ -1896,6 +1969,7 @@ const FORMS = {
       product: {
         name: data.name, description: data.description, category: data.category,
         price: Number(data.price), stock: Number(data.stock), available: true,
+        variants: parseVariants(data.variants),
       },
     });
     form.reset();

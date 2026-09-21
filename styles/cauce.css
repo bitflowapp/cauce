@@ -177,7 +177,7 @@ p {
   transition: top 0.2s ease;
 }
 
-.skip:focus {
+.skip:focus-visible {
   top: 12px;
 }
 
@@ -6103,4 +6103,41 @@ body.is-offline .header { box-shadow: inset 0 3px 0 var(--clay); }
 main {
   padding-left: max(0px, env(safe-area-inset-left, 0px));
   padding-right: max(0px, env(safe-area-inset-right, 0px));
+}
+
+/* Variantes simples de un producto: cada una es una línea del carrito. */
+.variant-list {
+  grid-area: actions;
+  display: grid;
+  gap: 6px;
+  padding-top: 8px;
+}
+
+.variant-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 44px;
+  border-top: 1px solid var(--line);
+  padding-top: 6px;
+}
+
+.variant-row:first-child { border-top: none; padding-top: 0; }
+.variant-name { font-size: 13px; font-weight: 600; color: var(--ink-light); }
+.variant-row .add-btn { padding: 8px 14px; font-size: 12px; }
+
+/* Marca neutra para un producto sin fotografía: mejor que ilustrar con un plato
+   que no tiene nada que ver con lo que el comercio cargó. */
+.product-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  background: var(--forest-tint);
+  color: var(--forest);
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
 }

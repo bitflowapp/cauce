@@ -16,6 +16,8 @@ Fecha de esta revisión: 21 de septiembre de 2026.
 | Revisión administrativa con aprobación y devolución con motivo | Hecho | Ídem |
 | Estados del comercio: borrador, pendiente, devuelto, activo, pausado | Hecho | `tests/backend-journeys.test.mjs` |
 | Catálogo: alta, edición, agotado, baja | Hecho | `tests/local-repository.test.mjs`, `npm run e2e` |
+| Variantes simples de producto, con diferencia de precio | Hecho | `tests/variants.test.mjs`, `npm run e2e` |
+| Búsqueda por comercio, rubro y productos | Hecho | `npm run e2e:demo` |
 | Exploración y carrito sin cuenta | Hecho | `npm run e2e`, `npm run e2e:demo` |
 | Carritos separados por comercio, un pedido por comercio | Hecho | `tests/backend-journeys.test.mjs` |
 | Confirmación con detalle, subtotal, envío, total y modalidad | Hecho | `npm run e2e` |

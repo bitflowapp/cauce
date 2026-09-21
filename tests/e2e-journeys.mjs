@@ -136,6 +136,17 @@ async function main() {
     await merchant.click('[data-form="product-create"] button[type="submit"]');
     await merchant.waitForFunction(`document.querySelector('#toast')?.textContent.includes('catálogo')`);
     step('Carga un producto');
+
+    // Un segundo producto con variantes simples.
+    await merchant.fill('#prod-name', 'Limonada por tamaño');
+    await merchant.fill('#prod-description', 'Limón, menta y jengibre');
+    await merchant.fill('#prod-price', '2500');
+    await merchant.fill('#prod-stock', '20');
+    await merchant.fill('#prod-category', 'Bebidas');
+    await merchant.fill('#prod-variants', 'Chica, Grande +1200');
+    await merchant.click('[data-form="product-create"] button[type="submit"]');
+    await merchant.waitForFunction(`/variantes: chica, grande/i.test(document.querySelector('#main').innerText)`);
+    step('Carga un producto con variantes simples');
     await shot(merchant, '02-catalogo');
 
     await merchant.click('[data-action="set-panel-tab"][data-tab="datos"]');
@@ -195,10 +206,18 @@ async function main() {
     await customer.waitForFunction(`document.body.innerText.includes('Almacén El Pehuén')`);
     await customer.click('a[href^="#comercio/almacen-el-pehuen"]');
     await customer.waitForFunction(`document.body.innerText.includes('Pan casero de campo')`);
-    await customer.click('[data-action="set-quantity"][data-quantity="1"]');
+    await customer.click('[data-action="set-quantity"][data-quantity="1"]:not([data-variant])');
     await customer.waitForFunction(`document.body.innerText.includes('en el carrito')`);
     await customer.waitForFunction('document.querySelector("#main")?.getAttribute("aria-busy") === "false"');
     step('Explora y suma al carrito sin crear cuenta');
+
+    // El producto con variantes obliga a elegir una: no hay un "Agregar" suelto.
+    const variantButtons = await customer.evaluate(
+      `document.querySelectorAll('[data-action="set-quantity"][data-variant]').length`);
+    if (variantButtons < 2) throw new Error('No aparecieron las variantes del producto');
+    await customer.click('[data-action="set-quantity"][data-variant="grande"][data-quantity="1"]');
+    await customer.waitForFunction('document.querySelector("#main")?.getAttribute("aria-busy") === "false"');
+    step('Elige una variante del producto que las tiene', `${variantButtons} opciones ofrecidas`);
     await shot(customer, '06-catalogo-cliente');
 
     const cartVisible = await customer.evaluate(
@@ -216,6 +235,8 @@ async function main() {
     await customer.fill('#checkout-address', 'Cristian Joubert 410');
     await customer.evaluate(`(() => { document.querySelector('[name="zoneAcknowledged"]').click(); return true; })()`);
     const total = await customer.text('.totals-final');
+    const detalle = await customer.text('.cart-lines-list');
+    if (!/Grande/.test(detalle)) throw new Error('La confirmación no identifica la variante elegida');
     step('La confirmación muestra el total antes de confirmar', total.replace(/\n/g, ' '));
     await shot(customer, '07-confirmacion');
 
@@ -357,18 +378,15 @@ async function main() {
 
     // ───────── aislamiento entre identidades ─────────
     console.log('\nAislamiento entre identidades');
-    await customer.evaluate(`(() => { location.hash = '#panel'; return true; })()`);
-    await customer.waitForFunction('document.querySelector(\"#main\")?.getAttribute(\"aria-busy\") === \"false\"');
-    await customer.waitForFunction(`document.querySelector('#main').innerText.length > 0`);
+    await visit(customer, '#panel');
     const panelText = await customer.text('#main');
     if (panelText.includes('Almacén El Pehuén')) {
       throw new Error('Una sesión sin cuenta ve el panel del comercio');
     }
     step('Una visitante no accede al panel del comercio');
 
-    await customer.evaluate(`(() => { location.hash = '#admin'; return true; })()`);
-    await customer.waitForFunction('document.querySelector(\"#main\")?.getAttribute(\"aria-busy\") === \"false\"');
-    await customer.waitForFunction(`document.querySelector('#main').innerText.includes('restringida')`);
+    await visit(customer, '#admin');
+    await customer.waitForFunction(`/restringida/i.test(document.querySelector('#main').innerText)`);
     step('Una visitante no accede a administración');
     await shot(customer, '16-panel-restringido');
 

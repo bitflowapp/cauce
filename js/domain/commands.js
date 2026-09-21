@@ -306,7 +306,8 @@ const catalogCommands = {
       priceStatus: 'confirmed',
       archived: false,
       badge: '',
-      dishType: 'burger',
+      // Sin fotografía ni tipo declarado, la interfaz usa una marca neutra.
+      dishType: '',
       image: '',
       variants: [],
       ...fields,
@@ -410,7 +411,7 @@ const cartCommands = {
     requireValue(business.status === 'active', 'BUSINESS_NOT_ACTIVE', 'El comercio no está publicado.');
     // Sin coerción: una cantidad que llega como texto es un error de quien llama,
     // no algo para adivinar. changeQuantity exige un entero seguro.
-    const next = changeQuantity(cartOf(state, ownerId, business), product, payload?.quantity);
+    const next = changeQuantity(cartOf(state, ownerId, business), product, payload?.quantity, payload?.variantId ?? null);
     state.carts[cartKey(ownerId, business)] = next;
     return next;
   },
@@ -477,8 +478,8 @@ const orderCommands = {
     requireValue(cart.requestId === payload.requestId, 'STALE_REQUEST',
       'El carrito cambió desde que abriste la confirmación. Revisalo y confirmá de nuevo.');
     const payloadLines = cart.lines
-      .map(line => ({ productId: line.productId, quantity: line.quantity }))
-      .sort((a, b) => String(a.productId).localeCompare(String(b.productId)));
+      .map(line => ({ productId: line.productId, variantId: line.variantId ?? null, quantity: line.quantity }))
+      .sort((a, b) => `${a.productId}|${a.variantId}`.localeCompare(`${b.productId}|${b.variantId}`));
     requireValue(state.orders.length < 1000, 'DEMO_LIMIT', 'El entorno admite hasta 1000 pedidos.');
 
     const quote = quoteCart({ ...scopeOf(business), lines: payloadLines }, business, state.products, fulfillment);
