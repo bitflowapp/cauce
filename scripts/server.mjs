@@ -6,14 +6,15 @@ import { fileURLToPath } from 'node:url';
 export const ROOT = fileURLToPath(new URL('../', import.meta.url));
 const CSP = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'none'; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-ancestors 'none'";
 const WORKER_CSP = "default-src 'self'; connect-src 'self'; base-uri 'none'; object-src 'none'";
-export function createStaticServer({ root = ROOT } = {}) {
+export function createStaticServer({ root = ROOT, supabase = false } = {}) {
   const base = resolve(root);
   return createServer(async (req, res) => {
     // La CSP del documento no aplica al service worker: el worker hereda la de
     // SU PROPIA respuesta. Servirle `connect-src 'none'` le bloquea todos los
     // fetch y deja la aplicación rota en la segunda pestaña.
     const isWorker = (req.url || '').startsWith('/service-worker.js');
-    res.setHeader('Content-Security-Policy', isWorker ? WORKER_CSP : CSP);
+    const documentCsp = supabase ? CSP.replace("connect-src 'none'", "connect-src 'self' https://ygqbcvxdrewcnzedfcyo.supabase.co wss://ygqbcvxdrewcnzedfcyo.supabase.co") : CSP;
+    res.setHeader('Content-Security-Policy', isWorker ? WORKER_CSP : documentCsp);
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Referrer-Policy', 'no-referrer');
     res.setHeader('Cache-Control', 'no-store');

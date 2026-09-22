@@ -6466,3 +6466,10 @@ main {
   .taxi-search-visual span,
   .taxi-search-visual span::before { animation: none !important; }
 }
+/* Connected account/onboarding views share the existing visual system. */
+main.foundation-layout {
+  padding-inline: clamp(16px, 4vw, 32px);
+}
+main.foundation-layout ~ .footer a[hidden] {
+  display: none;
+}

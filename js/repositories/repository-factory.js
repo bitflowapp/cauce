@@ -1,6 +1,7 @@
 import { CauceError } from '../core/errors.js';
 import { createLocalRepository } from './local-repository.js';
 import { createHttpRepository } from './http-repository.js';
+import { createSupabaseRepository } from './supabase-repository.js';
 
 // La compuerta de producción se mantiene: esta entrega no habilita pedidos ni
 // pagos reales en ningún entorno. `mode: 'demo'` con `liveOrders`/`livePayments`
@@ -18,6 +19,12 @@ export function assertNonProductionConfig(config) {
  * entorno declara `local-backend`, se usa el backend y sus errores se propagan.
  */
 export function createRepository(config, options = {}) {
+  if (options.runtime?.environment === 'supabase') {
+    if (config?.mode !== 'production' || config.liveOrders !== false || config.livePayments !== false) {
+      throw new CauceError('INVALID_PRODUCTION_CONFIG', 'La etapa conectada sólo habilita cuentas y comercios.');
+    }
+    return createSupabaseRepository({ client: options.runtime.client, redirectTo: options.runtime.redirectTo });
+  }
   assertNonProductionConfig(config);
   const runtime = options.runtime;
   if (!runtime || typeof runtime.environment !== 'string') {

@@ -39,6 +39,7 @@ const app = {
 };
 
 const isShared = () => Boolean(app.repository?.capabilities?.sharedPersistence);
+const isFoundation = () => Boolean(app.repository?.capabilities?.foundationOnly);
 const actor = () => app.session?.actor || null;
 const isSignedIn = () => actor()?.kind === 'account';
 const hasRole = role => Boolean(actor()?.roles?.includes(role));
@@ -291,14 +292,14 @@ function applyOfflineState() {
     const notice = document.createElement('div');
     notice.className = 'notice offline-notice offline-live-notice';
     notice.setAttribute('role', 'status');
-    notice.textContent = isShared()
+    notice.textContent = isFoundation() ? 'Sin conexión. Conservamos lo escrito. Al recuperar la conexión podés reintentar guardar.' : isShared()
       ? 'Sin conexión. No se puede confirmar hasta recuperarla. No quedó ninguna operación enviada a medias.'
       : 'Sin conexión. Podés seguir navegando: esta demostración guarda todo en tu propio navegador.';
     main.prepend(notice);
   }
   // En la demostración no hay servidor: quedarse sin conexión no impide nada.
   if (!isShared()) return;
-  for (const form of main.querySelectorAll(OPERATION_FORMS)) {
+  for (const form of main.querySelectorAll(isFoundation() ? 'form' : OPERATION_FORMS)) {
     const submit = form.querySelector('button[type="submit"]');
     if (submit) submit.disabled = !app.online;
   }
@@ -320,12 +321,16 @@ function errorView(error) {
 function updateShell() {
   const { page } = route();
   const signedIn = isSignedIn();
+  main.classList.toggle('foundation-layout', isFoundation());
+  if (isFoundation()) {
+    for (const link of document.querySelectorAll('a[href="#taxi"], a[href="#taxista"], a[href="#comercios"], a[href="#institucional"]')) link.hidden = true;
+  }
 
   const envChip = document.querySelector('#env-chip');
   if (envChip) {
     // En la cabecera va la forma corta, para que entre a 360 px sin recortarse;
     // el pie lleva la frase completa y el detalle está en el título accesible.
-    envChip.textContent = RUNTIME_ENV.environment === 'demo' ? 'Demostración' : 'Pruebas';
+    envChip.textContent = RUNTIME_ENV.environment === 'demo' ? 'Demostración' : isFoundation() ? 'Conectado' : 'Pruebas';
     envChip.title = `${RUNTIME_ENV.label}. ${RUNTIME_ENV.description}`;
     envChip.dataset.environment = RUNTIME_ENV.environment;
   }
@@ -977,6 +982,7 @@ async function viewActivity() {
 // ───────────────────────── cuenta ─────────────────────────
 
 async function viewAccount() {
+  if (isFoundation()) return viewConnectedAccount();
   if (isSignedIn()) {
     return `
       ${backLink('#actividad', 'Mi actividad')}
@@ -1958,7 +1964,7 @@ async function withBusy(element, operation) {
     }
   } finally {
     element.dataset.busy = 'false';
-    element.disabled = wasDisabled;
+    element.disabled = wasDisabled || (isFoundation() && !app.online);
   }
 }
 
@@ -2096,7 +2102,105 @@ const ACTIONS = {
   },
 };
 
+// Connected phase: shared shell and handlers, only implemented capabilities exposed.
+async function viewConnectedAccount() {
+  const notice = app.authNotice ? `<div class="notice" role="status">${esc(app.authNotice)}</div>` : '';
+  if (!isSignedIn()) return `${backLink('#inicio', 'Inicio')}
+    <section class="page-header"><h1 class="page-title">Ingresar a CAUCE</h1>
+      <p class="quiet">Tu cuenta se guarda en CAUCE y podés usarla desde otro dispositivo.</p></section>${notice}
+    <form class="checkout-form" data-form="sign-in"><h2>Ya tengo cuenta</h2>
+      <div class="field"><label for="signin-email">Correo</label><input id="signin-email" name="email" type="email" required autocomplete="email"></div>
+      <div class="field"><label for="signin-password">Contraseña</label><input id="signin-password" name="password" type="password" required autocomplete="current-password"></div>
+      <button class="button full" type="submit">Ingresar</button></form>
+    <form class="checkout-form" data-form="register"><h2>Crear una cuenta</h2>
+      <div class="field"><label for="reg-name">Nombre y apellido</label><input id="reg-name" name="name" required maxlength="80" autocomplete="name"></div>
+      <div class="field"><label for="reg-email">Correo</label><input id="reg-email" name="email" type="email" required autocomplete="email"></div>
+      <div class="field"><label for="reg-phone">Teléfono (opcional)</label><input id="reg-phone" name="phone" type="tel" autocomplete="tel"></div>
+      <div class="field"><label for="reg-password">Contraseña</label><input id="reg-password" name="password" type="password" required minlength="10" autocomplete="new-password"><p class="microcopy">Al menos 10 caracteres, con letras y números.</p></div>
+      <button class="button full" type="submit">Crear cuenta</button></form>
+    <form class="checkout-form" data-form="password-reset"><h2>Recuperar contraseña</h2>
+      <div class="field"><label for="reset-email">Correo de tu cuenta</label><input id="reset-email" name="email" type="email" required autocomplete="email"></div>
+      <button class="button secondary full" type="submit">Enviar enlace de recuperación</button></form>`;
+  return `${backLink('#inicio', 'Inicio')}<section class="page-header"><h1 class="page-title">Tu cuenta</h1>
+    <p class="quiet">${esc(actor().email)}</p></section>${notice}
+    <form class="checkout-form" data-form="profile-update"><h2>Datos personales</h2>
+      <div class="field"><label for="profile-name">Nombre y apellido</label><input id="profile-name" name="name" required maxlength="80" value="${esc(actor().name)}" autocomplete="name"></div>
+      <div class="field"><label for="profile-phone">Teléfono</label><input id="profile-phone" name="phone" type="tel" value="${esc(actor().phone || '')}" autocomplete="tel"></div>
+      <button class="button full" type="submit">Guardar perfil</button></form>
+    <form class="checkout-form" data-form="password-update"><h2>Cambiar contraseña</h2>
+      <div class="field"><label for="new-password">Nueva contraseña</label><input id="new-password" name="password" type="password" required minlength="10" autocomplete="new-password"></div>
+      <button class="button secondary full" type="submit">Guardar contraseña</button></form>
+    <div class="stack"><a class="button secondary" href="#panel">Mis comercios</a>
+      ${hasRole('admin') ? '<a class="button secondary" href="#admin">Revisión administrativa</a>' : ''}
+      <button class="button danger" type="button" data-action="sign-out">Cerrar sesión</button></div>`;
+}
+
+async function viewConnectedBusinesses(businessId) {
+  if (!isSignedIn()) return `${emptyState('Ingresá a tu cuenta', 'Sólo los miembros pueden ver sus comercios.', '#cuenta', 'Ingresar')}`;
+  const businesses = await app.repository.query('myBusinesses');
+  if (businessId) {
+    const business = businesses.find(b => b.id === businessId);
+    if (!business) return '<section class="notice error"><h1>Sin acceso</h1><p>Tu cuenta no pertenece a ese comercio.</p></section>';
+    return `${backLink('#panel', 'Mis comercios')}<section class="page-header"><h1 class="page-title">${esc(business.name)}</h1>
+      <p class="quiet">${esc(businessStatusLabel(business.status))} · Tu permiso: ${esc({ owner: 'Titular', manager: 'Encargado', staff: 'Equipo' }[business.membershipRole])}</p></section>
+      ${business.membershipRole === 'staff' ? '' : `<form class="checkout-form" data-form="business-rename">
+        <input type="hidden" name="businessId" value="${esc(business.id)}">
+        <div class="field"><label for="connected-business-name">Nombre comercial</label><input id="connected-business-name" name="name" required minlength="2" maxlength="120" value="${esc(business.name)}"></div>
+        <button class="button full" type="submit">Guardar nombre</button></form>`}
+      <div class="notice">El borrador está guardado en CAUCE. El catálogo y la solicitud de publicación aún no están habilitados.</div>`;
+  }
+  return `<section class="page-header"><h1 class="page-title">Mis comercios</h1><p class="quiet">Negocios vinculados a tu cuenta.</p></section>
+    <div class="stack">${businesses.map(b => `<a class="op-card" href="#panel/${esc(b.id)}"><strong>${esc(b.name)}</strong><span>${esc(businessStatusLabel(b.status))}</span></a>`).join('') || '<p>Todavía no tenés comercios.</p>'}</div>
+    <form class="checkout-form" data-form="business-create"><h2>Crear un comercio</h2>
+      <div class="field"><label for="biz-name">Nombre comercial</label><input id="biz-name" name="name" required minlength="2" maxlength="120"></div>
+      <p class="microcopy">Localidad: Aluminé. Se crea en borrador, sin publicación automática.</p>
+      <button class="button full" type="submit">Crear borrador</button></form>`;
+}
+
+async function viewConnectedHome() {
+  const localities = await app.repository.query('localities');
+  const locality = localities.find(item => item.slug === 'alumine');
+  if (!locality) throw new Error('Aluminé no está disponible en el servidor de CAUCE.');
+  return `<section class="page-header"><h1 class="page-title">CAUCE · ${esc(locality.name)}</h1>
+    <p class="quiet">Tu comunidad, más cerca.</p></section>
+    <section class="brand-intro brand-intro-merchant"><div>${renderCharacter('merchant', 128)}</div>
+      <p><strong>Tu cuenta y tu comercio, conectados.</strong><span>Guardá tus datos y retomá desde otro dispositivo.</span></p></section>
+    <div class="stack"><a class="button" href="#cuenta">${isSignedIn() ? 'Mi cuenta' : 'Ingresar o crear cuenta'}</a>
+      <a class="button secondary" href="#panel">Mis comercios</a></div>
+    <div class="notice">Cuentas y borradores disponibles. Todavía no se reciben pedidos ni solicitudes de taxi.</div>`;
+}
+
+function connectedView(page) {
+  if (page === 'inicio') return viewConnectedHome;
+  if (['cuenta', 'actividad', 'recuperar'].includes(page)) return viewConnectedAccount;
+  if (['panel', 'alta-comercio'].includes(page)) return viewConnectedBusinesses;
+  if (page === 'admin') return async () => {
+    const businesses = await app.repository.query('adminBusinesses');
+    return `<section class="page-header"><h1 class="page-title">Revisión administrativa</h1></section>
+      <div class="stack">${businesses.map(b => `<article class="op-card"><strong>${esc(b.name)}</strong><span>${esc(businessStatusLabel(b.status))}</span></article>`).join('') || '<p>No hay comercios registrados.</p>'}</div>
+      <p class="quiet">La aprobación se habilitará con el catálogo y los requisitos de publicación.</p>`;
+  };
+  return () => emptyState('Función aún no habilitada', 'Podés gestionar tu cuenta y los borradores de tus comercios.', '#inicio', 'Volver al inicio');
+}
+
 const FORMS = {
+  async 'profile-update'(form) {
+    await app.repository.updateProfile(Object.fromEntries(new FormData(form)));
+    app.session = await app.repository.session(); toast('Perfil guardado.'); await render();
+  },
+  async 'password-reset'(form) {
+    await app.repository.requestPasswordReset(new FormData(form).get('email'));
+    app.authNotice = 'Si el correo corresponde a una cuenta, recibirás un enlace para recuperar tu contraseña.';
+    await render();
+  },
+  async 'password-update'(form) {
+    await app.repository.updatePassword(new FormData(form).get('password'));
+    form.reset(); app.authNotice = 'Contraseña actualizada.'; toast('Contraseña actualizada.'); await render();
+  },
+  async 'business-rename'(form) {
+    await app.repository.command('business.rename', Object.fromEntries(new FormData(form)));
+    toast('Comercio actualizado.'); await render();
+  },
   search(form) {
     const data = new FormData(form);
     app.search.query = String(data.get('query') || '');
@@ -2115,7 +2219,11 @@ const FORMS = {
 
   async register(form) {
     const data = Object.fromEntries(new FormData(form));
-    await app.repository.register(data);
+    const result = await app.repository.register(data);
+    if (result?.confirmationRequired) {
+      form.reset(); app.authNotice = 'Revisá tu correo y confirmá la cuenta antes de ingresar.';
+      await render(); return;
+    }
     app.session = await app.repository.session();
     toast('Cuenta creada.');
     go('#actividad');
@@ -2290,10 +2398,15 @@ async function render({ focus = false } = {}) {
   const { page, param } = route();
   if (GATED_ROUTES.has(page) && isShared()) {
     try { app.session = await app.repository.session(); }
-    catch { /* si el servidor no responde, la vista lo informa igual */ }
+    catch (error) {
+      if (isFoundation()) {
+        main.innerHTML = errorView(error); main.setAttribute('aria-busy', 'false'); return;
+      }
+      // El entorno local conserva su comportamiento previo.
+    }
     if (token !== renderToken) return;
   }
-  const view = VIEWS[page];
+  const view = isFoundation() ? connectedView(page) : VIEWS[page];
   main.setAttribute('aria-busy', 'true');
   try {
     const markup = view
@@ -2308,7 +2421,7 @@ async function render({ focus = false } = {}) {
 
   // El contador del carrito alimenta la barra inferior en cualquier vista.
   try {
-    const carts = await app.repository.query('carts');
+    const carts = isFoundation() ? [] : await app.repository.query('carts');
     app.cartCount = carts.reduce((total, entry) =>
       total + entry.cart.lines.reduce((sum, line) => sum + line.quantity, 0), 0);
   } catch { app.cartCount = app.cartCount || 0; }
@@ -2391,16 +2504,36 @@ function bindEvents() {
     app.online = true;
     updateShell();
     toast('Conexión recuperada. Podés reintentar.');
-    render();
+    if (isFoundation()) applyOfflineState();
+    else render();
   });
 }
 
 async function start() {
+  main.setAttribute('aria-busy', 'true');
   try {
     app.repository = createRepository(CONFIG, {
       runtime: RUNTIME_ENV,
       storage: globalThis.localStorage,
     });
+    updateShell();
+    if (isFoundation()) {
+      app.repository.onAuthChange(event => {
+        if (event === 'PASSWORD_RECOVERY') app.recovering = true;
+        if (!app.started || !['SIGNED_OUT', 'PASSWORD_RECOVERY'].includes(event)) return;
+        // Avoid SDK calls inside its auth lock callback.
+        setTimeout(async () => {
+          try {
+            app.session = await app.repository.session();
+            if (event === 'PASSWORD_RECOVERY') go('#recuperar');
+            await render();
+          } catch (error) { main.innerHTML = errorView(error); }
+        }, 0);
+      });
+      const callback = await app.repository.completeAuthRedirect(location.href,
+        () => history.replaceState(null, '', location.pathname));
+      if (callback.handled) app.recovering = callback.recovery;
+    }
     app.session = await app.repository.session();
   } catch (error) {
     main.innerHTML = `<section class="notice error">
@@ -2408,15 +2541,19 @@ async function start() {
       <p>${esc(error.message)}</p>
       <p class="microcopy">Entorno declarado: ${esc(RUNTIME_ENV.environment)}.</p>
     </section>`;
+    main.setAttribute('aria-busy', 'false');
     return;
   }
   bindEvents();
+  app.started = true;
+  if (app.recovering) { app.authNotice = 'Elegí una nueva contraseña para tu cuenta.'; go('#recuperar'); }
   if (!location.hash) location.hash = '#inicio';
   await render();
   registerServiceWorker();
 }
 
 function registerServiceWorker() {
+  if (isFoundation()) return;
   if (!('serviceWorker' in navigator)) return;
   if (location.protocol !== 'https:' && !['localhost', '127.0.0.1'].includes(location.hostname)) return;
   navigator.serviceWorker.register('service-worker.js').catch(() => {
