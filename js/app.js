@@ -1080,6 +1080,7 @@ async function viewAccount() {
         <button class="button full" type="submit" ${app.online ? '' : 'disabled'}>Crear cuenta</button>
       </form>
 
+      ${app.repository.capabilities.accountManagement ? `
       <form class="checkout-form" data-form="password-reset">
         <h2 class="checkout-section-title">Recuperar contraseña</h2>
         <div class="field">
@@ -1087,7 +1088,7 @@ async function viewAccount() {
           <input id="reset-email" name="email" type="email" required autocomplete="email" inputmode="email">
         </div>
         <button class="button secondary full" type="submit" ${app.online ? '' : 'disabled'}>Enviar enlace de recuperación</button>
-      </form>`
+      </form>` : ''}`
     : `
       <div class="notice">
         <strong>Esta demostración no usa contraseñas.</strong>

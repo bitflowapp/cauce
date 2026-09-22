@@ -259,12 +259,22 @@ npm run e2e:supabase        # recorrido en tres navegadores independientes
 
 | Suite | Resultado |
 | --- | --- |
-| Pruebas existentes | 172 aprobadas |
-| Pruebas SQL sobre PostgreSQL embebido | 32 aprobadas |
+| Pruebas de dominio, interfaz y service worker | 176 aprobadas |
+| Pruebas SQL sobre PostgreSQL embebido | 38 aprobadas |
 | Identidad contra Supabase real | 12 comprobaciones |
 | Operación contra Supabase real | 11 comprobaciones |
+| Recorrido en tres navegadores contra Supabase real | 16 pasos |
 | E2E SQLite y demo heredados | 37 y 12 pasos |
 | Auditorías visuales heredadas | 64 pantallas |
+
+Cuatro de las pruebas de dominio ejecutan el service worker de verdad, en un
+entorno mínimo, para fijar qué puede quedar guardado en el dispositivo.
+
+Las pruebas SQL levantan PostgreSQL embebido, reconstruyen las seis migraciones
+desde cero y cambian de rol e identidad por transacción. **No prueban
+concurrencia**: PGlite tiene una sola conexión. Las carreras reales —doble envío
+del mismo pedido y dos conductores aceptando a la vez— se prueban contra el
+proyecto, con peticiones simultáneas de verdad.
 
 Las pruebas remotas tienen el destino CAUCE fijado en código y fallan si apunta
 a otro proyecto. Obtienen la clave de servidor sólo en memoria desde la CLI
