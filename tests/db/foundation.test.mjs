@@ -466,3 +466,71 @@ test('two drivers cannot take the same trip and the loser is told so', async () 
   assert.equal(rows(await as('customerA', 'select count(*)::int as n from public.trip_events where trip_id=$1', [trip]))[0].n, 7);
   assert.equal(rows(await as('customerB', 'select count(*)::int as n from public.trip_events'))[0].n, 0);
 });
+
+test('two lines of the same product neither oversell nor block an available sale', async () => {
+  const variants = rows(await as('merchantA',
+    'select id from public.product_variants where product_id=$1 order by name limit 2', [productA]));
+  await as('merchantA', 'select public.set_product_availability($1,true,10)', [productA]);
+  const items = JSON.stringify([
+    { product_id: productA, variant_id: variants[0].id, quantity: 5 },
+    { product_id: productA, variant_id: variants[1].id, quantity: 5 },
+  ]);
+  // Diez unidades disponibles y diez pedidas: el pedido entra completo.
+  const order = rows(await orderCall('customerB', businessA, crypto.randomUUID(), 'pickup', items))[0].id;
+  assert.equal(rows(await as('merchantA', 'select stock from public.products where id=$1', [productA]))[0].stock, 0);
+  assert.equal(Number(rows(await as('customerB', 'select total_ars from public.orders where id=$1', [order]))[0].total_ars), 20000);
+  // Una unidad más ya no existe.
+  await assert.rejects(orderCall('customerB', businessA, crypto.randomUUID(), 'pickup',
+    JSON.stringify([{ product_id: productA, variant_id: variants[0].id, quantity: 1 }])), error => error.code === 'U0003');
+  // Al cancelar se devuelven las diez, no cinco.
+  await as('customerB', 'select public.transition_order($1,1,$2,null,$3)', [order, 'canceled', 'Prueba']);
+  assert.equal(rows(await as('merchantA', 'select stock from public.products where id=$1', [productA]))[0].stock, 10);
+});
+
+// ───────────────── auditoría del esquema construido ─────────────────
+test('no anonymous account can execute any CAUCE function', async () => {
+  const result = await db.query(`select n.nspname||'.'||p.proname as name
+    from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname in ('public','private') and has_function_privilege('anon', p.oid, 'EXECUTE')`);
+  assert.deepEqual(result.rows, []);
+});
+test('every CAUCE function pins its search_path and stays out of public if privileged', async () => {
+  const loose = await db.query(`select n.nspname||'.'||p.proname as name
+    from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname in ('public','private') and p.prokind='f'
+      and (p.proconfig is null or not exists (select 1 from unnest(p.proconfig) c where c like 'search_path=%'))`);
+  assert.deepEqual(loose.rows, []);
+  const definer = await db.query(`select p.proname as name from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public' and p.prosecdef`);
+  assert.deepEqual(definer.rows, []);
+});
+test('no view is exposed, and none could run with the definer privileges', async () => {
+  const views = await db.query(`select c.relname as name from pg_class c join pg_namespace n on n.oid=c.relnamespace
+    where n.nspname='public' and c.relkind in ('v','m')
+      and coalesce((select option_value from pg_options_to_table(c.reloptions) where option_name='security_invoker'),'off') <> 'true'`);
+  assert.deepEqual(views.rows, []);
+});
+test('no anonymous or authenticated account writes a table directly beyond its columns', async () => {
+  // anon nunca escribe; `authenticated` sólo tiene DELETE donde el propio
+  // comercio da de baja su catálogo o su reparto. INSERT y UPDATE son por columna.
+  const anon = await db.query(`select table_name as name, privilege_type as p from information_schema.role_table_grants
+    where grantee='anon' and privilege_type <> 'SELECT' and table_schema in ('public','private')`);
+  assert.deepEqual(anon.rows, []);
+  const writes = await db.query(`select table_name||' '||privilege_type as grant_name from information_schema.role_table_grants
+    where grantee='authenticated' and privilege_type in ('INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER')
+      and table_schema in ('public','private') order by 1`);
+  assert.deepEqual(writes.rows.map(row => row.grant_name), [
+    'business_riders DELETE', 'product_categories DELETE', 'product_variants DELETE', 'products DELETE',
+  ]);
+});
+test('orders and trips accept no direct writes from any client role', async () => {
+  const result = await db.query(`select table_name as name, privilege_type as p, grantee
+    from information_schema.role_table_grants
+    where table_name in ('orders','order_items','order_events','trips','trip_events','drivers')
+      and grantee in ('anon','authenticated') and privilege_type <> 'SELECT'`);
+  assert.deepEqual(result.rows, []);
+  const columns = await db.query(`select table_name as name from information_schema.column_privileges
+    where table_name in ('orders','order_items','order_events','trips','trip_events')
+      and grantee in ('anon','authenticated') and privilege_type <> 'SELECT'`);
+  assert.deepEqual(columns.rows, []);
+});

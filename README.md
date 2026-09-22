@@ -11,6 +11,11 @@ y que administración revise las altas y supervise la operación.
 incorporados, ni convenio municipal. El detalle está en
 [docs/ESTADO-PILOTO.md](docs/ESTADO-PILOTO.md).
 
+En la rama `feat/cauce-production-foundation` existe además un **entorno
+conectado a Supabase** con cuentas, catálogo, imágenes, pedidos, reparto, taxi y
+sincronización en vivo reales. No está publicado y le falta correo transaccional
+propio: ver [docs/CAUCE-CONECTADO.md](docs/CAUCE-CONECTADO.md).
+
 ---
 
 ## Dos entornos, una sola aplicación
@@ -44,6 +49,17 @@ npm start
 ```
 
 Abre <http://127.0.0.1:4173>. Todo queda en tu navegador.
+
+### Entorno conectado a Supabase (rama de trabajo)
+
+```powershell
+npm ci
+npm run dev:supabase
+```
+
+Abre <http://127.0.0.1:4174>. Usa el proyecto `cauce-production` con la clave
+publicable; no hay secretos en el navegador. Requiere una cuenta confirmada:
+mientras no haya SMTP propio, el registro público no puede completarse.
 
 ### Entorno local de pruebas, con backend
 

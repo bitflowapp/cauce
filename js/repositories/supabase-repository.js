@@ -145,6 +145,9 @@ export function createSupabaseRepository({ client, redirectTo, storage } = {}) {
       pickupEnabled: row.pickup_enabled === true, deliveryEnabled: row.delivery_enabled === true,
       logoPath: row.logo_path || '', coverPath: row.cover_path || '',
       logo: publicUrl(row.logo_path), cover: publicUrl(row.cover_path),
+      // La vitrina existente lee estos nombres: se conserva su aspecto tal cual.
+      logoImage: publicUrl(row.logo_path), coverImage: publicUrl(row.cover_path),
+      subtitle: row.description || '', theme: 'sage', eta: '',
       ownerName: contact?.owner_name || '', contactPhone: contact?.phone || '',
       contactEmail: contact?.email || '', reference: contact?.reference || '',
       reviewNote: reviews.find(event => event.to_status === 'returned')?.note || '',

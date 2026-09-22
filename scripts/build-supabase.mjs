@@ -9,7 +9,7 @@ if (project.projectRef !== 'ygqbcvxdrewcnzedfcyo' || project.url !== 'https://yg
   || !project.publishableKey.startsWith('sb_publishable_')) throw new Error('Destino CAUCE inválido.');
 const output = resolve(root, '.local/supabase-preview');
 await mkdir(resolve(output, 'js'), { recursive: true });
-for (const name of ['assets', 'styles', 'manifest.webmanifest']) await cp(resolve(root, name), resolve(output, name), { recursive: true });
+for (const name of ['assets', 'styles', 'manifest.webmanifest', 'service-worker.js']) await cp(resolve(root, name), resolve(output, name), { recursive: true });
 let html = await readFile(resolve(root, 'index.html'), 'utf8');
 // CSP acotada al proyecto CAUCE: API, WebSocket de Realtime y el bucket de
 // imágenes públicas. Sin comodines y sin ningún otro proyecto Supabase.

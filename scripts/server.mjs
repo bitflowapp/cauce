@@ -13,7 +13,12 @@ export function createStaticServer({ root = ROOT, supabase = false } = {}) {
     // SU PROPIA respuesta. Servirle `connect-src 'none'` le bloquea todos los
     // fetch y deja la aplicación rota en la segunda pestaña.
     const isWorker = (req.url || '').startsWith('/service-worker.js');
-    const documentCsp = supabase ? CSP.replace("connect-src 'none'", "connect-src 'self' https://ygqbcvxdrewcnzedfcyo.supabase.co wss://ygqbcvxdrewcnzedfcyo.supabase.co") : CSP;
+    // Cabecera y meta se aplican las dos: si acá falta el origen de las
+    // imágenes de CAUCE, la vitrina queda sin fotos aunque el meta lo permita.
+    const documentCsp = supabase
+      ? CSP.replace("connect-src 'none'", "connect-src 'self' https://ygqbcvxdrewcnzedfcyo.supabase.co wss://ygqbcvxdrewcnzedfcyo.supabase.co")
+        .replace("img-src 'self' data:", "img-src 'self' data: blob: https://ygqbcvxdrewcnzedfcyo.supabase.co")
+      : CSP;
     res.setHeader('Content-Security-Policy', isWorker ? WORKER_CSP : documentCsp);
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Referrer-Policy', 'no-referrer');

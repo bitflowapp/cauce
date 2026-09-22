@@ -375,14 +375,14 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "order_events_order_id_business_id_fkey"
+            foreignKeyName: "order_events_business_scope"
             columns: ["order_id", "business_id"]
             isOneToOne: false
             referencedRelation: "orders"
             referencedColumns: ["id", "business_id"]
           },
           {
-            foreignKeyName: "order_events_order_id_customer_id_fkey"
+            foreignKeyName: "order_events_customer_scope"
             columns: ["order_id", "customer_id"]
             isOneToOne: false
             referencedRelation: "orders"
@@ -441,14 +441,14 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "order_items_order_id_business_id_fkey"
+            foreignKeyName: "order_items_business_scope"
             columns: ["order_id", "business_id"]
             isOneToOne: false
             referencedRelation: "orders"
             referencedColumns: ["id", "business_id"]
           },
           {
-            foreignKeyName: "order_items_order_id_customer_id_fkey"
+            foreignKeyName: "order_items_customer_scope"
             columns: ["order_id", "customer_id"]
             isOneToOne: false
             referencedRelation: "orders"

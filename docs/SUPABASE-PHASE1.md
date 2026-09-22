@@ -1,5 +1,12 @@
 # CAUCE conectado — fase 1
 
+> Histórico de la primera etapa conectada, con cuentas y comercios solamente.
+> El estado vigente —catálogo, imágenes, pedidos, reparto, taxi y sincronización
+> en vivo— está en [CAUCE-CONECTADO.md](CAUCE-CONECTADO.md). Lo que sigue
+> describe cómo quedó esta base y qué límites tenía; la advertencia de
+> contraseñas filtradas ya se resolvió y las plantillas de correo se
+> reescribieron en castellano.
+
 Proyecto exclusivo: `cauce-production` (`ygqbcvxdrewcnzedfcyo`), Luna Systems,
 `sa-east-1`. URL: https://ygqbcvxdrewcnzedfcyo.supabase.co.
 Rama: `feat/cauce-production-foundation`. No hubo merge ni deploy público.

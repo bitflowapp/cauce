@@ -269,8 +269,10 @@ const sectionHeading = (eyebrow, title, extra = '') => `
 // Aviso obligatorio antes de confirmar: ninguna operación llega a un comercio real.
 const confirmNotice = () => `
   <p class="confirm-notice">${renderIcon('shield-check', 15)}
-    <span>Esta confirmación no genera un servicio ni un cobro real. Queda registrada sólo en ${
-      isShared() ? 'el entorno de pruebas' : 'este navegador'}.</span>
+    <span>${app.repository?.capabilities?.orders
+      ? 'El comercio recibe este pedido y lo prepara. El pago se coordina con el comercio: CAUCE no cobra nada.'
+      : `Esta confirmación no genera un servicio ni un cobro real. Queda registrada sólo en ${
+        isShared() ? 'el entorno de pruebas' : 'este navegador'}.`}</span>
   </p>`;
 
 const offlineBanner = () => (app.online ? '' : `
@@ -800,17 +802,27 @@ async function viewCheckout(businessId) {
 
       <section class="checkout-section">
         <h2 class="checkout-section-title">Forma de pago</h2>
-        <div class="choice-group" role="radiogroup" aria-label="Forma de pago">
-          <label class="choice ${(stored.paymentMethod || 'cash_demo') === 'cash_demo' ? 'active' : ''}">
-            <input type="radio" name="paymentMethod" value="cash_demo" ${(stored.paymentMethod || 'cash_demo') === 'cash_demo' ? 'checked' : ''}>
-            <span class="choice-body"><strong>Efectivo al recibir</strong><span class="quiet">Prueba · no se cobra nada</span></span>
-          </label>
-          <label class="choice ${stored.paymentMethod === 'transfer_demo' ? 'active' : ''}">
-            <input type="radio" name="paymentMethod" value="transfer_demo" ${stored.paymentMethod === 'transfer_demo' ? 'checked' : ''}>
-            <span class="choice-body"><strong>Transferencia al comercio</strong><span class="quiet">Prueba · no se cobra nada</span></span>
-          </label>
-        </div>
-        <p class="microcopy">Los pagos en línea no están habilitados en esta entrega. El pedido y el pago son estados independientes.</p>
+        ${app.repository.capabilities.orders ? `
+          <div class="choice-group" role="radiogroup" aria-label="Forma de pago">
+            <label class="choice active">
+              <input type="radio" name="paymentMethod" value="cash" checked>
+              <span class="choice-body"><strong>${fulfillment === 'delivery' ? 'Efectivo al recibir' : 'Efectivo al retirar'}</strong>
+                <span class="quiet">Se coordina con el comercio</span></span>
+            </label>
+          </div>
+          <p class="microcopy">CAUCE no cobra ni intermedia el pago. El pedido y el pago son estados independientes.</p>`
+        : `
+          <div class="choice-group" role="radiogroup" aria-label="Forma de pago">
+            <label class="choice ${(stored.paymentMethod || 'cash_demo') === 'cash_demo' ? 'active' : ''}">
+              <input type="radio" name="paymentMethod" value="cash_demo" ${(stored.paymentMethod || 'cash_demo') === 'cash_demo' ? 'checked' : ''}>
+              <span class="choice-body"><strong>Efectivo al recibir</strong><span class="quiet">Prueba · no se cobra nada</span></span>
+            </label>
+            <label class="choice ${stored.paymentMethod === 'transfer_demo' ? 'active' : ''}">
+              <input type="radio" name="paymentMethod" value="transfer_demo" ${stored.paymentMethod === 'transfer_demo' ? 'checked' : ''}>
+              <span class="choice-body"><strong>Transferencia al comercio</strong><span class="quiet">Prueba · no se cobra nada</span></span>
+            </label>
+          </div>
+          <p class="microcopy">Los pagos en línea no están habilitados en esta entrega. El pedido y el pago son estados independientes.</p>`}
       </section>
 
       <section class="checkout-section checkout-total">
