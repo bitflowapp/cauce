@@ -28,8 +28,14 @@ jobs:
       - name: Comprobaciones estáticas y compuertas
         run: npm run check
 
+      - name: Instalar dependencias de pruebas fijadas en lockfile
+        run: npm ci
+
       - name: Pruebas de dominio, backend e interfaz
         run: npm test
+
+      - name: Migraciones y aislamiento RLS en PostgreSQL embebido
+        run: npm run test:db
 
       - name: Compilación estática y paquete sin conexión
         run: |
@@ -37,15 +43,14 @@ jobs:
           npm run build:offline
 
       - name: Recorridos de navegador y auditoría visual
-        # El runner trae Chrome instalado; si algún día no estuviera, el paso se
-        # marca como fallido sin bloquear el resto de la verificación.
-        continue-on-error: true
+        # Una regresión de navegador debe bloquear la verificación.
         env:
           CAUCE_CHROME_PATH: /usr/bin/google-chrome
         run: |
           npm run e2e
           npm run e2e:demo
           npm run audit:visual
+          npm run audit:visual:backend
 
       - name: Guardar la evidencia de esta corrida
         if: always()
