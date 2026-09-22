@@ -9,7 +9,7 @@ import { readFile, readdir } from 'node:fs/promises';
 import { PGlite } from '@electric-sql/pglite';
 
 const db = new PGlite();
-const ids = Object.fromEntries(['customerA', 'customerB', 'merchantA', 'merchantB', 'driverA', 'admin', 'manager', 'staff']
+const ids = Object.fromEntries(['customerA', 'customerB', 'merchantA', 'merchantB', 'driverA', 'admin', 'manager', 'staff', 'driverB']
   .map((name, i) => [name, `10000000-0000-4000-8000-${String(i + 1).padStart(12, '0')}`]));
 let businessA, businessB;
 async function as(name, sql, params = []) {
@@ -43,6 +43,7 @@ before(async () => {
     grant usage on schema storage to anon, authenticated;
     grant select on storage.buckets to anon, authenticated;
     grant select, insert, update, delete on storage.objects to anon, authenticated;
+    create publication supabase_realtime;
     -- Exercise old Supabase defaults too: migrations must revoke these grants.
     alter default privileges in schema public grant all on tables to anon, authenticated;
   `);
@@ -276,4 +277,192 @@ test('media paths isolate every business and keep staff out of uploads', async (
   assert.equal(rows(await as('merchantB', 'delete from storage.objects returning id')).length, 0);
   assert.equal(rows(await as('merchantB', "update storage.objects set name='robado' returning id")).length, 0);
   assert.equal(rows(await as('merchantA', 'delete from storage.objects returning id')).length, 2);
+});
+
+// ───────────────── pedidos, reparto y viajes ─────────────────
+const variantOf = async () => rows(await as('merchantA',
+  'select id from public.product_variants where product_id=$1 order by name limit 1', [productA]))[0].id;
+const itemsFor = (variant, quantity = 1) => JSON.stringify([{ product_id: productA, variant_id: variant, quantity }]);
+const contact = JSON.stringify({ name: 'Vecina Sintética', phone: '2942000111', notes: 'Sin sal' });
+const orderCall = (who, business, key, fulfillment, items, contactJson = contact) => as(who,
+  'select public.create_order($1,$2,$3,$4,$5::jsonb,$6::jsonb) as id',
+  [business, key, fulfillment, fulfillment === 'delivery' ? 'cash_on_delivery' : 'cash_on_pickup', contactJson, items]);
+let orderA, keyA;
+
+test('the server prices the order, the client only chooses products', async () => {
+  const variant = await variantOf();
+  keyA = crypto.randomUUID();
+  orderA = rows(await orderCall('customerA', businessA, keyA, 'pickup', itemsFor(variant, 2)))[0].id;
+  const order = rows(await as('customerA', 'select * from public.orders where id=$1', [orderA]))[0];
+  // 1800 de base + 200 de la variante, por dos unidades. Sin envío en retiro.
+  assert.equal(Number(order.subtotal_ars), 4000);
+  assert.equal(Number(order.delivery_fee_ars), 0);
+  assert.equal(Number(order.total_ars), 4000);
+  assert.equal(order.status, 'submitted');
+  assert.match(order.code, /^CA-\d{4}$/);
+  assert.equal(rows(await as('customerA', 'select stock from public.products where id=$1', [productA]))[0].stock, 8);
+  const items = rows(await as('customerA', 'select product_name,variant_name,unit_price_ars,total_ars from public.order_items where order_id=$1', [orderA]));
+  assert.equal(items.length, 1);
+  assert.equal(items[0].product_name, 'Pan casero');
+  assert.equal(Number(items[0].unit_price_ars), 2000);
+});
+
+test('the same attempt never creates a second order and a changed attempt is refused', async () => {
+  const variant = await variantOf();
+  assert.equal(rows(await orderCall('customerA', businessA, keyA, 'pickup', itemsFor(variant, 2)))[0].id, orderA);
+  assert.equal(rows(await as('customerA', 'select count(*)::int as n from public.orders'))[0].n, 1);
+  assert.equal(rows(await as('customerA', 'select stock from public.products where id=$1', [productA]))[0].stock, 8);
+  await assert.rejects(orderCall('customerA', businessA, keyA, 'pickup', itemsFor(variant, 3)),
+    error => error.code === 'U0002');
+});
+
+test('an order snapshot survives later catalog edits', async () => {
+  await as('merchantA', "update public.products set name='Pan casero grande', price_ars=5000 where id=$1", [productA]);
+  const items = rows(await as('customerA', 'select product_name,unit_price_ars from public.order_items where order_id=$1', [orderA]));
+  assert.equal(items[0].product_name, 'Pan casero');
+  assert.equal(Number(items[0].unit_price_ars), 2000);
+  await as('merchantA', "update public.products set name='Pan casero', price_ars=1800 where id=$1", [productA]);
+});
+
+test('stock, closed shops and unavailable products stop an order before it is created', async () => {
+  const variant = await variantOf();
+  await assert.rejects(orderCall('customerA', businessA, crypto.randomUUID(), 'pickup', itemsFor(variant, 99)),
+    error => error.code === 'U0003');
+  await assert.rejects(orderCall('customerA', businessA, crypto.randomUUID(), 'delivery', itemsFor(variant, 1)),
+    error => error.code === '23514');
+  await assert.rejects(orderCall('customerA', businessA, crypto.randomUUID(), 'pickup', JSON.stringify([])),
+    error => error.code === '23514');
+  // Un producto de otro comercio no entra en el pedido aunque se lo nombre.
+  await assert.rejects(orderCall('customerA', businessA, crypto.randomUUID(), 'pickup',
+    JSON.stringify([{ product_id: productB, quantity: 1 }])), error => error.code === '23514');
+  await as('merchantA', "select public.set_business_presence($1,null,false)", [businessA]);
+  await assert.rejects(orderCall('customerB', businessA, crypto.randomUUID(), 'pickup', itemsFor(variant, 1)),
+    error => error.code === '23514');
+  await as('merchantA', "select public.set_business_presence($1,null,true)", [businessA]);
+  assert.equal(rows(await as('customerA', 'select stock from public.products where id=$1', [productA]))[0].stock, 8);
+});
+
+test('an order is visible to its customer and its business, to nobody else', async () => {
+  assert.equal(rows(await as('customerA', 'select id from public.orders')).length, 1);
+  assert.equal(rows(await as('merchantA', 'select id from public.orders')).length, 1);
+  assert.equal(rows(await as('staff', 'select id from public.orders')).length, 1);
+  assert.equal(rows(await as('customerB', 'select id from public.orders')).length, 0);
+  assert.equal(rows(await as('merchantB', 'select id from public.orders')).length, 0);
+  assert.equal(rows(await as('admin', 'select id from public.orders')).length, 0);
+  await denied(as('anon', 'select id from public.orders'));
+  assert.equal(rows(await as('customerB', 'select id from public.order_items')).length, 0);
+  assert.equal(rows(await as('merchantB', 'select id from public.order_events')).length, 0);
+  // Sin INSERT ni UPDATE directos: la única vía es la función con reglas.
+  await denied(as('customerA', "update public.orders set total_ars=1 where id=$1", [orderA]));
+  await denied(as('customerA', "update public.orders set status='delivered' where id=$1", [orderA]));
+  await denied(as('merchantA', "update public.orders set status='delivered' where id=$1", [orderA]));
+  await denied(as('customerA', "insert into public.orders(code,business_id,locality_id,customer_id,idempotency_key,request_fingerprint,fulfillment,payment_method,contact_name,contact_phone,subtotal_ars,total_ars) values ('CA-9999',$1,$2,$3,gen_random_uuid(),'x','pickup','cash_on_pickup','X','2942000000',1,1)",
+    [businessA, null, ids.customerA]));
+});
+
+test('only the business advances an order, and never out of order', async () => {
+  const move = (who, status, version, rider = null) => as(who,
+    'select (public.transition_order($1,$2,$3,$4,$5)).status as status', [orderA, version, status, rider, '']);
+  await assert.rejects(move('customerA', 'delivered', 1), error => error.code === '42501');
+  await assert.rejects(move('customerA', 'preparing', 1), error => error.code === '42501');
+  await assert.rejects(move('merchantB', 'accepted', 1), error => error.code === '42501');
+  await assert.rejects(move('customerB', 'accepted', 1), error => error.code === '42501');
+  await assert.rejects(move('merchantA', 'ready', 1), error => error.code === '42501');
+  await assert.rejects(move('merchantA', 'accepted', 7), error => error.code === 'U0001');
+  assert.equal(rows(await move('merchantA', 'accepted', 1))[0].status, 'accepted');
+  assert.equal(rows(await move('merchantA', 'preparing', 2))[0].status, 'preparing');
+  assert.equal(rows(await move('merchantA', 'ready', 3))[0].status, 'ready');
+  // En retiro no hay asignación de reparto.
+  await assert.rejects(move('merchantA', 'assigned', 4), error => error.code === '42501');
+  assert.equal(rows(await move('merchantA', 'delivered', 4))[0].status, 'delivered');
+  assert.equal(rows(await as('merchantA', 'select payment_status from public.orders where id=$1', [orderA]))[0].payment_status, 'settled');
+  await assert.rejects(move('merchantA', 'canceled', 5), error => error.code === '42501');
+  assert.equal(rows(await as('customerA', 'select count(*)::int as n from public.order_events where order_id=$1', [orderA]))[0].n, 5);
+});
+
+test('delivery assigns only riders of the same business and cancelling returns stock', async () => {
+  await as('merchantA', `update public.businesses set delivery_enabled=true, delivery_zone='Casco urbano',
+    delivery_fee_ars=1200, minimum_order_ars=1000 where id=$1`, [businessA]);
+  const riderA = rows(await as('merchantA', "insert into public.business_riders(business_id,name,phone) values ($1,'Reparto A','2942000222') returning id", [businessA]))[0].id;
+  const riderB = rows(await as('merchantB', "insert into public.business_riders(business_id,name) values ($1,'Reparto B') returning id", [businessB]))[0].id;
+  assert.equal(rows(await as('merchantB', 'select id from public.business_riders')).length, 1);
+  assert.equal(rows(await as('customerA', 'select id from public.business_riders')).length, 0);
+  const variant = await variantOf();
+  const delivery = rows(await orderCall('customerA', businessA, crypto.randomUUID(), 'delivery', itemsFor(variant, 1),
+    JSON.stringify({ name: 'Vecina Sintética', phone: '2942000111', address: 'Calle Principal 123' })))[0].id;
+  const order = rows(await as('customerA', 'select subtotal_ars,delivery_fee_ars,total_ars,delivery_code from public.orders where id=$1', [delivery]))[0];
+  assert.equal(Number(order.subtotal_ars), 2000);
+  assert.equal(Number(order.delivery_fee_ars), 1200);
+  assert.equal(Number(order.total_ars), 3200);
+  assert.match(order.delivery_code, /^\d{4}$/);
+  const move = (who, status, version, rider = null) => as(who,
+    'select (public.transition_order($1,$2,$3,$4,$5)).status as status', [delivery, version, status, rider, '']);
+  await move('merchantA', 'accepted', 1);
+  await move('merchantA', 'preparing', 2);
+  await move('merchantA', 'ready', 3);
+  await assert.rejects(move('merchantA', 'assigned', 4, riderB), error => error.code === '23514');
+  await assert.rejects(move('merchantA', 'assigned', 4, null), error => error.code === '23514');
+  assert.equal(rows(await move('merchantA', 'assigned', 4, riderA))[0].status, 'assigned');
+  assert.equal(rows(await move('merchantA', 'picked_up', 5))[0].status, 'picked_up');
+  assert.equal(rows(await move('merchantA', 'on_the_way', 6))[0].status, 'on_the_way');
+  assert.equal(rows(await move('merchantA', 'arrived', 7))[0].status, 'arrived');
+  assert.equal(rows(await move('merchantA', 'delivered', 8))[0].status, 'delivered');
+
+  const cancelable = rows(await orderCall('customerA', businessA, crypto.randomUUID(), 'pickup', itemsFor(variant, 2)))[0].id;
+  assert.equal(rows(await as('customerA', 'select stock from public.products where id=$1', [productA]))[0].stock, 5);
+  assert.equal(rows(await as('customerA',
+    'select (public.transition_order($1,1,$2,null,$3)).status as status', [cancelable, 'canceled', 'Me arrepentí']))[0].status, 'canceled');
+  assert.equal(rows(await as('customerA', 'select stock from public.products where id=$1', [productA]))[0].stock, 7);
+});
+
+test('a driver only exists after administration approves the application', async () => {
+  await as('driverA', "select public.apply_as_driver('Conductor Sintético A','Móvil 1','Auto','AAA111','2942000333')");
+  await as('driverB', "select public.apply_as_driver('Conductor Sintético B','Móvil 2','Auto','BBB222','2942000444')");
+  assert.equal(rows(await as('driverA', 'select status,available from public.drivers'))[0].status, 'pending_review');
+  assert.equal(rows(await as('driverA', 'select id from public.drivers')).length, 1);
+  assert.equal(rows(await as('driverB', 'select id from public.drivers')).length, 1);
+  assert.equal(rows(await as('customerA', 'select id from public.drivers')).length, 0);
+  await denied(as('driverA', 'select public.set_driver_availability(true)'));
+  await denied(as('driverA', "select public.review_driver((select id from public.drivers limit 1),'active','')"));
+  await denied(as('customerA', 'select public.admin_drivers()'));
+  assert.equal(rows(await as('admin', 'select id from public.admin_drivers()')).length, 2);
+  for (const who of ['driverA', 'driverB']) {
+    const id = rows(await as(who, 'select id from public.drivers'))[0].id;
+    await as('admin', "select public.review_driver($1,'active','Aprobado')", [id]);
+    await as(who, 'select public.set_driver_availability(true)');
+  }
+});
+
+test('two drivers cannot take the same trip and the loser is told so', async () => {
+  const trip = rows(await as('customerA',
+    "select (public.request_trip('Ruta 23','Hospital','Portón azul',2,'Vecina Sintética','2942000111')).id as id"))[0].id;
+  await assert.rejects(as('customerA',
+    "select public.request_trip('Otra','Otro','',1,'Vecina Sintética','2942000111')"), error => error.code === '23514');
+  // Antes de aceptar, la oferta no revela nombre ni teléfono.
+  const offers = rows(await as('driverA', 'select * from public.driver_offers()'));
+  assert.equal(offers.length, 1);
+  assert.equal(offers[0].passenger_initial, 'V');
+  assert.ok(!Object.keys(offers[0]).some(key => /phone|passenger_name/.test(key)));
+  assert.equal(rows(await as('driverA', 'select id from public.trips')).length, 0);
+  assert.equal(rows(await as('driverB', 'select id from public.trips')).length, 0);
+  assert.equal(rows(await as('customerB', 'select id from public.trips')).length, 0);
+  await denied(as('anon', 'select id from public.trips'));
+
+  assert.equal(rows(await as('driverA', 'select (public.accept_trip($1)).status as status', [trip]))[0].status, 'accepted');
+  await assert.rejects(as('driverB', 'select public.accept_trip($1)', [trip]), error => error.code === 'U0004');
+  assert.equal(rows(await as('driverB', 'select * from public.driver_offers()')).length, 0);
+  assert.equal(rows(await as('driverA', 'select passenger_phone from public.trips'))[0].passenger_phone, '2942000111');
+  assert.equal(rows(await as('driverB', 'select id from public.trips')).length, 0);
+  const assigned = rows(await as('customerA', 'select (public.trip_driver($1)).plate as plate', [trip]))[0];
+  assert.equal(assigned.plate, 'AAA111');
+  assert.equal(rows(await as('customerB', 'select (public.trip_driver($1)).plate as plate', [trip]))[0].plate, null);
+
+  await assert.rejects(as('driverB', "select public.transition_trip($1,'driver_on_way','')", [trip]), error => error.code === '42501');
+  await assert.rejects(as('customerA', "select public.transition_trip($1,'completed','')", [trip]), error => error.code === '42501');
+  await assert.rejects(as('driverA', "select public.transition_trip($1,'completed','')", [trip]), error => error.code === '42501');
+  for (const next of ['driver_on_way', 'driver_arrived', 'passenger_on_board', 'in_trip', 'completed']) {
+    assert.equal(rows(await as('driverA', 'select (public.transition_trip($1,$2,$3)).status as status', [trip, next, '']))[0].status, next);
+  }
+  assert.equal(rows(await as('customerA', 'select count(*)::int as n from public.trip_events where trip_id=$1', [trip]))[0].n, 7);
+  assert.equal(rows(await as('customerB', 'select count(*)::int as n from public.trip_events'))[0].n, 0);
 });
