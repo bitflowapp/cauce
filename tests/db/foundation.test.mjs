@@ -1,6 +1,8 @@
 // Executes the migration in embedded PostgreSQL (PGlite), not a policy mock.
-// Auth fixtures below replace ONLY the platform-owned auth schema for this test.
-// This does not test GoTrue, PostgREST, email, Storage, Realtime or concurrency.
+// Auth and storage fixtures below replace ONLY the platform-owned schemas, with
+// the same shape the policies rely on (storage.objects.name, bucket_id).
+// This does not test GoTrue, PostgREST, email, the Storage API, Realtime or
+// concurrency: the real Storage service adds its own checks on top of these rows.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, readdir } from 'node:fs/promises';
@@ -30,6 +32,17 @@ before(async () => {
     grant usage on schema auth to anon, authenticated;
     grant usage on schema public to anon, authenticated;
     grant execute on function auth.uid() to anon, authenticated;
+    create schema storage;
+    create table storage.buckets (id text primary key, name text not null, public boolean not null default false,
+      file_size_limit bigint, allowed_mime_types text[], created_at timestamptz not null default now());
+    create table storage.objects (id uuid primary key default gen_random_uuid(),
+      bucket_id text not null references storage.buckets(id), name text not null, owner uuid,
+      metadata jsonb, created_at timestamptz not null default now(), updated_at timestamptz not null default now(),
+      unique (bucket_id, name));
+    alter table storage.objects enable row level security;
+    grant usage on schema storage to anon, authenticated;
+    grant select on storage.buckets to anon, authenticated;
+    grant select, insert, update, delete on storage.objects to anon, authenticated;
     -- Exercise old Supabase defaults too: migrations must revoke these grants.
     alter default privileges in schema public grant all on tables to anon, authenticated;
   `);
@@ -129,4 +142,138 @@ test('no public definer functions and no anonymous execute on private helpers', 
     where n.nspname='public' and p.prosecdef`);
   assert.deepEqual(result.rows, []);
   await denied(as('anon', 'select private.is_admin()'));
+});
+
+// ───────────────── catálogo, medios y ciclo de alta ─────────────────
+const rows = result => result.rows;
+let categoryA, productA, productB;
+
+test('owner builds a catalog; the neighbouring business cannot read or touch it', async () => {
+  categoryA = rows(await as('merchantA', "insert into public.product_categories(business_id,name) values ($1,'Panificados') returning id", [businessA]))[0].id;
+  productA = rows(await as('merchantA',
+    "insert into public.products(business_id,category_id,name,price_ars,stock) values ($1,$2,'Pan casero',1800,10) returning id",
+    [businessA, categoryA]))[0].id;
+  productB = rows(await as('merchantB',
+    "insert into public.products(business_id,name,price_ars,stock) values ($1,'Producto B',2500,5) returning id", [businessB]))[0].id;
+  // La localidad la deriva el servidor desde el comercio, no el cliente.
+  const scope = rows(await as('merchantA', 'select locality_id from public.products where id=$1', [productA]))[0];
+  assert.equal(scope.locality_id, rows(await db.query('select locality_id from public.businesses where id=$1', [businessA]))[0].locality_id);
+  assert.deepEqual(rows(await as('merchantA', 'select id from public.products order by name')), [{ id: productA }]);
+  assert.deepEqual(rows(await as('merchantB', 'select id from public.products')), [{ id: productB }]);
+  assert.equal(rows(await as('merchantA', "update public.products set name='Intrusion' where id=$1 returning id", [productB])).length, 0);
+  assert.equal(rows(await as('merchantA', 'delete from public.products where id=$1 returning id', [productB])).length, 0);
+});
+
+test('a product cannot borrow another business category, locality or image path', async () => {
+  await assert.rejects(as('merchantB',
+    "insert into public.products(business_id,category_id,name,price_ars) values ($1,$2,'Robado',100)", [businessB, categoryA]),
+  error => error.code === '23503');
+  await denied(as('merchantA', 'update public.products set locality_id=gen_random_uuid() where id=$1', [productA]));
+  await denied(as('merchantA', 'update public.products set business_id=$1 where id=$2', [businessB, productA]));
+  await assert.rejects(as('merchantA',
+    'update public.products set image_path=$1 where id=$2', [`businesses/${businessB}/products/x.webp`, productA]),
+  error => error.code === '23514');
+  assert.equal(rows(await as('merchantA',
+    'update public.products set image_path=$1 where id=$2 returning id', [`businesses/${businessA}/products/${productA}/x.webp`, productA])).length, 1);
+});
+
+test('staff marks availability through the guarded call and never by direct write', async () => {
+  // Una fila fuera de la politica no da error: no afecta ninguna fila.
+  assert.equal(rows(await as('staff', 'update public.products set available=false where id=$1 returning id', [productA])).length, 0);
+  await denied(as('staff', "insert into public.products(business_id,name,price_ars) values ($1,'De staff',100)", [businessA]));
+  assert.equal(rows(await as('staff', 'select (public.set_product_availability($1,false,3)).available as available', [productA]))[0].available, false);
+  assert.equal(rows(await as('merchantA', 'select available,stock from public.products where id=$1', [productA]))[0].stock, 3);
+  await denied(as('merchantB', 'select public.set_product_availability($1,true,99)', [productA]));
+  await denied(as('customerA', 'select public.set_product_availability($1,true,99)', [productA]));
+  await as('merchantA', 'select public.set_product_availability($1,true,10)', [productA]);
+});
+
+test('variants stay inside their product and respect the documented limit', async () => {
+  for (const name of ['Chico', 'Mediano', 'Grande']) {
+    await as('merchantA', 'insert into public.product_variants(product_id,business_id,name,price_delta_ars) values ($1,$2,$3,200)',
+      [productA, businessA, name]);
+  }
+  await denied(as('merchantB', 'insert into public.product_variants(product_id,business_id,name) values ($1,$2,$3)',
+    [productA, businessA, 'Intruso']));
+  await assert.rejects(as('merchantB', 'insert into public.product_variants(product_id,business_id,name) values ($1,$2,$3)',
+    [productA, businessB, 'Cruzado']), error => error.code === '23503');
+  for (const name of ['V4', 'V5', 'V6']) {
+    await as('merchantA', 'insert into public.product_variants(product_id,business_id,name) values ($1,$2,$3)', [productA, businessA, name]);
+  }
+  await assert.rejects(as('merchantA', 'insert into public.product_variants(product_id,business_id,name) values ($1,$2,$3)',
+    [productA, businessA, 'V7']), error => error.code === '23514');
+});
+
+test('private contact data belongs to the business and to administration only', async () => {
+  await as('merchantA', "insert into public.business_contacts(business_id,owner_name,phone) values ($1,'Responsable A','2942000001')", [businessA]);
+  assert.equal(rows(await as('merchantA', 'select phone from public.business_contacts')).length, 1);
+  assert.equal(rows(await as('staff', 'select phone from public.business_contacts')).length, 1);
+  assert.equal(rows(await as('merchantB', 'select phone from public.business_contacts')).length, 0);
+  assert.equal(rows(await as('customerA', 'select phone from public.business_contacts')).length, 0);
+  await denied(as('anon', 'select phone from public.business_contacts'));
+  assert.equal(rows(await as('admin', 'select phone from public.business_contacts')).length, 1);
+  assert.equal(rows(await as('staff', "update public.business_contacts set phone='0' where business_id=$1 returning business_id", [businessA])).length, 0);
+});
+
+test('publication requires a complete application and is decided only by administration', async () => {
+  assert.ok(rows(await as('merchantA', 'select public.business_missing_requirements($1) as missing', [businessA]))[0].missing.length > 0);
+  await assert.rejects(as('merchantA', 'select public.submit_business_for_review($1)', [businessA]), error => error.code === '23514');
+  await as('merchantA', `update public.businesses set address='Ruta 23', hours_label='9 a 13 y 17 a 21',
+    category_id=(select id from public.business_categories where slug='panaderia') where id=$1`, [businessA]);
+  assert.deepEqual(rows(await as('merchantA', 'select public.business_missing_requirements($1) as missing', [businessA]))[0].missing, []);
+  await denied(as('customerA', 'select public.submit_business_for_review($1)', [businessA]));
+  assert.equal(rows(await as('merchantA', 'select public.submit_business_for_review($1) as status', [businessA]))[0].status, 'pending_review');
+  await denied(as('merchantA', "select public.review_business($1,'active','')", [businessA]));
+  await denied(as('staff', "select public.review_business($1,'active','')", [businessA]));
+  await denied(as('customerA', "select public.review_business($1,'active','')", [businessA]));
+  await assert.rejects(as('admin', "select public.review_business($1,'deleted','')", [businessA]), error => error.code === '23514');
+  assert.equal(rows(await as('admin', "select public.review_business($1,'active','Aprobado') as decision", [businessA]))[0].decision, 'active');
+  assert.equal(rows(await as('merchantA', 'select status from public.businesses where id=$1', [businessA]))[0].status, 'active');
+  assert.equal(rows(await as('merchantA', 'select count(*)::int as n from public.business_review_events'))[0].n, 2);
+  assert.equal(rows(await as('merchantB', 'select count(*)::int as n from public.business_review_events'))[0].n, 0);
+});
+
+test('opening and pausing belong to the business; publishing never does', async () => {
+  assert.equal(rows(await as('merchantA', 'select public.set_business_presence($1,null,true) as status', [businessA]))[0].status, 'active');
+  assert.equal(rows(await as('merchantA', 'select open from public.businesses where id=$1', [businessA]))[0].open, true);
+  await denied(as('staff', 'select public.set_business_presence($1,null,false)', [businessA]));
+  await assert.rejects(as('merchantB', "select public.set_business_presence($1,'active',null)", [businessB]), error => error.code === '23514');
+  assert.equal(rows(await as('merchantA', "select public.set_business_presence($1,'paused',null) as status", [businessA]))[0].status, 'paused');
+  assert.equal(rows(await as('merchantA', 'select open from public.businesses where id=$1', [businessA]))[0].open, false);
+  await assert.rejects(as('merchantA', 'select public.set_business_presence($1,null,true)', [businessA]), error => error.code === '23514');
+  await as('merchantA', "select public.set_business_presence($1,'active',true)", [businessA]);
+});
+
+test('the public catalog shows a published business and hides drafts and archived items', async () => {
+  // `archived` no se puede fijar al crear: sólo se da de baja un producto existente.
+  await denied(as('merchantA', "insert into public.products(business_id,name,price_ars,archived) values ($1,'Producto de baja',900,true)", [businessA]));
+  const hidden = rows(await as('merchantA',
+    "insert into public.products(business_id,name,price_ars) values ($1,'Producto de baja',900) returning id", [businessA]))[0].id;
+  await as('merchantA', 'update public.products set archived=true where id=$1', [hidden]);
+  assert.deepEqual(rows(await as('anon', 'select id from public.products order by name')).map(row => row.id), [productA]);
+  assert.deepEqual(rows(await as('customerA', 'select id from public.products')).map(row => row.id), [productA]);
+  assert.equal(rows(await as('anon', 'select count(*)::int as n from public.product_variants'))[0].n, 6);
+  assert.equal(rows(await as('anon', 'select count(*)::int as n from public.product_categories'))[0].n, 1);
+  assert.equal(rows(await as('merchantA', 'select count(*)::int as n from public.products'))[0].n, 2);
+  await denied(as('anon', "insert into public.products(business_id,name,price_ars) values ($1,'Intruso',100)", [businessA]));
+  await denied(as('customerA', "insert into public.products(business_id,name,price_ars) values ($1,'Intruso',100)", [businessA]));
+  await as('merchantA', 'delete from public.products where id=$1', [hidden]);
+});
+
+test('media paths isolate every business and keep staff out of uploads', async () => {
+  const upload = (who, path) => as(who, 'insert into storage.objects(bucket_id,name) values ($1,$2)', ['business-media', path]);
+  await upload('merchantA', `businesses/${businessA}/logo/logo.webp`);
+  await upload('merchantA', `businesses/${businessA}/products/${productA}/photo.webp`);
+  await denied(upload('merchantA', `businesses/${businessB}/logo/logo.webp`));
+  await denied(upload('merchantA', `businesses/${businessA}/../${businessB}/logo/logo.webp`));
+  await denied(upload('merchantA', 'logo.webp'));
+  await denied(upload('staff', `businesses/${businessA}/products/${productA}/staff.webp`));
+  await denied(upload('customerA', `businesses/${businessA}/logo/logo.webp`));
+  assert.equal(rows(await as('manager', 'select count(*)::int as n from storage.objects'))[0].n, 2);
+  assert.equal(rows(await as('staff', 'select count(*)::int as n from storage.objects'))[0].n, 2);
+  assert.equal(rows(await as('merchantB', 'select count(*)::int as n from storage.objects'))[0].n, 0);
+  assert.equal(rows(await as('customerA', 'select count(*)::int as n from storage.objects'))[0].n, 0);
+  assert.equal(rows(await as('merchantB', 'delete from storage.objects returning id')).length, 0);
+  assert.equal(rows(await as('merchantB', "update storage.objects set name='robado' returning id")).length, 0);
+  assert.equal(rows(await as('merchantA', 'delete from storage.objects returning id')).length, 2);
 });
