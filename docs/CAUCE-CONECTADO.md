@@ -263,12 +263,22 @@ npm run e2e:supabase        # recorrido en tres navegadores independientes
 | Pruebas SQL sobre PostgreSQL embebido | 38 aprobadas |
 | Identidad contra Supabase real | 12 comprobaciones |
 | Operación contra Supabase real | 11 comprobaciones |
-| Recorrido en tres navegadores contra Supabase real | 17 pasos |
+| Recorrido en tres navegadores contra Supabase real | 13 de 17 pasos verificados |
 | E2E SQLite y demo heredados | 37 y 12 pasos |
 | Auditorías visuales heredadas | 64 pantallas |
 
 Cuatro de las pruebas de dominio ejecutan el service worker de verdad, en un
 entorno mínimo, para fijar qué puede quedar guardado en el dispositivo.
+
+El recorrido de navegador llegó hasta «el cambio de estado llega al cliente sin
+recargar», que es el paso 13. Los cuatro últimos —acceso por URL al panel ajeno,
+callback de recuperación, comportamiento sin conexión y ausencia de errores de
+JavaScript— **no están verificados en esta corrida**: se cortó por un problema de
+espera del propio guion al cambiar de identidad en el mismo navegador, ya
+corregido, y no se relanzó porque la máquina quedó sin memoria. Las tres
+capacidades equivalentes sí están comprobadas por otras vías: el aislamiento por
+cuenta en la suite de operación, el token de recuperación de un solo uso en la
+suite de identidad, y el service worker en las pruebas de dominio.
 
 Las pruebas SQL levantan PostgreSQL embebido, reconstruyen las seis migraciones
 desde cero y cambian de rol e identidad por transacción. **No prueban
