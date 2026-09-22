@@ -31,6 +31,10 @@ async function login(page, user) {
   // Cambiar de identidad en el mismo navegador exige cerrar la sesión anterior.
   if (await page.evaluate('!!document.querySelector("[data-action=sign-out]")')) {
     await press(page, '[data-action="sign-out"]');
+    // Cerrar sesión es una ida al servidor: hay que esperar a que termine
+    // antes de volver a la pantalla de ingreso, o se vuelve a dibujar la vista
+    // de la cuenta anterior.
+    await page.waitForFunction('!document.querySelector("[data-action=sign-out]")', { timeout: 30000 });
     await visit(page, 'cuenta');
   }
   await page.waitForFunction('!!document.querySelector("#signin-email")', { timeout: 30000 });
