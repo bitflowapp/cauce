@@ -17,7 +17,15 @@ let passed = false;
 const step = name => { steps.push(name); console.log(`PASS · ${name}`); };
 const base = 'http://127.0.0.1:4174';
 const ready = page => page.waitForFunction('document.querySelector("#main")?.getAttribute("aria-busy") === "false"', { timeout: 30000 });
-async function visit(page, route) { await page.goto(`${base}/index.html#${route}`); await ready(page); }
+// Ir al mismo hash no vuelve a navegar: si ya estábamos ahí hay que recargar,
+// o la pantalla sigue mostrando lo que se dibujó antes del cambio remoto.
+async function visit(page, route) {
+  const target = `${base}/index.html#${route}`;
+  const current = await page.evaluate('location.href').catch(() => '');
+  await page.goto(target);
+  if (current === target) await page.reload();
+  await ready(page);
+}
 async function login(page, user) {
   await visit(page, 'cuenta');
   await page.fill('#signin-email', user.email); await page.fill('#signin-password', user.password);
@@ -30,6 +38,7 @@ async function login(page, user) {
 // El clic de CDP va a las coordenadas del elemento: si quedó fuera de pantalla,
 // hay que traerlo antes o el clic cae en otro lado.
 async function press(page, selector) {
+  await page.waitForFunction(`!!document.querySelector(${JSON.stringify(selector)})`, { timeout: 30000 });
   await page.evaluate(`document.querySelector(${JSON.stringify(selector)}).scrollIntoView({ block: 'center' })`);
   await page.click(selector);
 }

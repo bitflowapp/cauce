@@ -55,6 +55,8 @@ Aplicadas con CLI sobre el proyecto real, en este orden:
 | `20260922021709` | Pedidos, reparto, conductores, viajes y funciones de regla |
 | `20260922022339` | Realtime y denegaciones explícitas en tablas de referencia |
 | `20260922023914` | Nombres propios para las claves de ámbito de pedido |
+| `20260922025918` | Corrección de contabilidad de stock con variantes |
+| `20260922030252` | Revocación de EXECUTE en funciones de trigger |
 
 `supabase/database.types.ts` se regeneró desde el proyecto real.
 
@@ -145,6 +147,28 @@ Que el bucket sea público significa que **quien tenga la URL exacta de una foto
 puede verla**. Es contenido que el comercio publica a propósito; permite servir
 las imágenes por CDN y evita meter respuestas privadas en la caché del
 navegador. Nada privado se guarda ahí.
+
+## Sincronización en vivo
+
+`orders`, `order_events`, `trips` y `trip_events` están en la publicación
+`supabase_realtime`. Realtime entrega cada cambio pasando la fila por las mismas
+políticas RLS, así que un comercio recibe sus pedidos y una persona los suyos.
+No se creó nada dentro del esquema `realtime`, que está protegido.
+
+La aplicación abre **una suscripción por vista**, acotada a lo que esa vista
+muestra: el panel del comercio escucha `business_id=eq.<su comercio>`, la
+pantalla de un pedido escucha ese pedido y la actividad de una persona escucha
+sus pedidos y sus viajes. Al cambiar de pantalla el canal se cierra. Nunca se
+escucha una tabla entera. Cuando llega un cambio, la aplicación **no pinta la
+carga útil del evento**: vuelve a consultar por la vía normal, que aplica RLS
+otra vez.
+
+Hay una excepción deliberada: **las solicitudes de taxi todavía sin aceptar no
+viajan por Realtime**. Una solicitud abierta no es legible por ningún conductor
+—esa es justamente la regla de privacidad—, así que Realtime tampoco podría
+entregarla sin romperla. El panel del conductor vuelve a pedir la lista anónima
+por RPC cada quince segundos mientras está abierto. Una vez aceptado el viaje,
+el conductor sí lo recibe en vivo, porque ya es suyo.
 
 ## Advisors
 

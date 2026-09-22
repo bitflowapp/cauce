@@ -805,7 +805,9 @@ export function createSupabaseRepository({ client, redirectTo, storage } = {}) {
         order: { table: 'orders', filter: `id=eq.${scope.orderId}` },
         myTrips: { table: 'trips', filter: `passenger_id=eq.${scope.passengerId}` },
         driverTrips: { table: 'trips', filter: `driver_id=eq.${scope.driverId}` },
-        openTrips: { table: 'trips', filter: `status=eq.requested` },
+        // No hay canal de solicitudes abiertas a propósito: una solicitud sin
+        // aceptar no es legible por ningún conductor, así que Realtime tampoco
+        // se la puede entregar. El panel del conductor las consulta por RPC.
       }[scope.kind];
       if (!filters) return () => {};
       const channel = client.channel(`cauce:${scope.kind}:${scope.businessId || scope.customerId || scope.orderId || scope.passengerId || scope.driverId || 'open'}`)

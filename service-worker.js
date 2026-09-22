@@ -59,6 +59,9 @@ self.addEventListener('fetch', event => {
   // Las llamadas al backend local nunca se cachean ni se responden desde caché:
   // una respuesta vieja aparentaría una operación que no ocurrió.
   if (url.pathname.includes('/api/')) return;
+  // Un enlace de confirmación o de recuperación llega con el token en la
+  // consulta. Nada con consulta se intercepta ni se guarda: ni el token ni la
+  // respuesta que produce pueden quedar en este dispositivo.
   if (url.search) return;
 
   // El documento va primero a la red, para no servir una versión vieja de la app.

@@ -1123,6 +1123,10 @@ const BUSINESS_FORM_FIELDS = `
   </div>`;
 
 async function viewBusinessSignup() {
+  // Con backend propio el rubro sale de la lista real; en la demostración
+  // sigue siendo texto libre, como estaba.
+  const categories = isSignedIn() && app.repository.capabilities.media
+    ? await app.repository.query('businessCategories') : [];
   if (!isSignedIn()) {
     return `
       ${backLink('#inicio', 'Inicio')}
@@ -1160,7 +1164,18 @@ async function viewBusinessSignup() {
       <p><strong>Empezá por lo esencial.</strong><span>Después vas a sumar identidad, catálogo y modalidades de entrega.</span></p>
     </section>
     <form class="checkout-form" data-form="business-create">
-      ${BUSINESS_FORM_FIELDS}
+      ${categories.length ? `
+        <div class="field">
+          <label for="biz-name">Nombre comercial</label>
+          <input id="biz-name" name="name" type="text" required minlength="2" maxlength="80">
+        </div>
+        <div class="field">
+          <label for="biz-category">Rubro</label>
+          <select id="biz-category" name="category" required>
+            <option value="">Elegí un rubro</option>
+            ${categories.map(category => `<option value="${esc(category.slug)}">${esc(category.name)}</option>`).join('')}
+          </select>
+        </div>` : BUSINESS_FORM_FIELDS}
       <button class="button full" type="submit" ${app.online ? '' : 'disabled'}>Crear borrador</button>
     </form>`;
 }
@@ -2443,15 +2458,13 @@ function syncLive(page, param) {
   else if (['inicio', 'actividad'].includes(page) && me?.id) {
     scopes.push({ kind: 'myOrders', customerId: me.id }, { kind: 'myTrips', passengerId: me.id });
   } else if (['taxi', 'viaje'].includes(page) && me?.id) scopes.push({ kind: 'myTrips', passengerId: me.id });
-  else if (page === 'taxista' && me?.driverId) {
-    scopes.push({ kind: 'driverTrips', driverId: me.driverId }, { kind: 'openTrips' });
-  }
+  else if (page === 'taxista' && me?.driverId) scopes.push({ kind: 'driverTrips', driverId: me.driverId });
   const key = `${page}:${param || ''}:${me?.id || ''}:${scopes.length}`;
   if (key === live.key) return;
   live.stop?.();
   live.stop = null;
   live.key = key;
-  if (!scopes.length) return;
+  if (!scopes.length && page !== 'taxista') return;
   // Un cambio remoto vuelve a pedir los datos por la vía normal, que aplica RLS
   // otra vez: la carga útil del evento nunca se pinta directamente.
   const refresh = () => {
@@ -2459,7 +2472,11 @@ function syncLive(page, param) {
     live.timer = setTimeout(() => { if (route().page === page) render(); }, 250);
   };
   const stops = scopes.map(scope => app.repository.watch(scope, refresh));
-  live.stop = () => { clearTimeout(live.timer); for (const stop of stops) stop(); };
+  // Las solicitudes de taxi todavía sin aceptar no son legibles por ningún
+  // conductor, así que tampoco pueden llegar por Realtime sin revelarlas: el
+  // panel las vuelve a pedir cada quince segundos mientras está abierto.
+  const poll = page === 'taxista' ? setInterval(refresh, 15000) : null;
+  live.stop = () => { clearTimeout(live.timer); if (poll) clearInterval(poll); for (const stop of stops) stop(); };
 }
 
 // Rutas cuyo contenido depende de los permisos de la cuenta. En el entorno con
