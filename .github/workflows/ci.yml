@@ -41,6 +41,7 @@ jobs:
         run: |
           npm run build
           npm run build:offline
+          npm run build:supabase
 
       - name: Recorridos de navegador y auditoría visual
         # Una regresión de navegador debe bloquear la verificación.

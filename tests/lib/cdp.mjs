@@ -65,11 +65,10 @@ export async function launchBrowser({ port = 9300 + Math.floor(Math.random() * 4
 }
 
 async function openPage(port, { width = 390, height = 844, mobile = true } = {}) {
-  const target = await fetchJson(`http://127.0.0.1:${port}/json/new?about:blank`).catch(async () => {
-    const response = await fetch(`http://127.0.0.1:${port}/json/new?about:blank`, { method: 'PUT' });
-    if (!response.ok) throw new Error('No se pudo abrir una pestaña nueva.');
-    return response.json();
-  });
+  // Modern Chrome requires PUT here. Retrying GET 80 times only delays every test.
+  const response = await fetch(`http://127.0.0.1:${port}/json/new?about:blank`, { method: 'PUT' });
+  if (!response.ok) throw new Error('No se pudo abrir una pestaña nueva.');
+  const target = await response.json();
   const socket = new WebSocket(target.webSocketDebuggerUrl);
   const pending = new Map();
   const listeners = new Set();
@@ -80,7 +79,8 @@ async function openPage(port, { width = 390, height = 844, mobile = true } = {})
   socket.addEventListener('message', event => {
     const message = JSON.parse(event.data);
     if (message.id && pending.has(message.id)) {
-      const { resolve, reject } = pending.get(message.id);
+      const { resolve, reject, timer } = pending.get(message.id);
+      clearTimeout(timer);
       pending.delete(message.id);
       if (message.error) reject(new Error(message.error.message));
       else resolve(message.result);
@@ -91,11 +91,11 @@ async function openPage(port, { width = 390, height = 844, mobile = true } = {})
   let nextId = 0;
   const send = (method, params = {}) => new Promise((resolve, reject) => {
     const id = ++nextId;
-    pending.set(id, { resolve, reject });
-    socket.send(JSON.stringify({ id, method, params }));
-    setTimeout(() => {
+    const timer = setTimeout(() => {
       if (pending.has(id)) { pending.delete(id); reject(new Error(`Timeout CDP en ${method}`)); }
     }, 30000);
+    pending.set(id, { resolve, reject, timer });
+    socket.send(JSON.stringify({ id, method, params }));
   });
 
   const consoleErrors = [];

@@ -1,5 +1,9 @@
 # Base productiva: entrega parcial y verificable
 
+> Histórico de la preparación inicial. El estado posterior a conectar el proyecto
+> real está en [SUPABASE-PHASE1.md](SUPABASE-PHASE1.md). El proyecto ya existe;
+> el bloqueo de creación/costo descrito abajo quedó resuelto por el usuario.
+
 Fecha: 21 de septiembre de 2026 (Argentina).
 Rama: `feat/cauce-production-foundation`, desde `ab57bdb`.
 

@@ -1,6 +1,12 @@
 # Arquitectura de CAUCE · Aluminé
 
-## Idea central: una aplicación, dos entornos
+## Idea central: una aplicación, entornos explícitos
+
+Además de demo y SQLite, la rama productiva incorpora el repositorio Supabase
+para cuentas y tenancy. El dominio existente permanece intacto. El build
+`build:supabase` genera un artefacto separado, con su cliente SDK y configuración
+explícita, sin alterar la demo de `dist`. Las capacidades todavía no implementadas
+no se simulan. Ver [estado de fase 1](SUPABASE-PHASE1.md), incluyendo el bloqueo SMTP.
 
 El riesgo obvio de tener una demostración pública y un entorno con backend es
 terminar con **dos aplicaciones distintas** que se parecen. Para evitarlo, las
