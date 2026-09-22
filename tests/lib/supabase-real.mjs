@@ -43,14 +43,32 @@ export async function fixtures(names) {
   const run = randomUUID().slice(0, 8);
   const users = {};
   const businesses = [];
+  // El orden importa: pedidos y viajes referencian cuentas y comercios con
+  // borrado restringido, y los archivos subidos no se van solos.
   async function cleanup() {
     for (const user of Object.values(users)) await user.client.auth.signOut({ scope: 'global' });
-    if (Object.keys(users).length) {
-      const owned = requireSuccess(await admin.from('business_memberships').select('business_id')
-        .in('user_id', Object.values(users).map(user => user.id)));
+    const ids = Object.values(users).map(user => user.id);
+    if (ids.length) {
+      const owned = requireSuccess(await admin.from('business_memberships').select('business_id').in('user_id', ids));
       for (const row of owned) if (!businesses.includes(row.business_id)) businesses.push(row.business_id);
+      requireSuccess(await admin.from('trips').delete().in('passenger_id', ids));
+      requireSuccess(await admin.from('orders').delete().in('customer_id', ids));
     }
-    for (const id of businesses) requireSuccess(await admin.from('businesses').delete().eq('id', id));
+    for (const id of businesses) {
+      requireSuccess(await admin.from('orders').delete().eq('business_id', id));
+      const listed = await admin.storage.from('business-media').list(`businesses/${id}`, { limit: 100 });
+      for (const folder of listed.data || []) {
+        const inner = await admin.storage.from('business-media').list(`businesses/${id}/${folder.name}`, { limit: 100 });
+        const paths = [];
+        for (const entry of inner.data || []) {
+          if (entry.id) { paths.push(`businesses/${id}/${folder.name}/${entry.name}`); continue; }
+          const deeper = await admin.storage.from('business-media').list(`businesses/${id}/${folder.name}/${entry.name}`, { limit: 100 });
+          for (const leaf of deeper.data || []) paths.push(`businesses/${id}/${folder.name}/${entry.name}/${leaf.name}`);
+        }
+        if (paths.length) await admin.storage.from('business-media').remove(paths);
+      }
+      requireSuccess(await admin.from('businesses').delete().eq('id', id));
+    }
     for (const user of Object.values(users)) requireSuccess(await admin.auth.admin.deleteUser(user.id));
   }
   try {

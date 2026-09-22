@@ -20,10 +20,14 @@ export function assertNonProductionConfig(config) {
  */
 export function createRepository(config, options = {}) {
   if (options.runtime?.environment === 'supabase') {
-    if (config?.mode !== 'production' || config.liveOrders !== false || config.livePayments !== false) {
-      throw new CauceError('INVALID_PRODUCTION_CONFIG', 'La etapa conectada sólo habilita cuentas y comercios.');
+    // La compuerta que queda abierta es la de pedidos reales entre vecinos y
+    // comercios. El cobro en línea sigue cerrado: se paga en mano, y ninguna
+    // entrega puede encenderlo cambiando una bandera.
+    if (config?.mode !== 'production' || config.liveOrders !== true || config.livePayments !== false) {
+      throw new CauceError('INVALID_PRODUCTION_CONFIG', 'La configuración conectada de CAUCE no es válida.');
     }
-    return createSupabaseRepository({ client: options.runtime.client, redirectTo: options.runtime.redirectTo });
+    return createSupabaseRepository({ client: options.runtime.client, redirectTo: options.runtime.redirectTo,
+      storage: options.storage });
   }
   assertNonProductionConfig(config);
   const runtime = options.runtime;

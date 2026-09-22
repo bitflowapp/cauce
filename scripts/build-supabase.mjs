@@ -11,7 +11,10 @@ const output = resolve(root, '.local/supabase-preview');
 await mkdir(resolve(output, 'js'), { recursive: true });
 for (const name of ['assets', 'styles', 'manifest.webmanifest']) await cp(resolve(root, name), resolve(output, name), { recursive: true });
 let html = await readFile(resolve(root, 'index.html'), 'utf8');
+// CSP acotada al proyecto CAUCE: API, WebSocket de Realtime y el bucket de
+// imágenes públicas. Sin comodines y sin ningún otro proyecto Supabase.
 html = html.replace("connect-src 'none'", `connect-src 'self' ${project.url} wss://ygqbcvxdrewcnzedfcyo.supabase.co`);
+html = html.replace("img-src 'self' data:", `img-src 'self' data: blob: ${project.url}`);
 html = html.replace('<head>', '<head>\n  <meta name="referrer" content="no-referrer">');
 await writeFile(resolve(output, 'index.html'), html);
 await build({ absWorkingDir: root, entryPoints: ['js/app.js'], outfile: resolve(output, 'js/app.js'),
@@ -20,14 +23,16 @@ await build({ absWorkingDir: root, entryPoints: ['js/app.js'], outfile: resolve(
     builder.onLoad({ filter: /[\\/]runtime-env\.js$/ }, () => ({ loader: 'js', resolveDir: root, contents: `
       import { createClient } from '@supabase/supabase-js';
       export const RUNTIME_ENV = Object.freeze({ environment: 'supabase', label: 'CAUCE conectado',
-        description: 'Cuentas y comercios guardados en CAUCE. Pedidos y taxis aún no habilitados.',
+        description: 'Cuentas, comercios, pedidos y viajes guardados en CAUCE, compartidos entre dispositivos.',
         sharedPersistence: true, passwordAuth: true, redirectTo: location.origin + '/index.html',
         client: createClient(${JSON.stringify(project.url)}, ${JSON.stringify(project.publishableKey)}, {
           auth: { flowType: 'pkce', persistSession: true, autoRefreshToken: true,
             detectSessionInUrl: true, storageKey: 'cauce:production:auth' }
         }) });` }));
     builder.onLoad({ filter: /[\\/]config\.js$/ }, async args => ({ loader: 'js',
-      contents: (await readFile(args.path, 'utf8')).replace(/^(\s*)mode: 'demo'/m, "$1mode: 'production'") }));
+      contents: (await readFile(args.path, 'utf8'))
+        .replace(/^(\s*)mode: 'demo'/m, "$1mode: 'production'")
+        .replace(/^(\s*)liveOrders: false/m, "$1liveOrders: true") }));
   } }],
 });
 const bundle = await readFile(resolve(output, 'js/app.js'), 'utf8');

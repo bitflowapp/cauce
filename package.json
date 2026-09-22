@@ -16,6 +16,7 @@
     "test": "node --test tests/*.test.mjs",
     "test:db": "node --test tests/db/*.test.mjs",
     "test:supabase": "node tests/supabase-real.mjs",
+    "test:supabase:ops": "node tests/supabase-operations.mjs",
     "e2e:supabase": "npm run build:supabase && node tests/e2e-supabase.mjs",
     "build": "node scripts/build.mjs",
     "build:icons": "node scripts/build-icons.mjs",

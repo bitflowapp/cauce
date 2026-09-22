@@ -39,7 +39,8 @@ const app = {
 };
 
 const isShared = () => Boolean(app.repository?.capabilities?.sharedPersistence);
-const isFoundation = () => Boolean(app.repository?.capabilities?.foundationOnly);
+// El entorno conectado es el que habla con CAUCE real: sus errores se muestran.
+const isConnected = () => app.repository?.environment === 'supabase';
 const actor = () => app.session?.actor || null;
 const isSignedIn = () => actor()?.kind === 'account';
 const hasRole = role => Boolean(actor()?.roles?.includes(role));
@@ -292,14 +293,14 @@ function applyOfflineState() {
     const notice = document.createElement('div');
     notice.className = 'notice offline-notice offline-live-notice';
     notice.setAttribute('role', 'status');
-    notice.textContent = isFoundation() ? 'Sin conexión. Conservamos lo escrito. Al recuperar la conexión podés reintentar guardar.' : isShared()
+    notice.textContent = isConnected() ? 'Sin conexión. Conservamos lo escrito. Al recuperar la conexión podés reintentar guardar.' : isShared()
       ? 'Sin conexión. No se puede confirmar hasta recuperarla. No quedó ninguna operación enviada a medias.'
       : 'Sin conexión. Podés seguir navegando: esta demostración guarda todo en tu propio navegador.';
     main.prepend(notice);
   }
   // En la demostración no hay servidor: quedarse sin conexión no impide nada.
   if (!isShared()) return;
-  for (const form of main.querySelectorAll(isFoundation() ? 'form' : OPERATION_FORMS)) {
+  for (const form of main.querySelectorAll(isConnected() ? 'form' : OPERATION_FORMS)) {
     const submit = form.querySelector('button[type="submit"]');
     if (submit) submit.disabled = !app.online;
   }
@@ -321,16 +322,11 @@ function errorView(error) {
 function updateShell() {
   const { page } = route();
   const signedIn = isSignedIn();
-  main.classList.toggle('foundation-layout', isFoundation());
-  if (isFoundation()) {
-    for (const link of document.querySelectorAll('a[href="#taxi"], a[href="#taxista"], a[href="#comercios"], a[href="#institucional"]')) link.hidden = true;
-  }
-
   const envChip = document.querySelector('#env-chip');
   if (envChip) {
     // En la cabecera va la forma corta, para que entre a 360 px sin recortarse;
     // el pie lleva la frase completa y el detalle está en el título accesible.
-    envChip.textContent = RUNTIME_ENV.environment === 'demo' ? 'Demostración' : isFoundation() ? 'Conectado' : 'Pruebas';
+    envChip.textContent = RUNTIME_ENV.environment === 'demo' ? 'Demostración' : isConnected() ? 'Conectado' : 'Pruebas';
     envChip.title = `${RUNTIME_ENV.label}. ${RUNTIME_ENV.description}`;
     envChip.dataset.environment = RUNTIME_ENV.environment;
   }
@@ -982,7 +978,7 @@ async function viewActivity() {
 // ───────────────────────── cuenta ─────────────────────────
 
 async function viewAccount() {
-  if (isFoundation()) return viewConnectedAccount();
+  const notice = app.authNotice ? `<div class="notice" role="status">${esc(app.authNotice)}</div>` : '';
   if (isSignedIn()) {
     return `
       ${backLink('#actividad', 'Mi actividad')}
@@ -990,6 +986,7 @@ async function viewAccount() {
         <h1 class="page-title">Tu cuenta</h1>
         <p class="quiet">${esc(actor().name)} · ${esc(actor().email || 'sin correo')}</p>
       </section>
+      ${notice}
       <section class="checkout-section">
         <h2 class="checkout-section-title">Accesos</h2>
         <p class="quiet">Roles: ${esc(actor().roles.join(', '))}</p>
@@ -999,7 +996,29 @@ async function viewAccount() {
           ${hasRole('admin') ? '<a class="button secondary" href="#admin">Administración</a>' : ''}
           <button class="button danger" type="button" data-action="sign-out">Cerrar sesión</button>
         </div>
-      </section>`;
+      </section>
+      ${app.repository.capabilities.accountManagement ? `
+        <form class="checkout-form" data-form="profile-update">
+          <h2 class="checkout-section-title">Datos personales</h2>
+          <div class="field">
+            <label for="profile-name">Nombre y apellido</label>
+            <input id="profile-name" name="name" type="text" required minlength="2" maxlength="80" value="${esc(actor().name)}" autocomplete="name">
+          </div>
+          <div class="field">
+            <label for="profile-phone">Teléfono</label>
+            <input id="profile-phone" name="phone" type="tel" inputmode="tel" value="${esc(actor().phone || '')}" autocomplete="tel">
+          </div>
+          <button class="button full" type="submit" ${app.online ? '' : 'disabled'}>Guardar perfil</button>
+        </form>
+        <form class="checkout-form" data-form="password-update">
+          <h2 class="checkout-section-title">Cambiar contraseña</h2>
+          <div class="field">
+            <label for="new-password">Nueva contraseña</label>
+            <input id="new-password" name="password" type="password" required minlength="10" autocomplete="new-password">
+            <p class="microcopy">Al menos 10 caracteres, combinando letras y números.</p>
+          </div>
+          <button class="button secondary full" type="submit" ${app.online ? '' : 'disabled'}>Guardar contraseña</button>
+        </form>` : ''}`;
   }
 
   const identities = app.repository.capabilities.demoIdentities ? await app.repository.identities() : [];
@@ -1011,6 +1030,7 @@ async function viewAccount() {
       <h1 class="page-title">Ingresar a CAUCE</h1>
       <p class="quiet">Comprar y pedir un taxi no requiere cuenta. La cuenta hace falta para comercios, taxistas y administración.</p>
     </section>
+    ${notice}
 
     ${app.repository.capabilities.passwordAuth ? `
       <form class="checkout-form" data-form="sign-in">
@@ -1046,6 +1066,15 @@ async function viewAccount() {
           <p class="microcopy">Al menos 10 caracteres, combinando letras y números.</p>
         </div>
         <button class="button full" type="submit" ${app.online ? '' : 'disabled'}>Crear cuenta</button>
+      </form>
+
+      <form class="checkout-form" data-form="password-reset">
+        <h2 class="checkout-section-title">Recuperar contraseña</h2>
+        <div class="field">
+          <label for="reset-email">Correo de tu cuenta</label>
+          <input id="reset-email" name="email" type="email" required autocomplete="email" inputmode="email">
+        </div>
+        <button class="button secondary full" type="submit" ${app.online ? '' : 'disabled'}>Enviar enlace de recuperación</button>
       </form>`
     : `
       <div class="notice">
@@ -1159,10 +1188,11 @@ async function viewMerchantPanel(businessId) {
       <a class="button secondary" href="#panel">Volver a mis comercios</a></section>`;
   }
 
-  const [orders, products, riders] = await Promise.all([
+  const [orders, products, riders, categories] = await Promise.all([
     app.repository.query('businessOrders', { businessId }),
     app.repository.query('products', { businessId }),
     app.repository.query('riders', { businessId }),
+    app.repository.capabilities.media ? app.repository.query('businessCategories') : [],
   ]);
 
   const missing = missingPublicationRequirements(business, products);
@@ -1199,7 +1229,7 @@ async function viewMerchantPanel(businessId) {
 
     ${tab === 'pedidos' ? merchantOrdersTab(business, orders, riders) : ''}
     ${tab === 'catalogo' ? merchantCatalogTab(business, products) : ''}
-    ${tab === 'datos' ? merchantDataTab(business, missing) : ''}
+    ${tab === 'datos' ? merchantDataTab(business, missing, categories) : ''}
     ${tab === 'reparto' ? merchantRidersTab(business, riders) : ''}`;
 }
 
@@ -1283,7 +1313,18 @@ function merchantOrdersTab(business, orders, riders) {
       </section>` : ''}`;
 }
 
+function mediaField(id, label, current, hint) {
+  return `
+    <div class="field">
+      <label for="${id}">${esc(label)}</label>
+      ${current ? `<img class="media-preview" src="${esc(current)}" alt="" width="120" height="120" loading="lazy">` : ''}
+      <input id="${id}" name="image" type="file" accept="image/jpeg,image/png,image/webp" data-preview="${id}-preview">
+      <p class="microcopy">${esc(hint)}</p>
+    </div>`;
+}
+
 function merchantCatalogTab(business, products) {
+  const media = Boolean(app.repository.capabilities.media);
   return `
     <section class="panel-section">
       <h2 class="checkout-section-title">Nuevo producto</h2>
@@ -1320,7 +1361,9 @@ function merchantCatalogTab(business, products) {
           <p class="microcopy">Separadas por coma. El número suma o resta sobre el precio base.
             Si cargás variantes, quien compra elige una.</p>
         </div>
-        <p class="microcopy">Las fotos se toman de las imágenes incluidas en el proyecto. La carga de fotos propias no está implementada en esta entrega.</p>
+        ${media ? mediaField('prod-image', 'Foto del producto (opcional)', '',
+          'JPEG, PNG o WebP, hasta 5 MB. El producto se publica igual si todavía no tenés foto.')
+          : '<p class="microcopy">Las fotos se toman de las imágenes incluidas en el proyecto. La carga de fotos propias no está implementada en este entorno.</p>'}
         <button class="button full" type="submit" ${app.online ? '' : 'disabled'}>Agregar al catálogo</button>
       </form>
     </section>
@@ -1329,6 +1372,8 @@ function merchantCatalogTab(business, products) {
       <h2 class="checkout-section-title">Catálogo (${products.filter(product => !product.archived).length})</h2>
       ${products.length ? `<div class="stack">${products.map(product => `
         <article class="catalog-row ${product.archived ? 'is-archived' : ''}">
+          <div class="catalog-row-head">
+          ${media ? productThumb(product, product.name, 'catalog-row-thumb') : ''}
           <div class="catalog-row-main">
             <strong>${esc(product.name)}</strong>
             <span class="quiet">${esc(product.category)} · ${money(product.price)} · stock ${product.stock}</span>
@@ -1339,6 +1384,7 @@ function merchantCatalogTab(business, products) {
             ${product.archived ? '<span class="status-chip cancelled">Dado de baja</span>'
               : product.available ? '' : '<span class="status-chip received">Agotado</span>'}
           </div>
+          </div>
           <form class="inline-form" data-form="product-update" data-business="${esc(business.id)}" data-product="${esc(product.id)}">
             <label class="visually-hidden" for="price-${esc(product.id)}">Precio de ${esc(product.name)}</label>
             <input id="price-${esc(product.id)}" name="price" type="number" min="1" step="1" value="${product.price}" inputmode="numeric">
@@ -1346,6 +1392,13 @@ function merchantCatalogTab(business, products) {
             <input id="stock-${esc(product.id)}" name="stock" type="number" min="0" step="1" value="${product.stock}" inputmode="numeric">
             <button class="button secondary" type="submit">Guardar</button>
           </form>
+          ${media ? `<form class="inline-form" data-form="product-image" data-business="${esc(business.id)}" data-product="${esc(product.id)}">
+            <label class="visually-hidden" for="photo-${esc(product.id)}">Foto de ${esc(product.name)}</label>
+            <input id="photo-${esc(product.id)}" name="image" type="file" accept="image/jpeg,image/png,image/webp">
+            <button class="button secondary" type="submit">${product.image ? 'Cambiar foto' : 'Subir foto'}</button>
+            ${product.image ? `<button class="link-button danger" type="button" data-action="product-photo-remove"
+              data-business="${esc(business.id)}" data-product="${esc(product.id)}">Quitar foto</button>` : ''}
+          </form>` : ''}
           <div class="catalog-row-actions">
             <button class="link-button" type="button" data-action="product-toggle" data-business="${esc(business.id)}"
               data-product="${esc(product.id)}" data-field="available" data-value="${product.available ? 'false' : 'true'}">
@@ -1361,8 +1414,9 @@ function merchantCatalogTab(business, products) {
     </section>`;
 }
 
-function merchantDataTab(business, missing) {
+function merchantDataTab(business, missing, categories = []) {
   const editable = business.status !== 'pending_review';
+  const media = Boolean(app.repository.capabilities.media);
   return `
     <section class="panel-section">
       ${business.status === 'pending_review'
@@ -1375,7 +1429,11 @@ function merchantDataTab(business, missing) {
         </div>
         <div class="field">
           <label for="b-category">Rubro</label>
-          <input id="b-category" name="category" type="text" maxlength="40" value="${esc(business.category || '')}" ${editable ? '' : 'disabled'}>
+          ${categories.length ? `<select id="b-category" name="category" ${editable ? '' : 'disabled'}>
+            <option value="">Elegí un rubro</option>
+            ${categories.map(category => `<option value="${esc(category.slug)}" ${category.name === business.category ? 'selected' : ''}>${esc(category.name)}</option>`).join('')}
+          </select>`
+          : `<input id="b-category" name="category" type="text" maxlength="40" value="${esc(business.category || '')}" ${editable ? '' : 'disabled'}>`}
         </div>
         <div class="field">
           <label for="b-owner">Responsable</label>
@@ -1426,6 +1484,27 @@ function merchantDataTab(business, missing) {
         <button class="button full" type="submit" ${editable && app.online ? '' : 'disabled'}>Guardar datos</button>
       </form>
     </section>
+
+    ${media ? `<section class="panel-section">
+      <h2 class="checkout-section-title">Imagen del comercio</h2>
+      <p class="quiet">Las imágenes se guardan en CAUCE, dentro de la carpeta de tu comercio. Nadie más puede escribir ahí.</p>
+      <form class="checkout-form" data-form="business-media" data-business="${esc(business.id)}" data-slot="logo">
+        ${mediaField('biz-logo', 'Logo', business.logo, 'Cuadrada, JPEG, PNG o WebP, hasta 5 MB.')}
+        <div class="modal-actions">
+          <button class="button" type="submit" ${app.online ? '' : 'disabled'}>Guardar logo</button>
+          ${business.logo ? `<button class="link-button danger" type="button" data-action="business-media-remove"
+            data-business="${esc(business.id)}" data-slot="logo">Quitar logo</button>` : ''}
+        </div>
+      </form>
+      <form class="checkout-form" data-form="business-media" data-business="${esc(business.id)}" data-slot="cover">
+        ${mediaField('biz-cover', 'Portada', business.cover, 'Apaisada, JPEG, PNG o WebP, hasta 5 MB.')}
+        <div class="modal-actions">
+          <button class="button" type="submit" ${app.online ? '' : 'disabled'}>Guardar portada</button>
+          ${business.cover ? `<button class="link-button danger" type="button" data-action="business-media-remove"
+            data-business="${esc(business.id)}" data-slot="cover">Quitar portada</button>` : ''}
+        </div>
+      </form>
+    </section>` : ''}
 
     <section class="panel-section">
       <h2 class="checkout-section-title">Publicación</h2>
@@ -1964,7 +2043,7 @@ async function withBusy(element, operation) {
     }
   } finally {
     element.dataset.busy = 'false';
-    element.disabled = wasDisabled || (isFoundation() && !app.online);
+    element.disabled = wasDisabled || (isConnected() && !app.online);
   }
 }
 
@@ -2030,6 +2109,18 @@ const ACTIONS = {
   async 'product-toggle'(element) {
     const { business, product, field, value } = element.dataset;
     await runCommand('product.update', { businessId: business, productId: product, patch: { [field]: value === 'true' } });
+    await render();
+  },
+  async 'product-photo-remove'(element) {
+    const { business, product } = element.dataset;
+    await runCommand('product.setImage', { businessId: business, productId: product, file: null });
+    toast('Foto quitada.');
+    await render();
+  },
+  async 'business-media-remove'(element) {
+    const { business, slot } = element.dataset;
+    await runCommand('business.setMedia', { businessId: business, slot, file: null });
+    toast(slot === 'cover' ? 'Portada quitada.' : 'Logo quitado.');
     await render();
   },
   async 'order-transition'(element) {
@@ -2101,87 +2192,6 @@ const ACTIONS = {
     }, { enableHighAccuracy: false, timeout: 8000 });
   },
 };
-
-// Connected phase: shared shell and handlers, only implemented capabilities exposed.
-async function viewConnectedAccount() {
-  const notice = app.authNotice ? `<div class="notice" role="status">${esc(app.authNotice)}</div>` : '';
-  if (!isSignedIn()) return `${backLink('#inicio', 'Inicio')}
-    <section class="page-header"><h1 class="page-title">Ingresar a CAUCE</h1>
-      <p class="quiet">Tu cuenta se guarda en CAUCE y podés usarla desde otro dispositivo.</p></section>${notice}
-    <form class="checkout-form" data-form="sign-in"><h2>Ya tengo cuenta</h2>
-      <div class="field"><label for="signin-email">Correo</label><input id="signin-email" name="email" type="email" required autocomplete="email"></div>
-      <div class="field"><label for="signin-password">Contraseña</label><input id="signin-password" name="password" type="password" required autocomplete="current-password"></div>
-      <button class="button full" type="submit">Ingresar</button></form>
-    <form class="checkout-form" data-form="register"><h2>Crear una cuenta</h2>
-      <div class="field"><label for="reg-name">Nombre y apellido</label><input id="reg-name" name="name" required maxlength="80" autocomplete="name"></div>
-      <div class="field"><label for="reg-email">Correo</label><input id="reg-email" name="email" type="email" required autocomplete="email"></div>
-      <div class="field"><label for="reg-phone">Teléfono (opcional)</label><input id="reg-phone" name="phone" type="tel" autocomplete="tel"></div>
-      <div class="field"><label for="reg-password">Contraseña</label><input id="reg-password" name="password" type="password" required minlength="10" autocomplete="new-password"><p class="microcopy">Al menos 10 caracteres, con letras y números.</p></div>
-      <button class="button full" type="submit">Crear cuenta</button></form>
-    <form class="checkout-form" data-form="password-reset"><h2>Recuperar contraseña</h2>
-      <div class="field"><label for="reset-email">Correo de tu cuenta</label><input id="reset-email" name="email" type="email" required autocomplete="email"></div>
-      <button class="button secondary full" type="submit">Enviar enlace de recuperación</button></form>`;
-  return `${backLink('#inicio', 'Inicio')}<section class="page-header"><h1 class="page-title">Tu cuenta</h1>
-    <p class="quiet">${esc(actor().email)}</p></section>${notice}
-    <form class="checkout-form" data-form="profile-update"><h2>Datos personales</h2>
-      <div class="field"><label for="profile-name">Nombre y apellido</label><input id="profile-name" name="name" required maxlength="80" value="${esc(actor().name)}" autocomplete="name"></div>
-      <div class="field"><label for="profile-phone">Teléfono</label><input id="profile-phone" name="phone" type="tel" value="${esc(actor().phone || '')}" autocomplete="tel"></div>
-      <button class="button full" type="submit">Guardar perfil</button></form>
-    <form class="checkout-form" data-form="password-update"><h2>Cambiar contraseña</h2>
-      <div class="field"><label for="new-password">Nueva contraseña</label><input id="new-password" name="password" type="password" required minlength="10" autocomplete="new-password"></div>
-      <button class="button secondary full" type="submit">Guardar contraseña</button></form>
-    <div class="stack"><a class="button secondary" href="#panel">Mis comercios</a>
-      ${hasRole('admin') ? '<a class="button secondary" href="#admin">Revisión administrativa</a>' : ''}
-      <button class="button danger" type="button" data-action="sign-out">Cerrar sesión</button></div>`;
-}
-
-async function viewConnectedBusinesses(businessId) {
-  if (!isSignedIn()) return `${emptyState('Ingresá a tu cuenta', 'Sólo los miembros pueden ver sus comercios.', '#cuenta', 'Ingresar')}`;
-  const businesses = await app.repository.query('myBusinesses');
-  if (businessId) {
-    const business = businesses.find(b => b.id === businessId);
-    if (!business) return '<section class="notice error"><h1>Sin acceso</h1><p>Tu cuenta no pertenece a ese comercio.</p></section>';
-    return `${backLink('#panel', 'Mis comercios')}<section class="page-header"><h1 class="page-title">${esc(business.name)}</h1>
-      <p class="quiet">${esc(businessStatusLabel(business.status))} · Tu permiso: ${esc({ owner: 'Titular', manager: 'Encargado', staff: 'Equipo' }[business.membershipRole])}</p></section>
-      ${business.membershipRole === 'staff' ? '' : `<form class="checkout-form" data-form="business-rename">
-        <input type="hidden" name="businessId" value="${esc(business.id)}">
-        <div class="field"><label for="connected-business-name">Nombre comercial</label><input id="connected-business-name" name="name" required minlength="2" maxlength="120" value="${esc(business.name)}"></div>
-        <button class="button full" type="submit">Guardar nombre</button></form>`}
-      <div class="notice">El borrador está guardado en CAUCE. El catálogo y la solicitud de publicación aún no están habilitados.</div>`;
-  }
-  return `<section class="page-header"><h1 class="page-title">Mis comercios</h1><p class="quiet">Negocios vinculados a tu cuenta.</p></section>
-    <div class="stack">${businesses.map(b => `<a class="op-card" href="#panel/${esc(b.id)}"><strong>${esc(b.name)}</strong><span>${esc(businessStatusLabel(b.status))}</span></a>`).join('') || '<p>Todavía no tenés comercios.</p>'}</div>
-    <form class="checkout-form" data-form="business-create"><h2>Crear un comercio</h2>
-      <div class="field"><label for="biz-name">Nombre comercial</label><input id="biz-name" name="name" required minlength="2" maxlength="120"></div>
-      <p class="microcopy">Localidad: Aluminé. Se crea en borrador, sin publicación automática.</p>
-      <button class="button full" type="submit">Crear borrador</button></form>`;
-}
-
-async function viewConnectedHome() {
-  const localities = await app.repository.query('localities');
-  const locality = localities.find(item => item.slug === 'alumine');
-  if (!locality) throw new Error('Aluminé no está disponible en el servidor de CAUCE.');
-  return `<section class="page-header"><h1 class="page-title">CAUCE · ${esc(locality.name)}</h1>
-    <p class="quiet">Tu comunidad, más cerca.</p></section>
-    <section class="brand-intro brand-intro-merchant"><div>${renderCharacter('merchant', 128)}</div>
-      <p><strong>Tu cuenta y tu comercio, conectados.</strong><span>Guardá tus datos y retomá desde otro dispositivo.</span></p></section>
-    <div class="stack"><a class="button" href="#cuenta">${isSignedIn() ? 'Mi cuenta' : 'Ingresar o crear cuenta'}</a>
-      <a class="button secondary" href="#panel">Mis comercios</a></div>
-    <div class="notice">Cuentas y borradores disponibles. Todavía no se reciben pedidos ni solicitudes de taxi.</div>`;
-}
-
-function connectedView(page) {
-  if (page === 'inicio') return viewConnectedHome;
-  if (['cuenta', 'actividad', 'recuperar'].includes(page)) return viewConnectedAccount;
-  if (['panel', 'alta-comercio'].includes(page)) return viewConnectedBusinesses;
-  if (page === 'admin') return async () => {
-    const businesses = await app.repository.query('adminBusinesses');
-    return `<section class="page-header"><h1 class="page-title">Revisión administrativa</h1></section>
-      <div class="stack">${businesses.map(b => `<article class="op-card"><strong>${esc(b.name)}</strong><span>${esc(businessStatusLabel(b.status))}</span></article>`).join('') || '<p>No hay comercios registrados.</p>'}</div>
-      <p class="quiet">La aprobación se habilitará con el catálogo y los requisitos de publicación.</p>`;
-  };
-  return () => emptyState('Función aún no habilitada', 'Podés gestionar tu cuenta y los borradores de tus comercios.', '#inicio', 'Volver al inicio');
-}
 
 const FORMS = {
   async 'profile-update'(form) {
@@ -2258,6 +2268,7 @@ const FORMS = {
 
   async 'product-create'(form) {
     const data = Object.fromEntries(new FormData(form));
+    const image = form.querySelector('input[type="file"][name="image"]')?.files?.[0] || null;
     await runCommand('product.create', {
       businessId: form.dataset.business,
       product: {
@@ -2265,9 +2276,28 @@ const FORMS = {
         price: Number(data.price), stock: Number(data.stock), available: true,
         variants: parseVariants(data.variants),
       },
+      image: image && image.size ? image : null,
     });
     form.reset();
-    toast('Producto agregado al catálogo.');
+    toast(image && image.size ? 'Producto y foto agregados al catálogo.' : 'Producto agregado al catálogo.');
+    await render();
+  },
+
+  // La imagen sube primero y recién después se guarda la referencia: si falla,
+  // el catálogo queda como estaba y el mensaje lo dice.
+  async 'product-image'(form) {
+    const file = form.querySelector('input[type="file"]')?.files?.[0];
+    if (!file || !file.size) { toast('Elegí una imagen para subir.', 'error'); return; }
+    await runCommand('product.setImage', { businessId: form.dataset.business, productId: form.dataset.product, file });
+    toast('Foto actualizada.');
+    await render();
+  },
+
+  async 'business-media'(form) {
+    const file = form.querySelector('input[type="file"]')?.files?.[0];
+    if (!file || !file.size) { toast('Elegí una imagen para subir.', 'error'); return; }
+    await runCommand('business.setMedia', { businessId: form.dataset.business, slot: form.dataset.slot, file });
+    toast(form.dataset.slot === 'cover' ? 'Portada actualizada.' : 'Logo actualizado.');
     await render();
   },
 
@@ -2386,6 +2416,40 @@ const VIEWS = {
 
 let renderToken = 0;
 
+// ── sincronización en vivo ──
+// Una suscripción por vista, acotada a lo que esa vista muestra: el comercio
+// escucha sus pedidos y la persona los suyos. Nunca se escucha la tabla entera.
+// Al cambiar de vista el canal se cierra; no quedan canales abiertos de fondo.
+const live = { key: '', stop: null, timer: null };
+
+function syncLive(page, param) {
+  if (!app.repository?.capabilities?.realtime) return;
+  const me = actor();
+  const scopes = [];
+  if (page === 'panel' && param) scopes.push({ kind: 'businessOrders', businessId: param });
+  else if (page === 'pedido' && param) scopes.push({ kind: 'order', orderId: param });
+  else if (['inicio', 'actividad'].includes(page) && me?.id) {
+    scopes.push({ kind: 'myOrders', customerId: me.id }, { kind: 'myTrips', passengerId: me.id });
+  } else if (['taxi', 'viaje'].includes(page) && me?.id) scopes.push({ kind: 'myTrips', passengerId: me.id });
+  else if (page === 'taxista' && me?.driverId) {
+    scopes.push({ kind: 'driverTrips', driverId: me.driverId }, { kind: 'openTrips' });
+  }
+  const key = `${page}:${param || ''}:${me?.id || ''}:${scopes.length}`;
+  if (key === live.key) return;
+  live.stop?.();
+  live.stop = null;
+  live.key = key;
+  if (!scopes.length) return;
+  // Un cambio remoto vuelve a pedir los datos por la vía normal, que aplica RLS
+  // otra vez: la carga útil del evento nunca se pinta directamente.
+  const refresh = () => {
+    clearTimeout(live.timer);
+    live.timer = setTimeout(() => { if (route().page === page) render(); }, 250);
+  };
+  const stops = scopes.map(scope => app.repository.watch(scope, refresh));
+  live.stop = () => { clearTimeout(live.timer); for (const stop of stops) stop(); };
+}
+
 // Rutas cuyo contenido depende de los permisos de la cuenta. En el entorno con
 // backend los roles viven en el servidor y pueden cambiar mientras la pestaña
 // sigue abierta (por ejemplo, cuando administración aprueba un alta), así que la
@@ -2399,14 +2463,13 @@ async function render({ focus = false } = {}) {
   if (GATED_ROUTES.has(page) && isShared()) {
     try { app.session = await app.repository.session(); }
     catch (error) {
-      if (isFoundation()) {
-        main.innerHTML = errorView(error); main.setAttribute('aria-busy', 'false'); return;
-      }
-      // El entorno local conserva su comportamiento previo.
+      // Con backend compartido, un fallo de sesión se muestra: nunca se degrada
+      // a datos locales ni se sigue mostrando lo que la cuenta anterior veía.
+      main.innerHTML = errorView(error); main.setAttribute('aria-busy', 'false'); return;
     }
     if (token !== renderToken) return;
   }
-  const view = isFoundation() ? connectedView(page) : VIEWS[page];
+  const view = VIEWS[page];
   main.setAttribute('aria-busy', 'true');
   try {
     const markup = view
@@ -2421,7 +2484,7 @@ async function render({ focus = false } = {}) {
 
   // El contador del carrito alimenta la barra inferior en cualquier vista.
   try {
-    const carts = isFoundation() ? [] : await app.repository.query('carts');
+    const carts = await app.repository.query('carts');
     app.cartCount = carts.reduce((total, entry) =>
       total + entry.cart.lines.reduce((sum, line) => sum + line.quantity, 0), 0);
   } catch { app.cartCount = app.cartCount || 0; }
@@ -2429,6 +2492,7 @@ async function render({ focus = false } = {}) {
 
   updateShell();
   applyOfflineState();
+  syncLive(page, param);
   // Recién acá la vista está completa: el contenido, el contador del carrito y
   // la barra inferior coinciden. `aria-busy="false"` es esa señal.
   main.setAttribute('aria-busy', 'false');
@@ -2504,7 +2568,7 @@ function bindEvents() {
     app.online = true;
     updateShell();
     toast('Conexión recuperada. Podés reintentar.');
-    if (isFoundation()) applyOfflineState();
+    if (isConnected()) applyOfflineState();
     else render();
   });
 }
@@ -2517,7 +2581,7 @@ async function start() {
       storage: globalThis.localStorage,
     });
     updateShell();
-    if (isFoundation()) {
+    if (isConnected()) {
       app.repository.onAuthChange(event => {
         if (event === 'PASSWORD_RECOVERY') app.recovering = true;
         if (!app.started || !['SIGNED_OUT', 'PASSWORD_RECOVERY'].includes(event)) return;
@@ -2553,7 +2617,6 @@ async function start() {
 }
 
 function registerServiceWorker() {
-  if (isFoundation()) return;
   if (!('serviceWorker' in navigator)) return;
   if (location.protocol !== 'https:' && !['localhost', '127.0.0.1'].includes(location.hostname)) return;
   navigator.serviceWorker.register('service-worker.js').catch(() => {

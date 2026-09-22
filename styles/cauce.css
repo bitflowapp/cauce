@@ -6027,11 +6027,31 @@ footer.footer, footer {
 }
 
 .catalog-row.is-archived { opacity: 0.62; }
+/* Con foto propia, la miniatura va al lado del nombre y la fila sigue
+   entrando a 360 px sin desbordar. */
+.catalog-row-head { display: flex; align-items: flex-start; gap: 10px; }
+.catalog-row-head .catalog-row-main { flex: 1; min-width: 0; }
+.catalog-row-thumb { width: 44px; height: 44px; flex-basis: 44px; }
 .catalog-row-main { display: grid; gap: 3px; }
 .catalog-row-main strong { font-size: 14px; color: var(--forest-deep); }
 .catalog-row-main .quiet { font-size: 12px; }
 .catalog-row-main .status-chip { justify-self: start; margin-top: 4px; }
 .catalog-row-actions { display: flex; flex-wrap: wrap; gap: 14px; }
+
+/* Carga de imágenes del comercio: vista previa acotada y control legible. */
+.media-preview {
+  display: block;
+  width: 96px;
+  height: 96px;
+  margin-bottom: 8px;
+  object-fit: cover;
+  background: var(--soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xs);
+}
+
+.field input[type="file"] { font-size: 13px; max-width: 100%; }
+.inline-form input[type="file"] { flex: 1 1 140px; min-width: 0; font-size: 12px; }
 
 .plain-list { list-style: none; margin: 8px 0; padding: 0; font-size: 13px; line-height: 1.6; color: var(--ink-light); }
 .plain-list li { padding: 3px 0; }

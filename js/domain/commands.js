@@ -32,6 +32,9 @@ const DEMO_PAYMENT_METHODS = Object.freeze(['cash_demo', 'transfer_demo']);
 export const PAYMENT_METHOD_LABELS = Object.freeze({
   cash_demo: 'Efectivo al recibir (prueba)',
   transfer_demo: 'Transferencia al comercio (prueba)',
+  // Formas de pago del entorno conectado: no hay cobro en línea todavía.
+  cash_on_delivery: 'Efectivo al recibir',
+  cash_on_pickup: 'Efectivo al retirar',
 });
 
 // ───────────────────────── utilidades internas ─────────────────────────
