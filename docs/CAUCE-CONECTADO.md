@@ -263,7 +263,7 @@ npm run e2e:supabase        # recorrido en tres navegadores independientes
 | Pruebas SQL sobre PostgreSQL embebido | 38 aprobadas |
 | Identidad contra Supabase real | 12 comprobaciones |
 | Operación contra Supabase real | 11 comprobaciones |
-| Recorrido en tres navegadores contra Supabase real | 16 pasos |
+| Recorrido en tres navegadores contra Supabase real | 17 pasos |
 | E2E SQLite y demo heredados | 37 y 12 pasos |
 | Auditorías visuales heredadas | 64 pantallas |
 

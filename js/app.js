@@ -2465,7 +2465,7 @@ function syncLive(page, param) {
   live.stop?.();
   live.stop = null;
   live.key = key;
-  if (!scopes.length && page !== 'taxista') return;
+  if (!scopes.length) return;
   // Un cambio remoto vuelve a pedir los datos por la vía normal, que aplica RLS
   // otra vez: la carga útil del evento nunca se pinta directamente.
   const refresh = () => {
@@ -2476,7 +2476,7 @@ function syncLive(page, param) {
   // Las solicitudes de taxi todavía sin aceptar no son legibles por ningún
   // conductor, así que tampoco pueden llegar por Realtime sin revelarlas: el
   // panel las vuelve a pedir cada quince segundos mientras está abierto.
-  const poll = page === 'taxista' ? setInterval(refresh, 15000) : null;
+  const poll = page === 'taxista' && me?.driverId ? setInterval(refresh, 15000) : null;
   live.stop = () => { clearTimeout(live.timer); if (poll) clearInterval(poll); for (const stop of stops) stop(); };
 }
 
