@@ -28,6 +28,12 @@ async function visit(page, route) {
 }
 async function login(page, user) {
   await visit(page, 'cuenta');
+  // Cambiar de identidad en el mismo navegador exige cerrar la sesión anterior.
+  if (await page.evaluate('!!document.querySelector("[data-action=sign-out]")')) {
+    await press(page, '[data-action="sign-out"]');
+    await visit(page, 'cuenta');
+  }
+  await page.waitForFunction('!!document.querySelector("#signin-email")', { timeout: 30000 });
   await page.fill('#signin-email', user.email); await page.fill('#signin-password', user.password);
   await press(page, '[data-form="sign-in"] button[type="submit"]');
   // Al entrar, CAUCE lleva a «Mi actividad»: volvemos a la cuenta para editarla.
