@@ -12,6 +12,7 @@
     "dev:seed": "node scripts/dev-server.mjs --seed",
     "check": "node scripts/check.mjs",
     "test": "node --test tests/*.test.mjs",
+    "test:db": "node --test tests/db/*.test.mjs",
     "build": "node scripts/build.mjs",
     "build:icons": "node scripts/build-icons.mjs",
     "build:offline": "node scripts/offline-bundle.mjs",
@@ -19,7 +20,10 @@
     "e2e:demo": "node tests/e2e-demo.mjs",
     "audit:visual": "node tests/visual-audit.mjs",
     "audit:visual:backend": "node tests/visual-audit.mjs --backend",
-    "verify": "npm run check && npm test && npm run build && npm run build:offline",
+    "verify": "npm run check && npm test && npm run test:db && npm run build && npm run build:offline",
     "verify:full": "npm run verify && npm run e2e && npm run e2e:demo && npm run audit:visual && npm run audit:visual:backend"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.8"
   }
 }
