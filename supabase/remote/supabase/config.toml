@@ -1,0 +1,15 @@
+# Explicit remote settings only. Never push the local CLI template to production.
+project_id = "cauce-production"
+[api]
+schemas = ["public"]
+[auth]
+site_url = "http://127.0.0.1:4174"
+additional_redirect_urls = ["http://127.0.0.1:4174/index.html"]
+minimum_password_length = 10
+password_requirements = "letters_digits"
+enable_anonymous_sign_ins = false
+enable_refresh_token_rotation = true
+[auth.email]
+enable_confirmations = true
+double_confirm_changes = true
+secure_password_change = true
