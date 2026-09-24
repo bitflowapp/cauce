@@ -192,3 +192,8 @@ proyecto real que requiere credenciales (ver `PRODUCTION_READINESS.md`).
 | N-06 | P2 | `main` sin margen lateral en todos los anchos (regla de safe-area), pestañas del panel y campos de hora fuera de pantalla a 320–375 px, texto del inicio con contraste bajo. | Resuelto (E2E `audit`, 7 anchos). |
 | N-07 | P2 | El interruptor de compra sin cuenta, apagado desde la base, mostraba un error genérico, y al ingresar la persona terminaba en *Mis pedidos* en vez de su carrito. | Resuelto: pide ingresar, conserva el carrito y vuelve a él (integración y E2E `edge`). |
 | N-08 | P3 | El alta de taxi no recortaba origen, destino ni nota a su largo máximo. | Resuelto (prueba de regresión). |
+| N-09 | P2 | `overflow-x: hidden` en body anulaba todo `sticky`: en el teléfono, "Ver carrito" quedaba bajo el borde de la pantalla (se llegaba sólo por la barra inferior). Venía de `main`. | Resuelto: `overflow-x: clip`; E2E mide la barra sobre la navegación. |
+| N-10 | P2 | En escritorio el aviso inferior capturaba los clics durante 5 s. | Resuelto (E2E con `elementFromPoint`, verificada contra el código anterior). |
+| N-11 | P2 | `report_client_event` (abierto a la clave pública) permitía hasta ~13 M filas por mes. | Resuelto: techos de 60/min y 5.000/día en la base (PGlite). |
+| N-12 | P3 | "Horarios de atención" no mostraba que se despliega. | Resuelto: indicador visible; E2E lo despliega. |
+| N-13 | — | La suite heredada del backend de desarrollo fallaba 2 de cada 21 corridas: el clic del paso siguiente caía durante el redibujo de la acción anterior. | Resuelto en el arnés (12/12 después). |
