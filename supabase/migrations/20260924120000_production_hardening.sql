@@ -904,8 +904,11 @@ begin
   if kind not in ('frontend_error', 'supabase_error', 'auth_error', 'order_failed', 'critical') then
     return false;
   end if;
-  -- Techo global y por cuenta: un cliente roto o malicioso no llena la tabla.
-  if (select count(*) from private.client_events where created_at > now() - interval '1 minute') >= 300 then
+  -- Cualquiera con la clave pública puede reportar, así que el volumen queda
+  -- acotado de antemano: techo global por minuto y por día (con 30 días de
+  -- retención, la tabla nunca pasa de ~150.000 filas) y techo por cuenta.
+  if (select count(*) from private.client_events where created_at > now() - interval '1 minute') >= 60
+     or (select count(*) from private.client_events where created_at > now() - interval '1 day') >= 5000 then
     return false;
   end if;
   if caller is not null and (select count(*) from private.client_events
