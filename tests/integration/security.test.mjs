@@ -115,6 +115,21 @@ test('una sesión anónima de compra pide y sigue su pedido, pero no administra 
   assert.equal(ok(await transition(people.guest, mine, 'canceled', { reason: '' })).status, 'canceled');
 });
 
+test('la compra sin cuenta se apaga desde la base sin tocar a quien tiene cuenta', async () => {
+  const lines = [{ product_id: A.products.untracked.id, quantity: 1 }];
+  await sql`update private.platform_features set enabled = false where key = 'guest_checkout'`;
+  try {
+    failsWith(await order(people.guest, A.id, lines), '42501');
+    ok(await order(people.outsider, A.id, lines), 'con cuenta sigue comprando');
+    // El contrato público lo informa para que la interfaz lo sepa.
+    const status = ok(await anonClient().rpc('app_status'));
+    assert.equal(status.features.guest_checkout, false);
+  } finally {
+    await sql`update private.platform_features set enabled = true where key = 'guest_checkout'`;
+  }
+  ok(await order(people.guest, A.id, lines), 'reabierta, la sesión anónima vuelve a pedir');
+});
+
 test('cliente A y cliente B no ven ni tocan lo del otro', async () => {
   const a = people.customerA.client;
   assert.deepEqual(ok(await a.from('orders').select('id')).map(row => row.id), [orderOfA]);

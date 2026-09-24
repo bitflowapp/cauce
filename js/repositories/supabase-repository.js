@@ -961,6 +961,12 @@ export function createSupabaseRepository({ client, redirectTo, storage, onError 
           delete cart.requestId;
           writeCart(owner, businessId, cart);
         }
+        // Compra sin cuenta apagada desde la base (interruptor de emergencia):
+        // la persona ingresa con su cuenta y el carrito se conserva.
+        if (user.is_anonymous && error.technical?.code === '42501') {
+          error.code = 'GUEST_CHECKOUT_UNAVAILABLE';
+          error.message = 'Para confirmar el pedido, ingresá con tu cuenta.';
+        }
         throw error;
       }
       writeCart(owner, businessId, emptyCart({ businessId, localityId: LOCALITY }));
@@ -1161,6 +1167,17 @@ export function createSupabaseRepository({ client, redirectTo, storage, onError 
       const channel = client.channel(`cauce:${scope.kind}:${scope.businessId || scope.customerId || scope.orderId || scope.passengerId || scope.driverId || 'open'}`)
         .on('postgres_changes', { event: '*', schema: 'public', table: filters.table, filter: filters.filter },
           payload => handler(payload))
+        // SUBSCRIBED llega enseguida, pero los cambios de Postgres empiezan a
+        // fluir recién cuando Realtime lo confirma (segundos después, y otra vez
+        // tras cada reconexión). Lo que pase en ese hueco no genera evento: al
+        // confirmarse se vuelve a consultar, así ningún pedido queda afuera.
+        .on('system', {}, payload => {
+          if (payload?.extension !== 'postgres_changes') return;
+          if (payload.status === 'ok') {
+            onStatus('SUBSCRIBED');
+            handler({ eventType: 'READY' });
+          } else onStatus('CHANNEL_ERROR');
+        })
         .subscribe(status => onStatus(status));
       return () => { client.removeChannel(channel); };
     },

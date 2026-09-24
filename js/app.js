@@ -2763,7 +2763,10 @@ const FORMS = {
     app.session = await app.repository.session();
     app.authNotice = '';
     toast(`Hola, ${actor().name}.`);
-    go(hasRole('admin') ? '#admin' : hasRole('merchant') ? '#panel' : '#actividad');
+    // Si se pidió ingresar a mitad de una compra, se vuelve al carrito.
+    const target = app.returnTo || (hasRole('admin') ? '#admin' : hasRole('merchant') ? '#panel' : '#actividad');
+    app.returnTo = null;
+    go(target);
     await render({ focus: true });
   },
 
@@ -2949,6 +2952,7 @@ const FORMS = {
       }
       if (error?.code === 'GUEST_CHECKOUT_UNAVAILABLE') {
         app.authNotice = 'Para confirmar el pedido, ingresá con tu cuenta. Tu carrito queda guardado.';
+        app.returnTo = `#carrito/${businessId}`;
         go('#cuenta');
         return;
       }

@@ -11,7 +11,9 @@ let E;
 
 before(async () => {
   await startPreview();
-  for (const name of ['owner', 'admin']) people[name] = await account(`edge-${name}`);
+  for (const name of ['owner', 'admin', ...browsersToRun.map(engine => `buyer-${engine}`)]) {
+    people[name] = await account(`edge-${name}`);
+  }
   await makeAdmin(people.admin);
   E = await publishedBusiness(people.owner, people.admin, { name: 'Casos Limite' });
 });
@@ -39,6 +41,38 @@ async function fillContact(page, name) {
 }
 
 for (const engine of browsersToRun) {
+  test(`${engine}: con la compra sin cuenta apagada, ingresa y vuelve a su carrito para confirmar`, async () => {
+    const browser = await launch(engine);
+    await sql`update private.platform_features set enabled = false where key = 'guest_checkout'`;
+    try {
+      const buyer = await person(browser, { label: 'cliente' });
+      const page = buyer.page;
+      await cartWith(page, 2);
+      await fillContact(page, `Sin cuenta ${engine} ${run}`);
+      await page.locator('button.button-confirm-order').click();
+      await page.waitForFunction(() => location.hash === '#cuenta', null, { timeout: 20000 });
+      await page.getByText('Para confirmar el pedido, ingresá con tu cuenta. Tu carrito queda guardado.').waitFor();
+      await page.fill('#signin-email', people[`buyer-${engine}`].email);
+      await page.fill('#signin-password', people[`buyer-${engine}`].password);
+      await page.locator('form[data-form="sign-in"] button[type="submit"]').click();
+      await page.waitForFunction(id => location.hash === `#carrito/${id}`, E.id, { timeout: 20000 });
+      await ready(page);
+      assert.match(await page.locator('.totals-final dd').textContent(), /2\.400/, 'el carrito sigue armado');
+      await fillContact(page, `Con cuenta ${engine} ${run}`);
+      await page.locator('button.button-confirm-order').click();
+      await page.waitForFunction(() => location.hash.startsWith('#pedido/'), null, { timeout: 20000 });
+      const [order] = await sql`select customer_id::text as customer, total_ars::int as total from public.orders
+        where contact_name = ${`Con cuenta ${engine} ${run}`}`;
+      assert.deepEqual(order, { customer: people[`buyer-${engine}`].id, total: 2400 });
+      const [{ count }] = await sql`select count(*)::int from public.orders where contact_name = ${`Sin cuenta ${engine} ${run}`}`;
+      assert.equal(count, 0, 'sin cuenta no se creó nada');
+      assert.deepEqual(buyer.problems, []);
+    } finally {
+      await sql`update private.platform_features set enabled = true where key = 'guest_checkout'`;
+      await browser.close();
+    }
+  });
+
   test(`${engine}: si el precio cambia mientras confirma, ve el total nuevo antes de pedir`, async () => {
     const browser = await launch(engine);
     try {

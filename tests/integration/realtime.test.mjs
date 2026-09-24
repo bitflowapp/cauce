@@ -17,15 +17,26 @@ before(async () => {
 // Cada canal abierto mantiene vivo un WebSocket: se cierran todos.
 after(async () => { await closeAll([...Object.values(people), ...channels]); });
 
-function listen(client, filter) {
+// SUBSCRIBED sólo confirma el canal: los cambios de Postgres empiezan a llegar
+// cuando Realtime avisa "Subscribed to PostgreSQL" (con el stack en frío, varios
+// segundos después). Se espera ese aviso, como hace la aplicación.
+function listen(client, filter, timeout = 30000) {
   const events = [];
   return new Promise((resolve, reject) => {
+    let lastError = '';
+    const timer = setTimeout(() => reject(new Error(`Realtime no confirmó la suscripción a Postgres ${lastError}`)), timeout);
     const channel = client.channel(`qa-${Math.random().toString(36).slice(2)}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'orders', ...(filter ? { filter } : {}) },
         payload => events.push(payload))
+      // Un error acá es transitorio: Realtime reintenta solo y después avisa "ok".
+      .on('system', {}, payload => {
+        if (payload?.extension !== 'postgres_changes') return;
+        if (payload.status !== 'ok') { lastError = String(payload.message || ''); return; }
+        clearTimeout(timer);
+        resolve({ events, channel });
+      })
       .subscribe((state, error) => {
-        if (state === 'SUBSCRIBED') resolve({ events, channel });
-        if (state === 'CHANNEL_ERROR' || state === 'TIMED_OUT') reject(error || new Error(state));
+        if (state === 'CHANNEL_ERROR' || state === 'TIMED_OUT') { clearTimeout(timer); reject(error || new Error(state)); }
       });
     channels.push({ client, channel });
   });
