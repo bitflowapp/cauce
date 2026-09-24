@@ -19,10 +19,13 @@ secretos, que este entorno no tiene ni puede crear:
 | B6 | Deploy de producción | commit de `.github/deploy-target` = `production` + integrar el PR; Pages exige el esquema antes de publicar | — | B1–B3 |
 | — | Smoke post-deploy | `smoke-publicado`: comercios CAUCE QA, compra sin cuenta y con cuenta, retiro y envío, titular/encargado/equipo, seguridad, 320–1440 px, Chromium y WebKit; borra los datos QA | local: ver §1 | B6 |
 
-Estado real del proyecto (24/09/2026, smoke de sólo lectura y workflow de
-operación): sin `app_status` (migración pendiente), compra sin cuenta
+Estado real del proyecto (última comprobación: 24/09/2026 23:30 UTC, run
+36073055064 del workflow de operación, sólo lectura): sin `app_status` y el
+catálogo nuevo responde HTTP 400 (migración pendiente), compra sin cuenta
 deshabilitada, sitio publicado = demostración, y **ningún secreto cargado en
-GitHub** (`✘` en los cinco).
+GitHub** (`✘` en los cinco). Lo que ya está bien hoy: una visita no lee
+ninguna de las 9 tablas privadas, no escribe pedidos ni sube archivos, la
+confirmación de correo es obligatoria y Realtime acepta suscripciones.
 
 Integrar esta rama a `main` **no publica el build conectado** mientras
 `.github/deploy-target` diga `demo`: Pages vuelve a publicar la demostración
