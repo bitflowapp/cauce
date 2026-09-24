@@ -54,6 +54,8 @@ const app = {
   seenOrders: new Map(),
   panelSyncedAt: null,
   liveHealthy: true,
+  // Último toque o clic: los refrescos en segundo plano esperan a que termine.
+  pointerAt: 0,
 };
 
 const isShared = () => Boolean(app.repository?.capabilities?.sharedPersistence);
@@ -3077,10 +3079,14 @@ function syncLive(page, param) {
   // otra vez: la carga útil del evento nunca se pinta directamente.
   // También en segundo plano: un panel en otra pestaña tiene que sonar y
   // marcar el título cuando entra un pedido.
+  // Nunca en medio de un toque: reemplazar la vista entre que se apoya y se
+  // levanta el dedo pierde el clic. Se reintenta apenas termina.
   const refresh = () => {
     clearTimeout(live.timer);
-    live.timer = setTimeout(() => {
-      if (route().page === page && !isEditing()) render();
+    live.timer = setTimeout(function run() {
+      if (route().page !== page || isEditing()) return;
+      if (Date.now() - app.pointerAt < 600) { live.timer = setTimeout(run, 300); return; }
+      render();
     }, 250);
   };
   // Cerrar un canal al cambiar de vista es normal: sólo cuenta como falla lo
@@ -3118,6 +3124,9 @@ async function render({ focus = false } = {}) {
   if (!app.repository) return;
   const token = ++renderToken;
   const { page, param } = route();
+  // Ocupada desde el primer instante: mientras se revalida la sesión la vista
+  // todavía es la anterior y está por reemplazarse.
+  main.setAttribute('aria-busy', 'true');
   if (GATED_ROUTES.has(page) && isShared()) {
     try { app.session = await app.repository.session(); }
     catch (error) {
@@ -3251,7 +3260,10 @@ function bindEvents() {
   });
 
   // El navegador sólo deja sonar avisos después de una interacción.
-  document.addEventListener('pointerdown', () => { if (route().page === 'panel') unlockSound(); }, { passive: true });
+  document.addEventListener('pointerdown', () => {
+    app.pointerAt = Date.now();
+    if (route().page === 'panel') unlockSound();
+  }, { passive: true, capture: true });
 
   window.addEventListener('error', event => app.telemetry?.error(event.error || event.message, { where: 'window' }));
   window.addEventListener('unhandledrejection', event => app.telemetry?.error(event.reason, { where: 'promise' }));
