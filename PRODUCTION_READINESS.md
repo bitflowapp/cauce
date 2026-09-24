@@ -44,7 +44,7 @@ local efímero dentro del runner.
 | Unitarias | `npm test` | dominio, horarios, telemetría, repositorio, service worker | 190/190 |
 | SQL embebido | `npm run test:db` | migraciones desde cero + actualización con datos legados, RLS por rol, techos del registro de errores | 52/52 |
 | Integración y seguridad | `npm run test:integration` | Postgres + GoTrue + PostgREST + Storage + Realtime + Mailpit reales | 45/45 |
-| E2E Chromium y WebKit | `npm run e2e:local` | recorridos en navegadores reales contra el build de producción | 27/27 |
+| E2E Chromium y WebKit | `npm run e2e:local` | recorridos en navegadores reales contra el build de producción (incluye invitación con correo real) | 29/29 |
 | Builds | `npm run build`, `build:offline`, `build:production` | demo, demo sin red, producción con chequeo de bundle | PASS |
 | Smoke de producción | `npm run smoke:production` | sólo lectura contra el proyecto y el sitio reales | 2/5 (B1, B2, B4) |
 
