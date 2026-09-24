@@ -60,7 +60,8 @@ Supabase temporales y tardan varios minutos):
 | Paso `correo` (confirmación y recuperación) | `node scripts/operacion.mjs correo --local` | 15/15 |
 | Paso `admin` (existente, invitación, correo malicioso) | `node scripts/operacion.mjs admin --local …` | PASS · PASS · rechazado |
 | Paso `backup` con restauración | `CAUCE_BACKUP_PASSPHRASE=… node scripts/operacion.mjs backup --local` | 12/12, esquema idéntico a las migraciones |
-| Smoke post-deploy | `CAUCE_SMOKE_LOCAL=1 npm run smoke:publicado` | ver abajo |
+| Smoke post-deploy (comercios CAUCE QA, Chromium y WebKit) | `CAUCE_SMOKE_LOCAL=1 npm run smoke:publicado` | 7/7 en 31 s, sin residuo |
+| Limpieza de residuo QA (corrida interrumpida simulada) | `node scripts/operacion.mjs limpiar-qa --local --aplicar` | borró 2 cuentas y 1 comercio QA; 172 cuentas reales intactas |
 
 ### Qué cubren las pruebas de seguridad (contra el stack real)
 
@@ -185,8 +186,8 @@ y `npm run smoke:publicado`.
   datos existentes en PGlite (`tests/db/upgrade.test.mjs`) y en Supabase real
   (`scripts/ensayo-migracion.mjs`), y el paso `migrar` la ensaya además sobre
   una copia de los datos de producción antes de aplicarla.
-- Residuos de QA de corridas anteriores (cuentas `cauce-qa-…@example.com`):
-  `node scripts/clean-qa-residue.mjs` (sin `--apply` sólo lista).
+- Residuos de QA de corridas anteriores (cuentas `cauce-qa-<8 hex>-<rol>@example.com`):
+  paso `limpiar-qa` (sin `aplicar` sólo lista; nunca toca otras cuentas).
 
 ### 3.4 Cuenta administradora a mano (alternativa a `admin`)
 

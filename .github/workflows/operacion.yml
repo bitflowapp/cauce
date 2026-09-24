@@ -19,7 +19,7 @@ on:
         type: choice
         required: true
         default: estado
-        options: [estado, migrar, auth, correo, admin, backup, smoke-publicado]
+        options: [estado, migrar, auth, correo, admin, backup, smoke-publicado, limpiar-qa]
       aplicar:
         description: Escribir cambios (si no, sólo muestra qué haría)
         type: boolean
@@ -86,7 +86,7 @@ jobs:
               paso="$IN_PASO"; aplicar="$IN_APLICAR"; confirmar="$IN_CONFIRMAR"; email="$IN_EMAIL"; invitar="$IN_INVITAR" ;;
           esac
           # Nada que no pase estas reglas llega al entorno del paso.
-          case "$paso" in estado|migrar|auth|correo|admin|backup|smoke-publicado) ;; *) echo "::error::paso inválido"; exit 1 ;; esac
+          case "$paso" in estado|migrar|auth|correo|admin|backup|smoke-publicado|limpiar-qa) ;; *) echo "::error::paso inválido"; exit 1 ;; esac
           [[ "$aplicar" =~ ^(true|false)$ && "$invitar" =~ ^(true|false)$ ]] || { echo "::error::aplicar/invitar inválidos"; exit 1; }
           [[ -z "$email" || "$email" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$ ]] || { echo "::error::correo inválido"; exit 1; }
           [[ -z "$confirmar" || "$confirmar" =~ ^[a-z]{20}$ ]] || { echo "::error::confirmación inválida"; exit 1; }

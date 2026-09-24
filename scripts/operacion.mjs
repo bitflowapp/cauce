@@ -11,6 +11,7 @@
 //   node scripts/operacion.mjs correo              confirmación y recuperación con entrega real
 //   node scripts/operacion.mjs admin --email x@y [--invitar] [--aplicar]
 //   node scripts/operacion.mjs backup              dump, restauración de prueba y copia cifrada
+//   node scripts/operacion.mjs limpiar-qa [--aplicar]   residuo de pruebas (cuentas cauce-qa-…)
 //
 // --local ensaya el mismo paso contra el stack de `npx supabase start`.
 import { randomBytes } from 'node:crypto';
@@ -306,9 +307,44 @@ async function admin(t, list) {
   list.check('la tabla de administración no se expone por la API', !exposed.ok, `HTTP ${exposed.status}`);
 }
 
+// Residuo de QA: sólo cuentas con el patrón exacto que crean las pruebas
+// (cauce-qa-<8 hex>-<rol>@example.com), sus comercios, pedidos y archivos.
+async function limpiarQa(t, list) {
+  const users = await t.sql(`select id::text as id, email from auth.users
+    where email ~ '^cauce-qa-[0-9a-f]{8}-[a-z]+@example\\.com$'`);
+  const ids = users.map(user => `'${user.id}'`).join(', ');
+  const businesses = users.length ? await t.sql(`select distinct business_id::text as id from public.business_memberships
+    where user_id in (${ids}) and role = 'owner'`) : [];
+  const [{ n: others }] = await t.sql(`select count(*)::int as n from auth.users
+    where email is not null and email !~ '^cauce-qa-[0-9a-f]{8}-[a-z]+@example\\.com$'`);
+  list.info('residuo encontrado', `${users.length} cuentas QA · ${businesses.length} comercios QA · ${others} cuentas reales intactas`);
+  if (!apply || (!users.length && !businesses.length)) { if (!apply) list.info('sin --aplicar', 'no se borró nada'); return; }
+  const service = client(t.url, await t.serviceKey());
+  const list2 = businesses.map(item => `'${item.id}'`).join(', ');
+  if (businesses.length) {
+    for (const { id } of businesses) {
+      const folders = await service.storage.from('business-media').list(`businesses/${id}`, { limit: 100 });
+      const paths = [];
+      for (const folder of folders.data || []) {
+        const entries = await service.storage.from('business-media').list(`businesses/${id}/${folder.name}`, { limit: 100 });
+        for (const entry of entries.data || []) paths.push(`businesses/${id}/${folder.name}/${entry.name}`);
+      }
+      if (paths.length) await service.storage.from('business-media').remove(paths);
+    }
+    await t.sql(`delete from public.orders where business_id in (${list2})`);
+    await t.sql(`delete from public.businesses where id in (${list2})`);
+  }
+  if (users.length) await t.sql(`delete from public.orders where customer_id in (${ids})`);
+  for (const user of users) await service.auth.admin.deleteUser(user.id);
+  const [{ n: left }] = await t.sql(`select count(*)::int as n from auth.users
+    where email ~ '^cauce-qa-[0-9a-f]{8}-[a-z]+@example\\.com$'`);
+  list.check('residuo de QA borrado', left === 0, `${users.length} cuentas y ${businesses.length} comercios`);
+}
+
 // ───────────────────────── arranque ─────────────────────────
 
-const STEPS = { estado, migrar, auth, correo, admin, backup: (t, checks) => { t.link(); return backup(t, checks); } };
+const STEPS = { estado, migrar, auth, correo, admin, backup: (t, checks) => { t.link(); return backup(t, checks); },
+  'limpiar-qa': limpiarQa };
 if (!STEPS[step]) {
   console.error(`Paso desconocido: ${step || '(ninguno)'}. Pasos: ${Object.keys(STEPS).join(', ')}.`);
   process.exit(2);
