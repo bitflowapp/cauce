@@ -4,5 +4,5 @@
   "confirmar": "",
   "email": "",
   "invitar": false,
-  "motivo": "Comprobar el mecanismo de pedidos del workflow de operación y qué secretos están cargados. Sólo lectura."
+  "motivo": "Volver a comprobar qué secretos están cargados y el estado real del proyecto antes del informe final. Sólo lectura."
 }
