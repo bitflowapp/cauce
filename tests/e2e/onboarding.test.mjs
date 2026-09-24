@@ -91,6 +91,12 @@ for (const engine of browsersToRun) {
       assert.ok((await card.textContent()).includes('Titular Real'));
       await card.getByRole('button', { name: 'Aprobar' }).click();
       await expectToast(office.page, 'Alta aprobada.');
+      // En escritorio, mientras el aviso está visible, un clic sobre él llega a
+      // lo que hay debajo (antes se perdía durante 5 segundos).
+      assert.equal(await office.page.evaluate(() => {
+        const box = document.querySelector('#toast').getBoundingClientRect();
+        return document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2)?.id;
+      }) === 'toast', false, 'el aviso no intercepta clics');
       await shot(office.page, `${engine}-onboarding-admin`);
 
       // 7. El comercio abre la atención.
@@ -115,6 +121,17 @@ for (const engine of browsersToRun) {
         .getByRole('button', { name: 'Agregar' }).click();
       await ready(visitor.page);
       await visitor.page.locator('.sticky-cart-bar a.button').waitFor();
+      // El acceso al carrito queda a la vista, sobre la navegación inferior
+      // (antes un overflow en body anulaba el sticky y quedaba bajo el borde).
+      const bar = await visitor.page.evaluate(() => {
+        const cart = document.querySelector('.sticky-cart-bar').getBoundingClientRect();
+        const nav = document.querySelector('.bottom-nav').getBoundingClientRect();
+        return { top: cart.top, bottom: cart.bottom, nav: nav.top };
+      });
+      assert.ok(bar.top >= 0 && bar.bottom <= bar.nav, `barra del carrito a la vista: ${JSON.stringify(bar)}`);
+      // Los horarios se despliegan desde la ficha.
+      await visitor.page.locator('.hours-details summary').click();
+      await visitor.page.locator('.hours-list li').first().waitFor();
       assert.deepEqual(await layoutIssues(visitor.page), []);
       await shot(visitor.page, `${engine}-onboarding-publico`);
       assert.deepEqual([...shop.problems, ...office.problems, ...visitor.problems], []);

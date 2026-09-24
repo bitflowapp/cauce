@@ -71,7 +71,15 @@ html, body {
   margin: 0;
   padding: 0;
   max-width: 100%;
-  overflow-x: hidden;
+}
+
+/* Sin desplazamiento lateral. `hidden` en body lo convertía en contenedor de
+   scroll y anulaba todo `position: sticky` (la barra del carrito quedaba bajo
+   el borde de la pantalla). `clip` recorta sin crear contenedor; donde no
+   existe, recorta sólo html, que se propaga a la ventana. */
+html { overflow-x: hidden; }
+@supports (overflow-x: clip) {
+  html, body { overflow-x: clip; }
 }
 
 body {
@@ -3699,6 +3707,9 @@ main:empty {
   font-weight: 600;
   animation: toastIn 0.2s ease;
   border: 1px solid rgba(255, 255, 255, 0.15);
+  /* Es sólo un aviso: el toque pasa al botón que quede debajo durante los
+     segundos en que está visible (antes se perdía). */
+  pointer-events: none;
 }
 
 .toast[hidden] {
@@ -6569,7 +6580,25 @@ main {
   min-height: 44px;
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  list-style: none;
 }
+/* `display: flex` borra el triángulo nativo: sin una señal, parece un título
+   y nadie sabe que se despliega. */
+.hours-details summary::-webkit-details-marker { display: none; }
+.hours-details summary::after {
+  content: '';
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg);
+  transition: transform 0.15s ease;
+}
+.hours-details[open] summary::after { transform: rotate(-135deg); }
 .hours-list { list-style: none; padding: 0; margin: 4px 0 0; display: grid; gap: 6px; }
 .hours-list li { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; }
 
