@@ -29,13 +29,8 @@ import {
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const DEMO_PAYMENT_METHODS = Object.freeze(['cash_demo', 'transfer_demo']);
 
-export const PAYMENT_METHOD_LABELS = Object.freeze({
-  cash_demo: 'Efectivo al recibir (prueba)',
-  transfer_demo: 'Transferencia al comercio (prueba)',
-  // Formas de pago del entorno conectado: no hay cobro en línea todavía.
-  cash_on_delivery: 'Efectivo al recibir',
-  cash_on_pickup: 'Efectivo al retirar',
-});
+// Las etiquetas viven en core: la interfaz conectada no depende del dominio demo.
+export { PAYMENT_METHOD_LABELS } from '../core/payment.js';
 
 // ───────────────────────── utilidades internas ─────────────────────────
 

@@ -127,3 +127,12 @@ test('el alta de un comercio queda registrada con estado, no como un interesado 
   assert.equal(mine.length, 1);
   assert.equal(mine[0].id, business.id);
 });
+
+test('un producto sin control de stock se vende mientras esté disponible', async () => {
+  const { knownStock, isCommerciallyPurchasable, UNTRACKED_STOCK } = await import('../js/core/commercial.js');
+  const product = { price: 1200, stock: 0, trackStock: false, available: true, archived: false };
+  assert.equal(knownStock(product), UNTRACKED_STOCK);
+  assert.equal(isCommerciallyPurchasable(product), true);
+  assert.equal(isCommerciallyPurchasable({ ...product, available: false }), false);
+  assert.equal(isCommerciallyPurchasable({ ...product, trackStock: true }), false, 'con control, cero es agotado');
+});

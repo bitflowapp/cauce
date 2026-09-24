@@ -7,7 +7,17 @@
 import { CONFIG } from './config.js';
 import { RUNTIME_ENV } from './runtime-env.js';
 import { createRepository } from './repositories/repository-factory.js';
-import { isNetworkError } from './repositories/http-repository.js';
+import { isNetworkError } from './core/network.js';
+import { CauceError } from './core/errors.js';
+import { REQUIRED_SCHEMA } from './core/contract.js';
+import { createTelemetry, classify } from './core/telemetry.js';
+import { nextOpening } from './core/business-hours.js';
+import { ROLE_LABELS } from './core/accounts.js';
+import { askReason, askConfirm } from './ui/dialog.js';
+import { announceNewOrders, clearOrderAlert, unlockSound, soundReady, setBaseTitle } from './ui/order-alert.js';
+import {
+  contactButtons, timesLine, hoursSummary, hoursEditor, readHoursForm, teamTab, ROLE_NAMES,
+} from './ui/merchant-tools.js';
 import { renderIcon, renderSticker } from './ui/icons.js';
 import { renderCharacter } from './ui/brand-characters.js';
 import {
@@ -36,6 +46,14 @@ const app = {
   panelTab: 'pedidos',
   formDrafts: new Map(),
   toastTimer: null,
+  // Entorno conectado: verticales habilitadas y contrato con la base.
+  features: null,
+  telemetry: null,
+  // Panel del comercio: pedidos ya vistos (para avisar los nuevos) y última
+  // actualización confirmada.
+  seenOrders: new Map(),
+  panelSyncedAt: null,
+  liveHealthy: true,
 };
 
 const isShared = () => Boolean(app.repository?.capabilities?.sharedPersistence);
@@ -44,6 +62,19 @@ const isConnected = () => app.repository?.environment === 'supabase';
 const actor = () => app.session?.actor || null;
 const isSignedIn = () => actor()?.kind === 'account';
 const hasRole = role => Boolean(actor()?.roles?.includes(role));
+// Sesión anónima de compra: tiene pedidos propios pero no es una cuenta.
+const isGuestSession = () => Boolean(actor()?.anonymous);
+// Verticales: en la demostración todo sigue encendido; en el entorno conectado
+// decide la base (app_status), para habilitar o apagar sin tocar código.
+const feature = name => !isConnected() || app.features?.[name] === true;
+
+// Lo que ve la persona: el mensaje de CAUCE, nunca el texto técnico de una
+// excepción. El detalle queda en el registro de errores.
+function userMessage(error) {
+  if (error instanceof CauceError || error?.name === 'CauceError') return error.message;
+  app.telemetry?.error(error, { where: 'ui' });
+  return 'Ocurrió un problema inesperado. Reintentá en unos segundos; si sigue pasando, avisanos.';
+}
 
 function productThumb(item, name = '', className = '') {
   const label = name || item?.name || 'Producto';
@@ -73,6 +104,7 @@ const DELIVERY_TRACK_PROGRESS = Object.freeze({
 function renderOrderMoment(order) {
   const moment = {
     received: ['merchant', 'Pedido recibido', 'El comercio ya puede revisarlo y confirmar si lo toma.'],
+    submitted: ['merchant', 'Pedido enviado', 'El comercio lo recibió y en breve confirma si lo toma.'],
     accepted: ['merchant', 'Pedido aceptado', 'El comercio confirmó que puede prepararlo.'],
     preparing: ['merchant', 'Preparando tu pedido', 'El comercio está trabajando en los productos del pedido.'],
     ready: ['shopper', 'Pedido listo', order.fulfillment === 'delivery' ? 'Está listo para asignar el reparto.' : 'Ya podés retirarlo por el comercio.'],
@@ -309,12 +341,13 @@ function applyOfflineState() {
 }
 
 function errorView(error) {
-  const retry = isNetworkError(error)
+  const offline = isNetworkError(error);
+  const retry = offline || isConnected()
     ? '<button class="button secondary" type="button" data-action="retry">Reintentar</button>'
     : '';
-  return `<section class="notice error">
-    <h2>No pudimos abrir esta vista</h2>
-    <p>${esc(error?.message || 'Ocurrió un error inesperado.')}</p>
+  return `<section class="notice error" role="alert">
+    <h2>${offline ? 'Sin conexión con CAUCE' : 'No pudimos abrir esta vista'}</h2>
+    <p>${esc(userMessage(error))}</p>
     <div class="modal-actions">${retry}<a class="button secondary" href="#inicio">Volver al inicio</a></div>
   </section>`;
 }
@@ -328,14 +361,19 @@ function updateShell() {
   if (envChip) {
     // En la cabecera va la forma corta, para que entre a 360 px sin recortarse;
     // el pie lleva la frase completa y el detalle está en el título accesible.
-    envChip.textContent = RUNTIME_ENV.environment === 'demo' ? 'Demostración' : isConnected() ? 'Conectado' : 'Pruebas';
+    // En producción no hay nada que aclarar: el indicador no se muestra.
+    envChip.hidden = isConnected();
+    envChip.textContent = RUNTIME_ENV.environment === 'demo' ? 'Demostración' : isConnected() ? '' : 'Pruebas';
     envChip.title = `${RUNTIME_ENV.label}. ${RUNTIME_ENV.description}`;
     envChip.dataset.environment = RUNTIME_ENV.environment;
   }
 
   const footerEnv = document.querySelector('#footer-env');
-  if (footerEnv) {
+  if (footerEnv && !isConnected()) {
     footerEnv.textContent = `${RUNTIME_ENV.label} · ${RUNTIME_ENV.description}`;
+  }
+  for (const element of document.querySelectorAll('a[href="#taxi"], a[href="#taxista"]')) {
+    element.hidden = !feature('taxi');
   }
 
   const accountLink = document.querySelector('#account-link');
@@ -369,6 +407,17 @@ function updateShell() {
 
 // ───────────────────────── vistas públicas ─────────────────────────
 
+// Abierto o cerrado, y por qué: el horario manda aunque el comercio se olvide
+// de cerrar, y el interruptor manda aunque esté dentro de horario.
+function availabilityText(business) {
+  if (business.open) return 'Abierto';
+  if (isConnected() && business.acceptingOrders) {
+    const next = nextOpening(business.hours, new Date(), business.timezone);
+    return next ? `Cerrado · ${next.label.replace('Abre ', 'abre ')}` : 'Cerrado';
+  }
+  return 'Cerrado';
+}
+
 function businessCard(business) {
   const modes = [
     business.pickupEnabled ? 'Retiro' : null,
@@ -385,7 +434,7 @@ function businessCard(business) {
           <h3>${esc(business.name)}</h3>
           <p class="quiet">${esc(business.category || 'Comercio local')}${business.subtitle ? ` · ${esc(business.subtitle)}` : ''}</p>
         </div>
-        <span class="availability ${business.open ? '' : 'closed'}">${business.open ? 'Abierto' : 'Cerrado'}</span>
+        <span class="availability ${business.open ? '' : 'closed'}">${esc(availabilityText(business))}</span>
       </div>
       <p class="merchant-modes">${renderIcon('bag', 14)} ${esc(modes || 'Modalidades a confirmar')}</p>
     </a>`;
@@ -403,13 +452,12 @@ function filterBusinesses(businesses, catalogs = {}) {
 }
 
 async function viewHome() {
-  const [businesses, carts, orders, trips] = await Promise.all([
+  const taxi = feature('taxi');
+  const [businesses, orders, trips] = await Promise.all([
     app.repository.query('publicBusinesses'),
-    app.repository.query('carts'),
     app.repository.query('myOrders'),
-    app.repository.query('myTrips'),
+    taxi ? app.repository.query('myTrips') : [],
   ]);
-  app.cartCount = carts.reduce((total, entry) => total + entry.cart.lines.reduce((sum, line) => sum + line.quantity, 0), 0);
 
   const activeOrders = orders.filter(order => !['delivered', 'canceled'].includes(order.status));
   const activeTrip = trips.find(trip => isTaxiActive(trip.status));
@@ -417,14 +465,14 @@ async function viewHome() {
 
   const operation = (activeOrders.length || activeTrip) ? `
     <section class="home-block">
-      ${sectionHeading('EN CURSO', 'Tu operación activa')}
+      ${sectionHeading('EN CURSO', activeOrders.length > 1 ? 'Tus pedidos en curso' : 'Tu pedido en curso')}
       <div class="stack">
-        ${activeOrders.slice(0, 2).map(order => `
+        ${activeOrders.slice(0, 3).map(order => `
           <a class="op-card" href="#pedido/${esc(order.id)}">
             <span class="op-card-icon">${renderIcon('receipt', 18)}</span>
             <span class="op-card-body">
               <strong>${esc(order.code)} · ${esc(businesses.find(b => b.id === order.businessId)?.name || 'Comercio')}</strong>
-              <span class="quiet">${esc(orderStatusLabel(order))} · ${esc(fulfillmentLabel(order.fulfillment))}</span>
+              <span class="quiet">${esc(fulfillmentLabel(order.fulfillment))} · ${money(order.total)}</span>
             </span>
             <span class="status-chip ${orderStatusTone(order.status)}">${esc(orderStatusLabel(order))}</span>
           </a>`).join('')}
@@ -440,6 +488,13 @@ async function viewHome() {
       </div>
     </section>` : '';
 
+  const businessesBlock = businesses.length
+    ? `<div class="merchant-grid">${(open.length ? open : businesses).slice(0, 4).map(businessCard).join('')}</div>`
+    : isConnected()
+      ? `<div class="notice"><strong>Estamos sumando los primeros comercios de Aluminé.</strong>
+          Muy pronto vas a poder pedir desde acá. ¿Tenés un comercio? Sumalo en pocos pasos.</div>`
+      : '<p class="quiet">Todavía no hay comercios publicados en este entorno.</p>';
+
   return `
     ${offlineBanner()}
     <section class="home-hero">
@@ -448,10 +503,13 @@ async function viewHome() {
       </div>
       <div class="home-hero-body">
         <p class="eyebrow">CAUCE · ALUMINÉ</p>
-        <h1>Comprá local.<br>Movete por Aluminé.</h1>
+        <h1>${taxi ? 'Comprá local.<br>Movete por Aluminé.' : 'Comprá en los comercios<br>de Aluminé.'}</h1>
+        ${taxi ? '' : '<p class="home-hero-lead">Retirá en el local o recibilo con el reparto del propio comercio. Sin crear una cuenta.</p>'}
         <div class="home-actions">
           <a class="button button-hero" href="#comercios">${renderIcon('store', 18)} Ver comercios</a>
-          <a class="button button-hero-outline" href="#taxi">${renderIcon('taxi', 18)} Pedir un taxi</a>
+          ${taxi
+            ? `<a class="button button-hero-outline" href="#taxi">${renderIcon('taxi', 18)} Pedir un taxi</a>`
+            : `<a class="button button-hero-outline" href="#actividad">${renderIcon('receipt', 18)} Mis pedidos</a>`}
         </div>
       </div>
       <div class="home-hero-character" aria-hidden="true">${renderCharacter('shopper', 180)}</div>
@@ -461,32 +519,41 @@ async function viewHome() {
 
     <section class="home-block">
       ${sectionHeading('COMERCIOS', open.length ? 'Abiertos ahora' : 'Comercios en CAUCE',
-        `<a class="link-button" href="#comercios">Ver todos</a>`)}
-      ${businesses.length
-        ? `<div class="merchant-grid">${(open.length ? open : businesses).slice(0, 4).map(businessCard).join('')}</div>`
-        : `<p class="quiet">Todavía no hay comercios publicados en este entorno.</p>`}
+        businesses.length ? `<a class="link-button" href="#comercios">Ver todos</a>` : '')}
+      ${businessesBlock}
     </section>
+
+    ${isConnected() ? `
+    <section class="home-block">
+      ${sectionHeading('CÓMO FUNCIONA', 'Pedir es simple')}
+      <ol class="how-steps">
+        <li><strong>Elegí un comercio</strong><span>Mirá el catálogo con precios y qué está disponible hoy.</span></li>
+        <li><strong>Confirmá tu pedido</strong><span>Retiro en el local o envío del comercio. Pagás al recibir o al retirar.</span></li>
+        <li><strong>Seguilo en vivo</strong><span>Ves cuando lo aceptan, lo preparan y sale. Te damos un enlace para no perderlo.</span></li>
+      </ol>
+    </section>` : ''}
 
     <section class="home-block home-secondary">
       <a class="secondary-access" href="#alta-comercio">
         <span class="secondary-access-icon" aria-hidden="true">${renderSticker('merchant', 40)}</span>
         <span>
           <strong>Sumar mi comercio</strong>
-          <span class="quiet">Creá tu cuenta, cargá tu catálogo y solicitá la publicación.</span>
+          <span class="quiet">Creá tu cuenta, cargá tu catálogo y empezá a recibir pedidos.</span>
         </span>
       </a>
+      ${taxi ? `
       <a class="secondary-access" href="#taxista">
         <span class="secondary-access-icon" aria-hidden="true">${renderSticker('taxi', 40)}</span>
         <span>
           <strong>Registrarme como taxista</strong>
           <span class="quiet">Completá tu alta y recibí solicitudes cuando esté aprobada.</span>
         </span>
-      </a>
+      </a>` : ''}
       <a class="secondary-access quiet-access" href="#institucional">
         <span class="secondary-access-icon" aria-hidden="true">${renderIcon('shield-check', 26)}</span>
         <span>
           <strong>Qué es CAUCE</strong>
-          <span class="quiet">Alcance, responsabilidades y propuesta de piloto.</span>
+          <span class="quiet">${isConnected() ? 'Quiénes somos, cómo funciona y a quién consultar.' : 'Alcance, responsabilidades y propuesta de piloto.'}</span>
         </span>
       </a>
     </section>`;
@@ -497,19 +564,22 @@ async function viewBusinesses() {
   const categories = ['Todos', ...new Set(businesses.map(business => business.category).filter(Boolean))];
   // Buscar "pizza" tiene que encontrar al comercio que vende pizza, no sólo al
   // que se llama así: se consulta el catálogo de cada comercio publicado.
-  const catalogs = app.search.query.trim()
-    ? Object.fromEntries(await Promise.all(businesses.map(async business => [
+  // En el entorno conectado es una sola consulta para todos los catálogos.
+  const catalogs = !app.search.query.trim() ? {}
+    : isConnected() ? await app.repository.query('searchCatalog', { query: app.search.query })
+    : Object.fromEntries(await Promise.all(businesses.map(async business => [
       business.id,
       (await app.repository.query('products', { businessId: business.id })).map(product => product.name).join(' '),
-    ])))
-    : {};
+    ])));
   const visible = filterBusinesses(businesses, catalogs);
 
   return `
     ${offlineBanner()}
     <section class="page-header">
       <h1 class="page-title">Comercios de Aluminé</h1>
-      <p class="quiet">${pluralize(businesses.length, 'comercio publicado', 'comercios publicados')} en este entorno · contenido ficticio de demostración.</p>
+      <p class="quiet">${isConnected()
+        ? `${pluralize(businesses.length, 'comercio publicado', 'comercios publicados')} · ${pluralize(businesses.filter(business => business.open).length, 'abierto ahora', 'abiertos ahora')}`
+        : `${pluralize(businesses.length, 'comercio publicado', 'comercios publicados')} en este entorno · contenido ficticio de demostración.`}</p>
     </section>
 
     <form class="search-bar" data-form="search" role="search">
@@ -530,17 +600,36 @@ async function viewBusinesses() {
           data-action="set-category" data-category="${esc(category)}">${esc(category)}</button>`).join('')}
     </div>
 
-    ${visible.length
+    ${!businesses.length
+      ? emptyState('Todavía no hay comercios publicados',
+        'Estamos sumando los primeros comercios de Aluminé. Volvé pronto, o sumá el tuyo.',
+        '#alta-comercio', 'Sumar mi comercio', 'merchant')
+      : visible.length
       ? `<div class="merchant-grid">${visible.map(businessCard).join('')}</div>`
       : emptyState('Sin resultados',
         'La búsqueda mira el nombre del comercio, su rubro y sus productos. Probá con otra palabra o quitá los filtros.',
         '#comercios', 'Ver todos los comercios', 'bag')}`;
 }
 
+// Un comercio pausado, suspendido o en borrador no es público: se explica en
+// lugar de mostrar un error.
+async function loadPublicBusiness(businessId) {
+  try {
+    return await app.repository.query('business', { businessId });
+  } catch (error) {
+    if (error?.code === 'BUSINESS_NOT_FOUND') return null;
+    throw error;
+  }
+}
+
+const unavailableBusiness = () => emptyState('Este comercio no está disponible',
+  'Puede estar pausado o en revisión. Mirá los otros comercios de Aluminé.', '#comercios', 'Ver comercios', 'bag');
+
 async function viewBusiness(businessId) {
   if (!businessId) return emptyState('Comercio no encontrado', 'Elegí un comercio del listado.');
-  const [business, products, cart] = await Promise.all([
-    app.repository.query('business', { businessId }),
+  const business = await loadPublicBusiness(businessId);
+  if (!business) return unavailableBusiness();
+  const [products, cart] = await Promise.all([
     app.repository.query('products', { businessId }),
     app.repository.query('cart', { businessId }),
   ]);
@@ -569,7 +658,7 @@ async function viewBusiness(businessId) {
           <h3>${esc(product.name)}</h3>
           ${product.description ? `<p class="quiet">${esc(product.description)}</p>` : ''}
           <p class="product-price">${money(confirmedPrice(product))}</p>
-          ${available ? '' : `<p class="product-flag">${stock <= 0 ? 'Sin stock' : 'No disponible'}</p>`}
+          ${available ? '' : `<p class="product-flag">${product.available === false ? 'Agotado por hoy' : stock <= 0 ? 'Sin stock' : 'No disponible'}</p>`}
         </div>
         ${variants.length ? `
           <div class="variant-list">
@@ -628,19 +717,22 @@ async function viewBusiness(businessId) {
         <h1 class="page-title">${esc(business.name)}</h1>
         <p class="quiet">${esc(business.subtitle || business.category || '')}</p>
         <div class="shop-meta">
-          <span class="availability ${business.open ? '' : 'closed'}">${business.open ? 'Abierto' : 'Cerrado'}</span>
-          ${business.hoursLabel ? `<span>${renderIcon('clock', 14)} ${esc(business.hoursLabel)}</span>` : ''}
+          <span class="availability ${business.open ? '' : 'closed'}">${esc(availabilityText(business))}</span>
+          ${business.hoursLabel && !(business.hours || []).length ? `<span>${renderIcon('clock', 14)} ${esc(business.hoursLabel)}</span>` : ''}
           ${business.address ? `<span>${renderIcon('pin', 14)} ${esc(business.address)}</span>` : ''}
+          ${timesLine(business) ? `<span>${renderIcon('clock', 14)} ${esc(timesLine(business))}</span>` : ''}
         </div>
         <div class="shop-meta">
           ${business.pickupEnabled ? `<span class="tag">${renderIcon('bag', 13)} Retiro en el comercio</span>` : ''}
           ${business.deliveryEnabled ? `<span class="tag">${renderIcon('delivery', 13)} Envío ${business.deliveryFee > 0 ? money(business.deliveryFee) : 'sin costo'}${business.minimumOrder > 0 ? ` · mínimo ${money(business.minimumOrder)}` : ''}</span>` : ''}
         </div>
         ${business.deliveryZone ? `<p class="microcopy">Zona de envío declarada por el comercio: ${esc(business.deliveryZone)}.</p>` : ''}
+        ${isConnected() ? contactButtons(business, { compact: true }) : ''}
       </div>
     </section>
+    ${isConnected() && (business.hours || []).length ? `<details class="hours-details"><summary>Horarios de atención</summary>${hoursSummary(business)}</details>` : ''}
 
-    ${business.open ? '' : `<div class="notice"><strong>El comercio está cerrado.</strong> Podés mirar el catálogo, pero no confirmar pedidos hasta que vuelva a abrir.</div>`}
+    ${business.open ? '' : `<div class="notice" role="status"><strong>${esc(availabilityText(business))}.</strong> Podés mirar el catálogo y armar tu pedido; se confirma cuando el comercio esté recibiendo pedidos.</div>`}
 
     ${categories.map(category => `
       <section class="catalog-group">
@@ -688,8 +780,9 @@ async function viewCarts(businessId) {
 }
 
 async function viewCheckout(businessId) {
-  const [business, products, cart] = await Promise.all([
-    app.repository.query('business', { businessId }),
+  const business = await loadPublicBusiness(businessId);
+  if (!business) return unavailableBusiness();
+  const [products, cart] = await Promise.all([
     app.repository.query('products', { businessId }),
     app.repository.query('cart', { businessId }),
   ]);
@@ -708,53 +801,68 @@ async function viewCheckout(businessId) {
   let quote = null;
   let quoteError = '';
   try { quote = await app.repository.query('quote', { businessId, fulfillment }); }
-  catch (error) { quoteError = error.message; }
+  catch (error) { quoteError = userMessage(error); }
 
+  // Una línea cuyo producto se dio de baja, se agotó o cambió de opciones se
+  // marca y se puede quitar: nunca queda trabada en el carrito.
   const detail = cart.lines.map(line => {
-    const product = products.find(candidate => candidate.id === line.productId);
+    const product = products.find(candidate => candidate.id === line.productId && !candidate.archived);
     const variant = (product?.variants || []).find(item => item.id === line.variantId) || null;
-    return { line, product, variant };
+    const unavailable = !product || !isCommerciallyPurchasable(product)
+      || (line.variantId && !variant) || (!line.variantId && (product?.variants || []).length > 0);
+    return { line, product, variant, unavailable };
   });
+  const unavailableCount = detail.filter(item => item.unavailable).length;
+  const notice = app.checkoutNotice?.businessId === businessId ? app.checkoutNotice : null;
 
   return `
     ${offlineBanner()}
     ${backLink(`#comercio/${business.id}`, business.name)}
     <section class="page-header">
       <h1 class="page-title">Confirmar pedido</h1>
-      <p class="quiet">${esc(business.name)}</p>
+      <p class="quiet">${esc(business.name)}${timesLine(business, fulfillment) ? ` · ${esc(timesLine(business, fulfillment))}` : ''}</p>
     </section>
+
+    ${notice ? `<div class="notice ${notice.tone === 'error' ? 'error' : ''}" role="alert">${esc(notice.message)}</div>` : ''}
+    ${business.open ? '' : `<div class="notice" role="status"><strong>${esc(availabilityText(business))}.</strong> Vas a poder confirmar cuando el comercio esté recibiendo pedidos.</div>`}
 
     <section class="checkout-section">
       <h2 class="checkout-section-title">Tu pedido</h2>
       <ul class="cart-lines-list">
-        ${detail.map(({ line, product, variant }) => {
-          const unit = confirmedPrice(product || {}) + (variant ? Number(variant.priceDelta) || 0 : 0);
+        ${detail.map(({ line, product, variant, unavailable }) => {
+          const unit = (confirmedPrice(product || {}) || 0) + (variant ? Number(variant.priceDelta) || 0 : 0);
           const variantAttribute = line.variantId ? ` data-variant="${esc(line.variantId)}"` : '';
           return `
-          <li class="cart-line">
+          <li class="cart-line ${unavailable ? 'is-unavailable' : ''}">
             <div class="cart-line-product">
               ${productThumb(product, product?.name)}
               <div class="cart-line-info">
-                <span class="cart-line-title">${esc(product?.name || 'Producto')}${variant ? ` · ${esc(variant.name)}` : ''}</span>
-                <span class="cart-line-unit-price">${money(unit)} c/u</span>
+                <span class="cart-line-title">${esc(product?.name || 'Producto que ya no está en el catálogo')}${variant ? ` · ${esc(variant.name)}` : ''}</span>
+                <span class="cart-line-unit-price">${unavailable ? 'No disponible' : `${money(unit)} c/u`}</span>
               </div>
             </div>
+            ${unavailable ? `
+            <button class="button secondary" type="button" data-action="set-quantity" data-business="${esc(business.id)}"
+              data-product="${esc(line.productId)}"${variantAttribute} data-quantity="0">Quitar</button>` : `
             <div class="cart-line-controls">
               <button class="qty-button" type="button" data-action="set-quantity" data-business="${esc(business.id)}"
-                data-product="${esc(line.productId)}"${variantAttribute} data-quantity="${line.quantity - 1}" aria-label="Quitar una unidad">−</button>
+                data-product="${esc(line.productId)}"${variantAttribute} data-quantity="${line.quantity - 1}" aria-label="Quitar una unidad de ${esc(product.name)}">−</button>
               <span class="qty-value">${line.quantity}</span>
               <button class="qty-button" type="button" data-action="set-quantity" data-business="${esc(business.id)}"
-                data-product="${esc(line.productId)}"${variantAttribute} data-quantity="${line.quantity + 1}" aria-label="Agregar una unidad">+</button>
+                data-product="${esc(line.productId)}"${variantAttribute} data-quantity="${line.quantity + 1}" aria-label="Agregar una unidad de ${esc(product.name)}"
+                ${line.quantity >= Math.min(99, knownStock(product) ?? 0) ? 'disabled' : ''}>+</button>
             </div>
-            <span class="cart-line-total">${money(unit * line.quantity)}</span>
+            <span class="cart-line-total">${money(unit * line.quantity)}</span>`}
           </li>`;
         }).join('')}
       </ul>
+      ${unavailableCount > 1 ? `<button class="link-button" type="button" data-action="remove-unavailable" data-business="${esc(business.id)}">Quitar los ${unavailableCount} productos no disponibles</button>` : ''}
     </section>
 
-    ${quoteError ? `<div class="notice error"><strong>Revisá tu carrito.</strong> ${esc(quoteError)}</div>` : ''}
+    ${quoteError && !unavailableCount ? `<div class="notice error" role="alert"><strong>Revisá tu pedido.</strong> ${esc(quoteError)}</div>` : ''}
 
-    <form class="checkout-form" data-form="checkout" data-business="${esc(business.id)}">
+    <form class="checkout-form" data-form="checkout" data-business="${esc(business.id)}"
+      data-expected-total="${quote ? quote.total : ''}" novalidate>
       <section class="checkout-section">
         <h2 class="checkout-section-title">Cómo lo recibís</h2>
         <div class="choice-group" role="radiogroup" aria-label="Modalidad de entrega">
@@ -765,7 +873,7 @@ async function viewCheckout(businessId) {
                 <strong>${mode === 'pickup' ? 'Retiro en el comercio' : 'Envío del comercio'}</strong>
                 <span class="quiet">${mode === 'pickup'
                   ? esc(business.address || 'Dirección a confirmar con el comercio')
-                  : `${business.deliveryFee > 0 ? money(business.deliveryFee) : 'Sin costo'}${business.deliveryZone ? ` · ${esc(business.deliveryZone)}` : ''}`}</span>
+                  : `${business.deliveryFee > 0 ? money(business.deliveryFee) : 'Sin costo'}${business.minimumOrder > 0 ? ` · mínimo ${money(business.minimumOrder)}` : ''}${business.deliveryZone ? ` · ${esc(business.deliveryZone)}` : ''}`}</span>
               </span>
             </label>`).join('')}
         </div>
@@ -773,6 +881,7 @@ async function viewCheckout(businessId) {
 
       <section class="checkout-section">
         <h2 class="checkout-section-title">Tus datos</h2>
+        ${isConnected() && !isSignedIn() ? `<p class="microcopy">No hace falta crear una cuenta. El comercio usa estos datos sólo para este pedido.</p>` : ''}
         <div class="field">
           <label for="checkout-name">Nombre y apellido</label>
           <input id="checkout-name" name="name" type="text" required minlength="2" maxlength="80"
@@ -782,12 +891,13 @@ async function viewCheckout(businessId) {
           <label for="checkout-phone">Teléfono de contacto</label>
           <input id="checkout-phone" name="phone" type="tel" required inputmode="tel" autocomplete="tel"
             placeholder="2942 000000" value="${esc(stored.phone || (isSignedIn() ? actor().phone || '' : ''))}">
+          <p class="microcopy">El comercio te llama o escribe si hay algún cambio.</p>
         </div>
         ${fulfillment === 'delivery' ? `
           <div class="field">
             <label for="checkout-address">Dirección de entrega</label>
             <input id="checkout-address" name="address" type="text" required minlength="5" maxlength="200"
-              autocomplete="street-address" placeholder="Calle y número" value="${esc(stored.address || '')}">
+              autocomplete="street-address" placeholder="Calle, número y referencia" value="${esc(stored.address || '')}">
           </div>
           ${business.deliveryZone ? `
             <label class="check-label">
@@ -796,7 +906,7 @@ async function viewCheckout(businessId) {
             </label>` : ''}` : ''}
         <div class="field">
           <label for="checkout-notes">Notas para el comercio (opcional)</label>
-          <textarea id="checkout-notes" name="notes" rows="2" maxlength="300">${esc(stored.notes || '')}</textarea>
+          <textarea id="checkout-notes" name="notes" rows="2" maxlength="280">${esc(stored.notes || '')}</textarea>
         </div>
       </section>
 
@@ -807,10 +917,10 @@ async function viewCheckout(businessId) {
             <label class="choice active">
               <input type="radio" name="paymentMethod" value="cash" checked>
               <span class="choice-body"><strong>${fulfillment === 'delivery' ? 'Efectivo al recibir' : 'Efectivo al retirar'}</strong>
-                <span class="quiet">Se coordina con el comercio</span></span>
+                <span class="quiet">Se paga directamente al comercio</span></span>
             </label>
           </div>
-          <p class="microcopy">CAUCE no cobra ni intermedia el pago. El pedido y el pago son estados independientes.</p>`
+          <p class="microcopy">CAUCE no cobra ni intermedia el pago.</p>`
         : `
           <div class="choice-group" role="radiogroup" aria-label="Forma de pago">
             <label class="choice ${(stored.paymentMethod || 'cash_demo') === 'cash_demo' ? 'active' : ''}">
@@ -833,51 +943,39 @@ async function viewCheckout(businessId) {
             <div><dt>${fulfillment === 'delivery' ? 'Envío' : 'Retiro'}</dt><dd>${fulfillment === 'delivery' ? money(quote.deliveryFee) : 'Sin costo'}</dd></div>
             <div class="totals-final"><dt>Total</dt><dd>${money(quote.total)}</dd></div>
           </dl>
-          <p class="microcopy">El importe se recalcula ${isShared() ? 'en el servidor' : 'con el catálogo guardado'} al confirmar.</p>`
-        : '<p class="quiet">No se puede calcular el total hasta resolver los avisos de arriba.</p>'}
+          <p class="microcopy">${isConnected()
+            ? 'CAUCE confirma precios y disponibilidad al enviar. Si algo cambió, te lo mostramos antes de crear el pedido.'
+            : `El importe se recalcula ${isShared() ? 'en el servidor' : 'con el catálogo guardado'} al confirmar.`}</p>`
+        : `<p class="quiet">${unavailableCount ? 'Quitá los productos no disponibles para ver el total.' : 'No se puede calcular el total hasta resolver los avisos de arriba.'}</p>`}
       </section>
 
       ${confirmNotice()}
 
       <button class="button button-confirm-order full" type="submit"
-        ${quote && app.online ? '' : 'disabled'}>Confirmar pedido</button>
+        ${quote && app.online && business.open ? '' : 'disabled'}>Confirmar pedido${quote ? ` · ${money(quote.total)}` : ''}</button>
       ${!app.online && isShared() ? '<p class="microcopy">Sin conexión no se confirma. Reintentá cuando vuelva.</p>' : ''}
     </form>`;
 }
 
-async function viewOrder(orderId) {
-  const order = await app.repository.query('order', { orderId });
-  const business = await app.repository.query('business', { businessId: order.businessId });
+// Enlace de seguimiento: abre el pedido desde cualquier dispositivo, sin sesión.
+const trackingUrl = token => new URL(`index.html#seguimiento/${token}`, location.href.split('#')[0]).href;
+
+function orderTimeline(order) {
   const steps = stepsFor(order.fulfillment);
   const current = stepIndex(order);
-  const canceled = order.status === 'canceled';
+  const reached = new Map((order.history || []).map(step => [step.status, step.at]));
+  return `<ol class="timeline" aria-label="Estado del pedido">
+    ${steps.map((step, index) => `
+      <li class="timeline-step ${index < current ? 'done' : index === current ? 'current' : ''}"
+        ${index === current ? 'aria-current="step"' : ''}>
+        <span class="timeline-dot" aria-hidden="true"></span>
+        <span>${esc(orderStatusLabel({ ...order, status: step }))}${reached.get(step) ? ` <span class="quiet">· ${esc(timeOnly(reached.get(step)))}</span>` : ''}</span>
+      </li>`).join('')}
+  </ol>`;
+}
 
-  return `
-    ${offlineBanner()}
-    ${backLink('#actividad', 'Mi actividad')}
-    <section class="page-header">
-      <span class="eyebrow">PEDIDO ${esc(order.code)}</span>
-      <h1 class="page-title">${esc(business.name)}</h1>
-      <p class="quiet">${esc(fulfillmentLabel(order.fulfillment))} · ${esc(shortDate(order.createdAt))}</p>
-    </section>
-
-    ${canceled ? `
-      <div class="notice ${order.cancellation?.kind === 'rejected' ? 'error' : ''}">
-        <strong>${order.cancellation?.kind === 'rejected' ? 'El comercio no pudo tomar el pedido.' : 'Pedido cancelado.'}</strong>
-        ${order.cancellation?.reason ? esc(order.cancellation.reason) : ''}
-      </div>`
-    : `<ol class="timeline" aria-label="Estado del pedido">
-        ${steps.map((step, index) => `
-          <li class="timeline-step ${index < current ? 'done' : index === current ? 'current' : ''}">
-            <span class="timeline-dot" aria-hidden="true"></span>
-            <span>${esc(orderStatusLabel({ ...order, status: step }))}</span>
-          </li>`).join('')}
-      </ol>`}
-
-    ${canceled ? '' : renderOrderMoment(order)}
-    ${canceled ? '' : renderDeliveryTracking(order, business)}
-
-    <section class="checkout-section">
+function orderDetail(order) {
+  return `<section class="checkout-section">
       <h2 class="checkout-section-title">Detalle</h2>
       <ul class="cart-lines-list">
         ${order.lines.map(line => `
@@ -897,24 +995,99 @@ async function viewOrder(orderId) {
         <div><dt>Envío</dt><dd>${order.deliveryFee > 0 ? money(order.deliveryFee) : 'Sin costo'}</dd></div>
         <div class="totals-final"><dt>Total</dt><dd>${money(order.total)}</dd></div>
       </dl>
-      <p class="microcopy">Pago: ${esc(paymentLabel(order.paymentMethod))} · Estado del pago: pendiente al momento de la entrega.</p>
-      ${order.deliveryCode ? `<p class="microcopy">Código de entrega: <strong>${esc(formatDeliveryCode(order.deliveryCode.code))}</strong></p>` : ''}
+      <p class="microcopy">Pago: ${esc(paymentLabel(order.paymentMethod))}${order.status === 'delivered' ? '' : ' · se paga al comercio en la entrega.'}</p>
+      ${order.deliveryCode && order.status !== 'delivered' ? `<p class="microcopy">Código de entrega: <strong>${esc(formatDeliveryCode(order.deliveryCode.code))}</strong> · decíselo a quien te entrega el pedido.</p>` : ''}
       ${order.customer?.address ? `<p class="microcopy">Dirección: ${esc(order.customer.address)}</p>` : ''}
+    </section>`;
+}
+
+function cancellationNotice(order) {
+  return `<div class="notice ${order.cancellation?.kind === 'rejected' ? 'error' : ''}" role="status">
+    <strong>${order.cancellation?.kind === 'rejected' ? 'El comercio no pudo tomar el pedido.' : 'Pedido cancelado.'}</strong>
+    ${order.cancellation?.reason ? `Motivo: ${esc(order.cancellation.reason)}` : ''}
+  </div>`;
+}
+
+async function viewOrder(orderId) {
+  const order = await app.repository.query('order', { orderId });
+  const business = await loadPublicBusiness(order.businessId);
+  const businessName = business?.name || 'Comercio';
+  const canceled = order.status === 'canceled';
+  const closed = canceled || order.status === 'delivered';
+
+  return `
+    ${offlineBanner()}
+    ${backLink('#actividad', 'Mis pedidos')}
+    <section class="page-header">
+      <span class="eyebrow">PEDIDO ${esc(order.code)}</span>
+      <h1 class="page-title">${esc(businessName)}</h1>
+      <p class="quiet">${esc(fulfillmentLabel(order.fulfillment))} · ${esc(shortDate(order.createdAt))}</p>
     </section>
+
+    ${canceled ? cancellationNotice(order) : orderTimeline(order)}
+    ${canceled || !business ? '' : renderOrderMoment(order)}
+    ${canceled || !business ? '' : renderDeliveryTracking(order, business)}
+    ${!closed && business && timesLine(business, order.fulfillment) ? `<p class="microcopy">Tiempo estimado declarado por el comercio: ${esc(timesLine(business, order.fulfillment))}.</p>` : ''}
+
+    ${isConnected() && order.trackingToken && !closed ? `
+    <section class="checkout-section tracking-share">
+      <h2 class="checkout-section-title">Seguí tu pedido desde cualquier lugar</h2>
+      <p class="microcopy">Guardá este enlace: muestra el estado del pedido aunque cambies de teléfono o cierres el navegador.</p>
+      <div class="modal-actions">
+        <button class="button secondary" type="button" data-action="copy-tracking" data-url="${esc(trackingUrl(order.trackingToken))}">${renderIcon('link', 16)} Copiar enlace</button>
+        ${typeof navigator !== 'undefined' && navigator.share ? `<button class="button secondary" type="button" data-action="share-tracking" data-url="${esc(trackingUrl(order.trackingToken))}" data-code="${esc(order.code)}">Compartir</button>` : ''}
+      </div>
+    </section>` : ''}
+
+    ${isConnected() && business && !closed ? `<section class="checkout-section">
+      <h2 class="checkout-section-title">¿Necesitás hablar con ${esc(businessName)}?</h2>
+      ${contactButtons(business) || '<p class="quiet">El comercio no publicó un teléfono.</p>'}
+    </section>` : ''}
+
+    ${orderDetail(order)}
 
     ${allowedActions(order, { kind: 'customer', id: order.customerId }).includes('canceled') ? `
       <button class="button danger full" type="button" data-action="cancel-order"
-        data-order="${esc(order.id)}" data-version="${order.version}">Cancelar pedido</button>` : ''}`;
+        data-order="${esc(order.id)}" data-version="${order.version}">Cancelar pedido</button>
+      <p class="microcopy">Podés cancelar mientras el comercio no lo haya aceptado.</p>` : ''}`;
+}
+
+async function viewTracking(token) {
+  let order;
+  try {
+    order = await app.repository.query('trackOrder', { token });
+  } catch (error) {
+    if (error?.code === 'ORDER_NOT_FOUND') {
+      return emptyState('Pedido no encontrado', error.message, '#comercios', 'Ver comercios', 'bag');
+    }
+    throw error;
+  }
+  const canceled = order.status === 'canceled';
+  return `
+    ${offlineBanner()}
+    <section class="page-header">
+      <span class="eyebrow">PEDIDO ${esc(order.code)}</span>
+      <h1 class="page-title">${esc(order.business.name)}</h1>
+      <p class="quiet">${esc(fulfillmentLabel(order.fulfillment))} · ${esc(shortDate(order.createdAt))}</p>
+    </section>
+    ${canceled ? cancellationNotice(order) : orderTimeline(order)}
+    ${canceled ? '' : renderOrderMoment(order)}
+    ${!canceled && order.status !== 'delivered' && timesLine(order.business, order.fulfillment)
+      ? `<p class="microcopy">Tiempo estimado declarado por el comercio: ${esc(timesLine(order.business, order.fulfillment))}.</p>` : ''}
+    ${canceled || order.status === 'delivered' ? '' : contactButtons(order.business)}
+    ${orderDetail(order)}
+    <p class="microcopy">Esta página se actualiza sola cada medio minuto.</p>`;
 }
 
 async function viewActivity() {
+  const taxi = feature('taxi');
   const [orders, trips, businesses] = await Promise.all([
     app.repository.query('myOrders'),
-    app.repository.query('myTrips'),
+    taxi ? app.repository.query('myTrips') : [],
     app.repository.query('publicBusinesses'),
   ]);
   const nameOf = id => businesses.find(business => business.id === id)?.name || 'Comercio';
-  const tab = app.activityTab;
+  const tab = taxi ? app.activityTab : 'pedidos';
 
   const ordersList = orders.length ? `
     <div class="stack">
@@ -951,18 +1124,20 @@ async function viewActivity() {
   return `
     ${offlineBanner()}
     <section class="page-header">
-      <h1 class="page-title">Mi actividad</h1>
+      <h1 class="page-title">${taxi ? 'Mi actividad' : 'Mis pedidos'}</h1>
       ${isSignedIn()
         ? `<p class="quiet">Sesión de ${esc(actor().name)}.</p>`
-        : `<p class="quiet">Estás navegando sin cuenta. Tus pedidos quedan asociados a este dispositivo.</p>`}
+        : isConnected()
+          ? `<p class="quiet">Compraste sin cuenta: tus pedidos quedan guardados en este dispositivo. Desde cada pedido podés copiar su enlace de seguimiento.</p>`
+          : `<p class="quiet">Estás navegando sin cuenta. Tus pedidos quedan asociados a este dispositivo.</p>`}
     </section>
 
-    <div class="tabs" role="tablist" aria-label="Tipo de actividad">
+    ${taxi ? `<div class="tabs" role="tablist" aria-label="Tipo de actividad">
       <button class="tab ${tab === 'pedidos' ? 'active' : ''}" type="button" role="tab"
         aria-selected="${tab === 'pedidos'}" data-action="set-activity-tab" data-tab="pedidos">Pedidos</button>
       <button class="tab ${tab === 'viajes' ? 'active' : ''}" type="button" role="tab"
         aria-selected="${tab === 'viajes'}" data-action="set-activity-tab" data-tab="viajes">Viajes</button>
-    </div>
+    </div>` : ''}
 
     ${tab === 'pedidos' ? ordersList : tripsList}
 
@@ -974,10 +1149,10 @@ async function viewActivity() {
         </button>` : `
         <a class="secondary-access" href="#cuenta">
           <span class="secondary-access-icon" aria-hidden="true">${renderIcon('user', 26)}</span>
-          <span><strong>Ingresar o crear cuenta</strong><span class="quiet">Necesaria para comercios, taxistas y administración.</span></span>
+          <span><strong>Ingresar o crear cuenta</strong><span class="quiet">${taxi ? 'Necesaria para comercios, taxistas y administración.' : 'Para comercios y su equipo. Para comprar no hace falta.'}</span></span>
         </a>`}
       ${hasRole('merchant') ? `<a class="secondary-access" href="#panel"><span class="secondary-access-icon" aria-hidden="true">${renderIcon('store', 26)}</span><span><strong>Panel de mi comercio</strong><span class="quiet">Pedidos, catálogo y reparto.</span></span></a>` : ''}
-      ${hasRole('driver') ? `<a class="secondary-access" href="#taxista"><span class="secondary-access-icon" aria-hidden="true">${renderIcon('taxi', 26)}</span><span><strong>Panel de taxista</strong><span class="quiet">Disponibilidad y solicitudes.</span></span></a>` : ''}
+      ${hasRole('driver') && taxi ? `<a class="secondary-access" href="#taxista"><span class="secondary-access-icon" aria-hidden="true">${renderIcon('taxi', 26)}</span><span><strong>Panel de taxista</strong><span class="quiet">Disponibilidad y solicitudes.</span></span></a>` : ''}
       ${hasRole('admin') ? `<a class="secondary-access" href="#admin"><span class="secondary-access-icon" aria-hidden="true">${renderIcon('shield-check', 26)}</span><span><strong>Administración</strong><span class="quiet">Altas pendientes y supervisión.</span></span></a>` : ''}
       ${app.repository.capabilities.reset ? `
         <button class="secondary-access quiet-access" type="button" data-action="reset-demo">
@@ -1001,10 +1176,10 @@ async function viewAccount() {
       ${notice}
       <section class="checkout-section">
         <h2 class="checkout-section-title">Accesos</h2>
-        <p class="quiet">Roles: ${esc(actor().roles.join(', '))}</p>
+        <p class="quiet">Accesos: ${esc(actor().roles.map(role => ROLE_LABELS[role] || role).join(' · '))}</p>
         <div class="stack">
           ${hasRole('merchant') ? '<a class="button secondary" href="#panel">Panel de mi comercio</a>' : '<a class="button secondary" href="#alta-comercio">Sumar mi comercio</a>'}
-          ${hasRole('driver') ? '<a class="button secondary" href="#taxista">Panel de taxista</a>' : '<a class="button secondary" href="#taxista">Registrarme como taxista</a>'}
+          ${!feature('taxi') ? '' : hasRole('driver') ? '<a class="button secondary" href="#taxista">Panel de taxista</a>' : '<a class="button secondary" href="#taxista">Registrarme como taxista</a>'}
           ${hasRole('admin') ? '<a class="button secondary" href="#admin">Administración</a>' : ''}
           <button class="button danger" type="button" data-action="sign-out">Cerrar sesión</button>
         </div>
@@ -1025,6 +1200,10 @@ async function viewAccount() {
         <form class="checkout-form" data-form="password-update">
           <h2 class="checkout-section-title">Cambiar contraseña</h2>
           <div class="field">
+            <label for="current-password">Contraseña actual</label>
+            <input id="current-password" name="currentPassword" type="password" required autocomplete="current-password">
+          </div>
+          <div class="field">
             <label for="new-password">Nueva contraseña</label>
             <input id="new-password" name="password" type="password" required minlength="10" autocomplete="new-password">
             <p class="microcopy">Al menos 10 caracteres, combinando letras y números.</p>
@@ -1040,7 +1219,9 @@ async function viewAccount() {
     ${backLink('#inicio', 'Inicio')}
     <section class="page-header">
       <h1 class="page-title">Ingresar a CAUCE</h1>
-      <p class="quiet">Comprar y pedir un taxi no requiere cuenta. La cuenta hace falta para comercios, taxistas y administración.</p>
+      <p class="quiet">${feature('taxi')
+        ? 'Comprar y pedir un taxi no requiere cuenta. La cuenta hace falta para comercios, taxistas y administración.'
+        : 'Para comprar no hace falta cuenta. La cuenta es para comercios, su equipo y administración.'}</p>
     </section>
     ${notice}
 
@@ -1088,6 +1269,15 @@ async function viewAccount() {
           <input id="reset-email" name="email" type="email" required autocomplete="email" inputmode="email">
         </div>
         <button class="button secondary full" type="submit" ${app.online ? '' : 'disabled'}>Enviar enlace de recuperación</button>
+      </form>
+      <form class="checkout-form" data-form="resend-confirmation">
+        <h2 class="checkout-section-title">¿No te llegó el correo de confirmación?</h2>
+        <div class="field">
+          <label for="resend-email">Correo con el que te registraste</label>
+          <input id="resend-email" name="email" type="email" required autocomplete="email" inputmode="email">
+        </div>
+        <button class="button secondary full" type="submit" ${app.online ? '' : 'disabled'}>Reenviar confirmación</button>
+        <p class="microcopy">Revisá también la carpeta de correo no deseado.</p>
       </form>` : ''}`
     : `
       <div class="notice">
@@ -1109,6 +1299,35 @@ async function viewAccount() {
         </div>
         <p class="microcopy">Son personas ficticias creadas para la demostración. No representan cuentas reales.</p>
       </section>`}`;
+}
+
+// Llegada desde el enlace de recuperación: la sesión de recuperación ya está
+// abierta y sólo falta elegir la contraseña nueva.
+async function viewRecovery() {
+  if (!isSignedIn()) {
+    return `${backLink('#cuenta', 'Ingresar')}
+      <section class="page-header"><h1 class="page-title">Recuperar contraseña</h1></section>
+      <div class="notice error" role="alert"><strong>El enlace venció o ya se usó.</strong>
+        Pedí uno nuevo desde “Ingresar”. Cada enlace sirve una sola vez y dura una hora.</div>
+      <a class="button full" href="#cuenta">Pedir un enlace nuevo</a>`;
+  }
+  return `
+    <section class="page-header">
+      <h1 class="page-title">Elegí tu nueva contraseña</h1>
+      <p class="quiet">${esc(actor().email || '')}</p>
+    </section>
+    <form class="checkout-form" data-form="password-recovery" novalidate>
+      <div class="field">
+        <label for="recovery-password">Nueva contraseña</label>
+        <input id="recovery-password" name="password" type="password" required minlength="10" autocomplete="new-password">
+        <p class="microcopy">Al menos 10 caracteres, combinando letras y números.</p>
+      </div>
+      <div class="field">
+        <label for="recovery-confirm">Repetí la contraseña</label>
+        <input id="recovery-confirm" name="confirm" type="password" required minlength="10" autocomplete="new-password">
+      </div>
+      <button class="button full" type="submit" ${app.online ? '' : 'disabled'}>Guardar contraseña</button>
+    </form>`;
 }
 
 // ───────────────────────── alta y panel de comercio ─────────────────────────
@@ -1181,16 +1400,34 @@ async function viewBusinessSignup() {
     </form>`;
 }
 
+const PANEL_TABS = Object.freeze([
+  ['pedidos', 'Pedidos', 'all'], ['catalogo', 'Catálogo', 'all'], ['datos', 'Datos', 'manage'],
+  ['horarios', 'Horarios', 'connected-manage'], ['reparto', 'Reparto', 'manage'], ['equipo', 'Equipo', 'connected-manage'],
+]);
+
+function agoText(value) {
+  const minutes = Math.max(0, Math.round((Date.now() - new Date(value).getTime()) / 60000));
+  if (!Number.isFinite(minutes)) return '';
+  if (minutes < 1) return 'recién';
+  if (minutes < 60) return `hace ${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  return hours < 24 ? `hace ${hours} h` : shortDate(value);
+}
+
 async function viewMerchantPanel(businessId) {
   if (!isSignedIn()) {
     return `${backLink('#inicio', 'Inicio')}
       <section class="page-header"><h1 class="page-title">Panel de comercio</h1></section>
-      <div class="notice"><strong>Necesitás iniciar sesión.</strong> El panel muestra únicamente los datos del comercio de tu cuenta.</div>
+      <div class="notice"><strong>Necesitás iniciar sesión.</strong> El panel muestra únicamente los datos de los comercios de tu cuenta.</div>
       <a class="button full" href="#cuenta">Ingresar</a>`;
   }
 
   const businesses = await app.repository.query('myBusinesses');
   if (!businessId) {
+    if (businesses.length === 1 && !app.panelListShown) {
+      app.panelListShown = true;
+      setTimeout(() => go(`#panel/${businesses[0].id}`), 0);
+    }
     return `
       ${offlineBanner()}
       <section class="page-header">
@@ -1202,7 +1439,7 @@ async function viewMerchantPanel(businessId) {
           <span class="op-card-icon">${renderIcon('store', 18)}</span>
           <span class="op-card-body">
             <strong>${esc(business.name)}</strong>
-            <span class="quiet">${esc(BUSINESS_STATUS_HINTS[business.status] || '')}</span>
+            <span class="quiet">${esc(ROLE_NAMES[business.membershipRole] || '')}${business.membershipRole ? ' · ' : ''}${esc(BUSINESS_STATUS_HINTS[business.status] || '')}</span>
           </span>
           <span class="status-chip ${business.status === 'active' ? 'done' : business.status === 'pending_review' ? 'ready' : 'received'}">${esc(businessStatusLabel(business.status))}</span>
         </a>`).join('')}</div>`
@@ -1212,57 +1449,85 @@ async function viewMerchantPanel(businessId) {
 
   const business = businesses.find(candidate => candidate.id === businessId);
   if (!business) {
-    return `<section class="notice error"><h2>Sin acceso</h2><p>Ese comercio no pertenece a tu cuenta.</p>
+    return `<section class="notice error" role="alert"><h2>Sin acceso</h2><p>Ese comercio no pertenece a tu cuenta.</p>
       <a class="button secondary" href="#panel">Volver a mis comercios</a></section>`;
   }
+  const role = business.membershipRole || 'owner';
+  const canManage = role !== 'staff';
+  const tabs = PANEL_TABS.filter(([, , scope]) => scope === 'all' || (scope === 'manage' && canManage)
+    || (scope === 'connected-manage' && canManage && isConnected()));
+  const tab = tabs.some(([key]) => key === app.panelTab) ? app.panelTab : 'pedidos';
 
-  const [orders, products, riders, categories] = await Promise.all([
+  const [orders, products, riders, categories, team, serverRequirements] = await Promise.all([
     app.repository.query('businessOrders', { businessId }),
     app.repository.query('products', { businessId }),
-    app.repository.query('riders', { businessId }),
-    app.repository.capabilities.media ? app.repository.query('businessCategories') : [],
+    canManage || tab === 'pedidos' ? app.repository.query('riders', { businessId }) : [],
+    canManage && tab === 'datos' && app.repository.capabilities.media ? app.repository.query('businessCategories') : [],
+    tab === 'equipo' ? app.repository.query('team', { businessId }) : [],
+    // En el entorno conectado los requisitos de publicación los decide el servidor.
+    isConnected() && canManage && tab === 'datos' ? app.repository.query('businessRequirements', { businessId }) : null,
   ]);
+  const requirements = serverRequirements || missingPublicationRequirements(business, products);
 
-  const missing = missingPublicationRequirements(business, products);
-  const tab = app.panelTab;
+  // Pedidos nuevos desde la última vez que el panel los vio: aviso sonoro y
+  // visual. La primera carga sólo registra lo que ya estaba.
+  const pendingIds = orders.filter(order => order.status === 'submitted').map(order => order.id);
+  const seen = app.seenOrders.get(businessId);
+  const fresh = seen ? pendingIds.filter(id => !seen.has(id)) : [];
+  app.seenOrders.set(businessId, new Set([...(seen || []), ...pendingIds]));
+  if (fresh.length) announceNewOrders(fresh.length);
+  else if (!pendingIds.length) clearOrderAlert();
+  app.panelSyncedAt = new Date();
+  const newCount = pendingIds.length;
 
   return `
     ${offlineBanner()}
     ${backLink('#panel', 'Mis comercios')}
     <section class="page-header">
-      <span class="eyebrow">${esc(businessStatusLabel(business.status).toUpperCase())}</span>
+      <span class="eyebrow">${esc(businessStatusLabel(business.status).toUpperCase())} · ${esc((ROLE_NAMES[role] || '').toUpperCase())}</span>
       <h1 class="page-title">${esc(business.name)}</h1>
       <p class="quiet">${esc(BUSINESS_STATUS_HINTS[business.status] || '')}</p>
     </section>
 
-    ${business.status === 'returned' && business.reviewNote ? `
-      <div class="notice error">
-        <strong>Administración devolvió la solicitud.</strong> ${esc(business.reviewNote)}
+    ${['returned', 'suspended'].includes(business.status) && business.reviewNote ? `
+      <div class="notice error" role="alert">
+        <strong>${business.status === 'suspended' ? 'Administración suspendió el comercio.' : 'Administración devolvió la solicitud.'}</strong> ${esc(business.reviewNote)}
       </div>` : ''}
 
     ${business.status === 'active' ? `
-      <div class="panel-openbar">
-        <span>${business.open ? 'Recibiendo pedidos' : 'Cerrado: no recibe pedidos'}</span>
-        <button class="button ${business.open ? 'danger' : ''}" type="button" data-action="toggle-open"
-          data-business="${esc(business.id)}" data-open="${business.open ? 'false' : 'true'}">
-          ${business.open ? 'Cerrar atención' : 'Abrir atención'}
-        </button>
+      <div class="panel-openbar ${business.acceptingOrders ? 'is-open' : ''}">
+        <span><strong>${business.acceptingOrders ? (business.open ? 'Recibiendo pedidos' : 'Abierto, fuera de horario') : 'Cerrado: no recibe pedidos'}</strong>
+          ${business.acceptingOrders && !business.open && isConnected() ? `<small>${esc(nextOpening(business.hours, new Date(), business.timezone)?.label || 'Revisá los horarios cargados.')}</small>` : ''}</span>
+        ${canManage ? `<button class="button ${business.acceptingOrders ? 'danger' : ''}" type="button" data-action="toggle-open"
+          data-business="${esc(business.id)}" data-open="${business.acceptingOrders ? 'false' : 'true'}">
+          ${business.acceptingOrders ? 'Cerrar atención' : 'Abrir atención'}
+        </button>` : ''}
       </div>` : ''}
 
+    ${isConnected() ? `<div class="panel-sync" role="status" aria-live="polite">
+      <span class="panel-sync-dot ${app.liveHealthy ? 'ok' : 'warn'}" aria-hidden="true"></span>
+      <span>${app.liveHealthy ? 'En vivo' : 'Reconectando: revisamos cada 30 segundos'} · actualizado ${esc(timeOnly(app.panelSyncedAt))}</span>
+      <button class="link-button" type="button" data-action="refresh-panel">${renderIcon('refresh', 14)} Actualizar</button>
+      ${soundReady() ? '' : '<button class="link-button" type="button" data-action="enable-sound">Activar sonido de pedidos</button>'}
+    </div>` : ''}
+
     <div class="tabs" role="tablist" aria-label="Secciones del panel">
-      ${[['pedidos', 'Pedidos'], ['catalogo', 'Catálogo'], ['datos', 'Datos'], ['reparto', 'Reparto']].map(([key, label]) => `
+      ${tabs.map(([key, label]) => `
         <button class="tab ${tab === key ? 'active' : ''}" type="button" role="tab" aria-selected="${tab === key}"
-          data-action="set-panel-tab" data-tab="${key}">${label}</button>`).join('')}
+          data-action="set-panel-tab" data-tab="${key}">${label}${key === 'pedidos' && newCount ? ` <span class="tab-badge">${newCount}</span>` : ''}</button>`).join('')}
     </div>
 
-    ${tab === 'pedidos' ? merchantOrdersTab(business, orders, riders) : ''}
-    ${tab === 'catalogo' ? merchantCatalogTab(business, products) : ''}
-    ${tab === 'datos' ? merchantDataTab(business, missing, categories) : ''}
-    ${tab === 'reparto' ? merchantRidersTab(business, riders) : ''}`;
+    ${tab === 'pedidos' ? merchantOrdersTab(business, orders, riders, fresh) : ''}
+    ${tab === 'catalogo' ? merchantCatalogTab(business, products, { canManage }) : ''}
+    ${tab === 'datos' ? merchantDataTab(business, requirements, categories) : ''}
+    ${tab === 'horarios' ? hoursEditor(business, { editable: business.status !== 'suspended' }) : ''}
+    ${tab === 'reparto' ? merchantRidersTab(business, riders) : ''}
+    ${tab === 'equipo' ? teamTab(business, team, { isOwner: role === 'owner' }) : ''}`;
 }
 
-function merchantOrdersTab(business, orders, riders) {
-  const pending = orders.filter(order => !['delivered', 'canceled'].includes(order.status));
+function merchantOrdersTab(business, orders, riders, fresh = []) {
+  const incoming = orders.filter(order => order.status === 'submitted');
+  const running = orders.filter(order => !['submitted', 'delivered', 'canceled'].includes(order.status));
   const closed = orders.filter(order => ['delivered', 'canceled'].includes(order.status));
   const merchantActor = { kind: 'merchant', businessId: business.id, localityId: business.localityId };
 
@@ -1285,59 +1550,77 @@ function merchantOrdersTab(business, orders, riders) {
       ? { kind: 'rider', id: order.riderId, businessId: business.id, localityId: business.localityId }
       : null;
     const riderOptions = riderActor ? allowedActions(order, riderActor).filter(Boolean) : [];
-    const options = [...new Set([...merchantOptions, ...riderOptions])];
+    // Un envío que falla después de salir también se puede cerrar, con motivo.
+    const lateCancel = isConnected() && order.fulfillment === 'delivery'
+      && ['picked_up', 'on_the_way', 'arrived'].includes(order.status) ? ['canceled'] : [];
+    const options = [...new Set([...merchantOptions, ...riderOptions, ...lateCancel])];
+    const forward = options.filter(action => action !== 'canceled');
     const riderName = riders.find(rider => rider.id === order.riderId)?.name;
+    const phone = String(order.customer.phone || '').replace(/[^\d+]/g, '');
 
     return `
-      <article class="order-panel-card">
+      <article class="order-panel-card ${order.status === 'submitted' ? 'is-new' : ''} ${fresh.includes(order.id) ? 'is-fresh' : ''}"
+        aria-label="Pedido ${esc(order.code)}">
         <header class="order-panel-head">
           <div>
             <strong>${esc(order.code)}</strong>
-            <span class="quiet"> · ${esc(fulfillmentLabel(order.fulfillment))} · ${esc(timeOnly(order.createdAt))}</span>
+            <span class="quiet"> · ${esc(fulfillmentLabel(order.fulfillment))} · ${esc(timeOnly(order.createdAt))} (${esc(agoText(order.createdAt))})</span>
           </div>
           <span class="status-chip ${orderStatusTone(order.status)}">${esc(orderStatusLabel(order))}</span>
         </header>
         <ul class="order-panel-lines">
-          ${order.lines.map(line => `<li>${line.quantity} × ${esc(line.name)}</li>`).join('')}
+          ${order.lines.map(line => `<li><strong>${line.quantity} ×</strong> ${esc(line.name)}</li>`).join('')}
         </ul>
-        <p class="microcopy">${esc(order.customer.name)} · ${esc(formatArgentinePhone(order.customer.phone))}${order.customer.address ? ` · ${esc(order.customer.address)}` : ''}</p>
-        ${order.customer.notes ? `<p class="microcopy">Notas: ${esc(order.customer.notes)}</p>` : ''}
-        <p class="order-panel-total">${money(order.total)} · ${esc(paymentLabel(order.paymentMethod))}</p>
+        <p class="order-panel-customer">
+          <span>${renderIcon('user', 14)} ${esc(order.customer.name)}</span>
+          ${phone ? `<a href="tel:${esc(phone)}">${renderIcon('phone', 14)} ${esc(formatArgentinePhone(order.customer.phone))}</a>` : ''}
+        </p>
+        ${order.customer.address ? `<p class="microcopy">${renderIcon('pin', 13)} ${esc(order.customer.address)}</p>` : ''}
+        ${order.customer.notes ? `<p class="order-panel-notes">Notas: ${esc(order.customer.notes)}</p>` : ''}
+        <p class="order-panel-total">${money(order.total)} · ${esc(paymentLabel(order.paymentMethod))}${order.deliveryFee ? ` · envío ${money(order.deliveryFee)}` : ''}</p>
+        ${order.deliveryCode && !['delivered', 'canceled'].includes(order.status) ? `<p class="microcopy">Código de entrega: <strong>${esc(formatDeliveryCode(order.deliveryCode.code))}</strong> · pedíselo a la persona al entregar.</p>` : ''}
         ${riderName ? `<p class="microcopy">Reparto: ${esc(riderName)}</p>` : ''}
-        ${order.cancellation ? `<p class="microcopy">Motivo: ${esc(order.cancellation.reason)}</p>` : ''}
+        ${order.cancellation ? `<p class="microcopy">Motivo: ${esc(order.cancellation.reason || 'sin detalle')}</p>` : ''}
         ${options.length ? `<div class="order-panel-actions">
-          ${options.map(action => {
+          ${forward.map(action => {
             if (action === 'assigned') {
-              if (!riders.length) {
-                return `<a class="button secondary" href="#panel/${esc(business.id)}" data-action="set-panel-tab" data-tab="reparto">Dar de alta reparto</a>`;
+              const active = riders.filter(rider => rider.active !== false);
+              if (!active.length) {
+                return `<button class="button secondary" type="button" data-action="set-panel-tab" data-tab="reparto">Cargar quién reparte</button>`;
               }
               return `<form class="inline-form" data-form="assign-rider" data-order="${esc(order.id)}" data-version="${order.version}">
-                <label class="visually-hidden" for="rider-${esc(order.id)}">Repartidor para ${esc(order.code)}</label>
+                <label class="visually-hidden" for="rider-${esc(order.id)}">Quién reparte ${esc(order.code)}</label>
                 <select id="rider-${esc(order.id)}" name="riderId" required>
-                  ${riders.map(rider => `<option value="${esc(rider.id)}">${esc(rider.name)}</option>`).join('')}
+                  ${active.map(rider => `<option value="${esc(rider.id)}">${esc(rider.name)}</option>`).join('')}
                 </select>
                 <button class="button" type="submit">Asignar reparto</button>
               </form>`;
             }
-            const danger = action === 'canceled' ? 'danger' : '';
-            return `<button class="button ${danger}" type="button" data-action="order-transition"
-              data-order="${esc(order.id)}" data-version="${order.version}" data-next="${esc(action)}"
-              ${action === 'canceled' ? 'data-reason="required"' : ''}>${esc(actionLabel(order, action))}</button>`;
+            return `<button class="button" type="button" data-action="order-transition"
+              data-order="${esc(order.id)}" data-version="${order.version}" data-next="${esc(action)}">${esc(actionLabel(order, action))}</button>`;
           }).join('')}
+          ${options.includes('canceled') ? `<button class="button ${order.status === 'submitted' ? 'danger' : 'link-button danger'}" type="button"
+            data-action="order-transition" data-order="${esc(order.id)}" data-version="${order.version}" data-next="canceled"
+            data-reason="required" data-code="${esc(order.code)}">${esc(actionLabel(order, 'canceled'))}</button>` : ''}
         </div>` : ''}
       </article>`;
   };
 
   return `
     <section class="panel-section">
-      <h2 class="checkout-section-title">Requieren atención (${pending.length})</h2>
-      ${pending.length ? `<div class="stack">${pending.map(orderRow).join('')}</div>`
-        : '<p class="quiet">No hay pedidos pendientes en este momento.</p>'}
+      <h2 class="checkout-section-title">Requieren atención (${incoming.length})</h2>
+      ${incoming.length ? `<div class="stack">${incoming.map(orderRow).join('')}</div>`
+        : `<p class="quiet">${business.status === 'active' ? 'Sin pedidos nuevos. Cuando entre uno, aparece acá y suena un aviso.' : 'El comercio todavía no está publicado.'}</p>`}
+    </section>
+    <section class="panel-section">
+      <h2 class="checkout-section-title">En curso (${running.length})</h2>
+      ${running.length ? `<div class="stack">${running.map(orderRow).join('')}</div>`
+        : '<p class="quiet">No hay pedidos en preparación ni en camino.</p>'}
     </section>
     ${closed.length ? `
       <section class="panel-section">
-        <h2 class="checkout-section-title">Cerrados (${closed.length})</h2>
-        <div class="stack">${closed.slice(0, 10).map(orderRow).join('')}</div>
+        <h2 class="checkout-section-title">Cerrados recientes (${closed.length})</h2>
+        <div class="stack">${closed.slice(0, 15).map(orderRow).join('')}</div>
       </section>` : ''}`;
 }
 
@@ -1351,10 +1634,60 @@ function mediaField(id, label, current, hint) {
     </div>`;
 }
 
-function merchantCatalogTab(business, products) {
+function merchantCatalogTab(business, products, { canManage = true } = {}) {
   const media = Boolean(app.repository.capabilities.media);
+  const connected = isConnected();
+  const stockLabel = product => (!connected || product.trackStock ? `stock ${product.stock}` : 'sin control de stock');
+  const rows = products.map(product => `
+    <article class="catalog-row ${product.archived ? 'is-archived' : ''}">
+      <div class="catalog-row-head">
+      ${media ? productThumb(product, product.name, 'catalog-row-thumb') : ''}
+      <div class="catalog-row-main">
+        <strong>${esc(product.name)}</strong>
+        <span class="quiet">${esc(product.category)} · ${money(product.price)} · ${esc(stockLabel(product))}</span>
+        ${(product.variants || []).length
+          ? `<span class="quiet">Variantes: ${esc((product.variants || []).map(variant =>
+              variant.priceDelta ? `${variant.name} ${variant.priceDelta > 0 ? '+' : '−'}${Math.abs(variant.priceDelta)}` : variant.name).join(', '))}</span>`
+          : ''}
+        ${product.archived ? '<span class="status-chip cancelled">Dado de baja</span>'
+          : product.available ? '' : '<span class="status-chip received">Agotado</span>'}
+      </div>
+      </div>
+      ${canManage && !product.archived ? `<form class="inline-form" data-form="product-update" data-business="${esc(business.id)}" data-product="${esc(product.id)}"
+        data-track="${connected && !product.trackStock ? 'false' : 'true'}">
+        <label class="visually-hidden" for="price-${esc(product.id)}">Precio de ${esc(product.name)}</label>
+        <input id="price-${esc(product.id)}" name="price" type="number" min="1" step="1" value="${product.price}" inputmode="numeric">
+        ${!connected || product.trackStock ? `<label class="visually-hidden" for="stock-${esc(product.id)}">Stock de ${esc(product.name)}</label>
+        <input id="stock-${esc(product.id)}" name="stock" type="number" min="0" max="10000" step="1" value="${product.stock}" inputmode="numeric">` : ''}
+        <button class="button secondary" type="submit">Guardar</button>
+      </form>` : ''}
+      ${!canManage && connected && product.trackStock && !product.archived ? `<form class="inline-form" data-form="product-stock" data-business="${esc(business.id)}"
+        data-product="${esc(product.id)}" data-available="${product.available ? 'true' : 'false'}">
+        <label class="visually-hidden" for="stock-${esc(product.id)}">Stock de ${esc(product.name)}</label>
+        <input id="stock-${esc(product.id)}" name="stock" type="number" min="0" max="10000" step="1" value="${product.stock}" inputmode="numeric">
+        <button class="button secondary" type="submit">Guardar stock</button>
+      </form>` : ''}
+      ${canManage && media && !product.archived ? `<form class="inline-form" data-form="product-image" data-business="${esc(business.id)}" data-product="${esc(product.id)}">
+        <label class="visually-hidden" for="photo-${esc(product.id)}">Foto de ${esc(product.name)}</label>
+        <input id="photo-${esc(product.id)}" name="image" type="file" accept="image/jpeg,image/png,image/webp">
+        <button class="button secondary" type="submit">${product.image ? 'Cambiar foto' : 'Subir foto'}</button>
+        ${product.image ? `<button class="link-button danger" type="button" data-action="product-photo-remove"
+          data-business="${esc(business.id)}" data-product="${esc(product.id)}">Quitar foto</button>` : ''}
+      </form>` : ''}
+      <div class="catalog-row-actions">
+        ${product.archived ? '' : `<button class="link-button" type="button" data-action="product-toggle" data-business="${esc(business.id)}"
+          data-product="${esc(product.id)}" data-field="available" data-value="${product.available ? 'false' : 'true'}">
+          ${product.available ? 'Marcar agotado' : 'Marcar disponible'}
+        </button>`}
+        ${canManage ? `<button class="link-button danger" type="button" data-action="product-toggle" data-business="${esc(business.id)}"
+          data-product="${esc(product.id)}" data-field="archived" data-value="${product.archived ? 'false' : 'true'}">
+          ${product.archived ? 'Reactivar' : 'Dar de baja'}
+        </button>` : ''}
+      </div>
+    </article>`).join('');
+
   return `
-    <section class="panel-section">
+    ${canManage ? `<section class="panel-section">
       <h2 class="checkout-section-title">Nuevo producto</h2>
       <form class="checkout-form" data-form="product-create" data-business="${esc(business.id)}">
         <div class="field">
@@ -1362,19 +1695,24 @@ function merchantCatalogTab(business, products) {
           <input id="prod-name" name="name" type="text" required minlength="2" maxlength="80">
         </div>
         <div class="field">
-          <label for="prod-description">Descripción</label>
+          <label for="prod-description">Descripción (opcional)</label>
           <input id="prod-description" name="description" type="text" maxlength="280">
         </div>
         <div class="field-row">
           <div class="field">
-            <label for="prod-price">Precio</label>
+            <label for="prod-price">Precio en pesos</label>
             <input id="prod-price" name="price" type="number" required min="1" step="1" inputmode="numeric">
           </div>
           <div class="field">
             <label for="prod-stock">Stock</label>
-            <input id="prod-stock" name="stock" type="number" required min="0" step="1" value="10" inputmode="numeric">
+            <input id="prod-stock" name="stock" type="number" min="0" max="10000" step="1" value="${connected ? '' : '10'}" inputmode="numeric"
+              ${connected ? 'placeholder="Sin control"' : 'required'}>
           </div>
         </div>
+        ${connected ? `<label class="check-label">
+          <input type="checkbox" name="trackStock">
+          <span>Controlar stock: CAUCE descuenta cada venta y deja de vender en cero. Si no lo marcás, el producto se vende mientras esté disponible y lo marcás agotado a mano.</span>
+        </label>` : ''}
         <div class="field">
           <label for="prod-category">Categoría</label>
           <input id="prod-category" name="category" type="text" required maxlength="40" list="categorias" value="Otros">
@@ -1394,57 +1732,19 @@ function merchantCatalogTab(business, products) {
           : '<p class="microcopy">Las fotos se toman de las imágenes incluidas en el proyecto. La carga de fotos propias no está implementada en este entorno.</p>'}
         <button class="button full" type="submit" ${app.online ? '' : 'disabled'}>Agregar al catálogo</button>
       </form>
-    </section>
+    </section>` : `<p class="microcopy">Tu rol en el equipo permite marcar productos agotados o disponibles${connected ? ' y actualizar el stock de los que lo controlan' : ''}.</p>`}
 
     <section class="panel-section">
       <h2 class="checkout-section-title">Catálogo (${products.filter(product => !product.archived).length})</h2>
-      ${products.length ? `<div class="stack">${products.map(product => `
-        <article class="catalog-row ${product.archived ? 'is-archived' : ''}">
-          <div class="catalog-row-head">
-          ${media ? productThumb(product, product.name, 'catalog-row-thumb') : ''}
-          <div class="catalog-row-main">
-            <strong>${esc(product.name)}</strong>
-            <span class="quiet">${esc(product.category)} · ${money(product.price)} · stock ${product.stock}</span>
-            ${(product.variants || []).length
-              ? `<span class="quiet">Variantes: ${esc((product.variants || []).map(variant =>
-                  variant.priceDelta ? `${variant.name} ${variant.priceDelta > 0 ? '+' : '−'}${Math.abs(variant.priceDelta)}` : variant.name).join(', '))}</span>`
-              : ''}
-            ${product.archived ? '<span class="status-chip cancelled">Dado de baja</span>'
-              : product.available ? '' : '<span class="status-chip received">Agotado</span>'}
-          </div>
-          </div>
-          <form class="inline-form" data-form="product-update" data-business="${esc(business.id)}" data-product="${esc(product.id)}">
-            <label class="visually-hidden" for="price-${esc(product.id)}">Precio de ${esc(product.name)}</label>
-            <input id="price-${esc(product.id)}" name="price" type="number" min="1" step="1" value="${product.price}" inputmode="numeric">
-            <label class="visually-hidden" for="stock-${esc(product.id)}">Stock de ${esc(product.name)}</label>
-            <input id="stock-${esc(product.id)}" name="stock" type="number" min="0" step="1" value="${product.stock}" inputmode="numeric">
-            <button class="button secondary" type="submit">Guardar</button>
-          </form>
-          ${media ? `<form class="inline-form" data-form="product-image" data-business="${esc(business.id)}" data-product="${esc(product.id)}">
-            <label class="visually-hidden" for="photo-${esc(product.id)}">Foto de ${esc(product.name)}</label>
-            <input id="photo-${esc(product.id)}" name="image" type="file" accept="image/jpeg,image/png,image/webp">
-            <button class="button secondary" type="submit">${product.image ? 'Cambiar foto' : 'Subir foto'}</button>
-            ${product.image ? `<button class="link-button danger" type="button" data-action="product-photo-remove"
-              data-business="${esc(business.id)}" data-product="${esc(product.id)}">Quitar foto</button>` : ''}
-          </form>` : ''}
-          <div class="catalog-row-actions">
-            <button class="link-button" type="button" data-action="product-toggle" data-business="${esc(business.id)}"
-              data-product="${esc(product.id)}" data-field="available" data-value="${product.available ? 'false' : 'true'}">
-              ${product.available ? 'Marcar agotado' : 'Marcar disponible'}
-            </button>
-            <button class="link-button danger" type="button" data-action="product-toggle" data-business="${esc(business.id)}"
-              data-product="${esc(product.id)}" data-field="archived" data-value="${product.archived ? 'false' : 'true'}">
-              ${product.archived ? 'Reactivar' : 'Dar de baja'}
-            </button>
-          </div>
-        </article>`).join('')}</div>`
-        : '<p class="quiet">Todavía no cargaste productos.</p>'}
+      ${products.length ? `<div class="stack">${rows}</div>` : '<p class="quiet">Todavía no cargaste productos.</p>'}
     </section>`;
 }
 
 function merchantDataTab(business, missing, categories = []) {
-  const editable = business.status !== 'pending_review';
+  const editable = !['pending_review', 'suspended'].includes(business.status);
   const media = Boolean(app.repository.capabilities.media);
+  const connected = isConnected();
+  const disabled = editable ? '' : 'disabled';
   return `
     <section class="panel-section">
       ${business.status === 'pending_review'
@@ -1453,62 +1753,90 @@ function merchantDataTab(business, missing, categories = []) {
         <h2 class="checkout-section-title">Datos del comercio</h2>
         <div class="field">
           <label for="b-name">Nombre comercial</label>
-          <input id="b-name" name="name" type="text" required maxlength="80" value="${esc(business.name)}" ${editable ? '' : 'disabled'}>
+          <input id="b-name" name="name" type="text" required maxlength="80" value="${esc(business.name)}" ${disabled}>
         </div>
         <div class="field">
           <label for="b-category">Rubro</label>
-          ${categories.length ? `<select id="b-category" name="category" ${editable ? '' : 'disabled'}>
+          ${categories.length ? `<select id="b-category" name="category" ${disabled}>
             <option value="">Elegí un rubro</option>
             ${categories.map(category => `<option value="${esc(category.slug)}" ${category.name === business.category ? 'selected' : ''}>${esc(category.name)}</option>`).join('')}
           </select>`
-          : `<input id="b-category" name="category" type="text" maxlength="40" value="${esc(business.category || '')}" ${editable ? '' : 'disabled'}>`}
+          : `<input id="b-category" name="category" type="text" maxlength="40" value="${esc(business.category || '')}" ${disabled}>`}
         </div>
+        ${connected ? `<div class="field">
+          <label for="b-description">Descripción corta</label>
+          <input id="b-description" name="description" type="text" maxlength="280" value="${esc(business.description || '')}"
+            placeholder="Qué vendés, en una frase" ${disabled}>
+        </div>` : ''}
         <div class="field">
           <label for="b-owner">Responsable</label>
-          <input id="b-owner" name="ownerName" type="text" maxlength="80" value="${esc(business.ownerName || '')}" ${editable ? '' : 'disabled'}>
+          <input id="b-owner" name="ownerName" type="text" maxlength="80" value="${esc(business.ownerName || '')}" ${disabled}>
         </div>
         <div class="field">
-          <label for="b-phone">Teléfono de contacto</label>
-          <input id="b-phone" name="contactPhone" type="tel" inputmode="tel" value="${esc(business.contactPhone || '')}" ${editable ? '' : 'disabled'}>
+          <label for="b-phone">Teléfono de contacto con CAUCE</label>
+          <input id="b-phone" name="contactPhone" type="tel" inputmode="tel" value="${esc(business.contactPhone || '')}" ${disabled}>
+          ${connected ? '<p class="microcopy">Privado: sólo lo ve administración de CAUCE.</p>' : ''}
         </div>
+        ${connected ? `<div class="field-row">
+          <div class="field">
+            <label for="b-public-phone">Teléfono para clientes</label>
+            <input id="b-public-phone" name="publicPhone" type="tel" inputmode="tel" value="${esc(business.publicPhone || '')}" ${disabled}>
+          </div>
+          <div class="field">
+            <label for="b-whatsapp">WhatsApp para clientes</label>
+            <input id="b-whatsapp" name="whatsapp" type="tel" inputmode="tel" value="${esc(business.whatsapp || '')}" ${disabled}>
+          </div>
+        </div>
+        <p class="microcopy">Se muestran en tu página para que te consulten por un pedido.</p>` : ''}
         <div class="field">
           <label for="b-address">Dirección</label>
-          <input id="b-address" name="address" type="text" maxlength="120" value="${esc(business.address || '')}" ${editable ? '' : 'disabled'}>
+          <input id="b-address" name="address" type="text" maxlength="120" value="${esc(business.address || '')}" ${disabled}>
         </div>
         <div class="field">
           <label for="b-reference">Referencias para llegar</label>
-          <input id="b-reference" name="reference" type="text" maxlength="120" value="${esc(business.reference || '')}" ${editable ? '' : 'disabled'}>
+          <input id="b-reference" name="reference" type="text" maxlength="120" value="${esc(business.reference || '')}" ${disabled}>
         </div>
         <div class="field">
-          <label for="b-hours">Horarios de atención</label>
+          <label for="b-hours">Horarios (texto que ve el cliente)</label>
           <input id="b-hours" name="hoursLabel" type="text" maxlength="80" value="${esc(business.hoursLabel || '')}"
-            placeholder="Lunes a sábado de 9 a 13 y de 17 a 21" ${editable ? '' : 'disabled'}>
+            placeholder="Lunes a sábado de 9 a 13 y de 17 a 21" ${disabled}>
+          ${connected ? '<p class="microcopy">Los horarios que controlan cuándo se toman pedidos se cargan en la pestaña Horarios.</p>' : ''}
         </div>
 
         <h2 class="checkout-section-title">Modalidades de entrega</h2>
         <label class="check-label">
-          <input type="checkbox" name="pickupEnabled" ${business.pickupEnabled ? 'checked' : ''} ${editable ? '' : 'disabled'}>
+          <input type="checkbox" name="pickupEnabled" ${business.pickupEnabled ? 'checked' : ''} ${disabled}>
           <span>Retiro en el comercio</span>
         </label>
         <label class="check-label">
-          <input type="checkbox" name="deliveryEnabled" ${business.deliveryEnabled ? 'checked' : ''} ${editable ? '' : 'disabled'}>
+          <input type="checkbox" name="deliveryEnabled" ${business.deliveryEnabled ? 'checked' : ''} ${disabled}>
           <span>Envío con reparto propio</span>
         </label>
         <div class="field">
           <label for="b-zone">Zona de envío</label>
           <input id="b-zone" name="deliveryZone" type="text" maxlength="80" value="${esc(business.deliveryZone || '')}"
-            placeholder="Casco urbano de Aluminé" ${editable ? '' : 'disabled'}>
+            placeholder="Casco urbano de Aluminé" ${disabled}>
         </div>
         <div class="field-row">
           <div class="field">
-            <label for="b-fee">Costo de envío</label>
-            <input id="b-fee" name="deliveryFee" type="number" min="0" step="1" value="${business.deliveryFee || 0}" inputmode="numeric" ${editable ? '' : 'disabled'}>
+            <label for="b-fee">Costo de envío en pesos</label>
+            <input id="b-fee" name="deliveryFee" type="number" min="0" step="1" value="${business.deliveryFee || 0}" inputmode="numeric" ${disabled}>
           </div>
           <div class="field">
             <label for="b-min">Pedido mínimo para envío</label>
-            <input id="b-min" name="minimumOrder" type="number" min="0" step="1" value="${business.minimumOrder || 0}" inputmode="numeric" ${editable ? '' : 'disabled'}>
+            <input id="b-min" name="minimumOrder" type="number" min="0" step="1" value="${business.minimumOrder || 0}" inputmode="numeric" ${disabled}>
           </div>
         </div>
+        ${connected ? `<div class="field-row">
+          <div class="field">
+            <label for="b-prep">Preparación estimada (minutos)</label>
+            <input id="b-prep" name="prepMinutes" type="number" min="5" max="240" step="5" value="${business.prepMinutes ?? ''}" inputmode="numeric" ${disabled}>
+          </div>
+          <div class="field">
+            <label for="b-delivery-min">Envío estimado (minutos)</label>
+            <input id="b-delivery-min" name="deliveryMinutes" type="number" min="5" max="240" step="5" value="${business.deliveryMinutes ?? ''}" inputmode="numeric" ${disabled}>
+          </div>
+        </div>` : ''}
         <button class="button full" type="submit" ${editable && app.online ? '' : 'disabled'}>Guardar datos</button>
       </form>
     </section>
@@ -1546,7 +1874,8 @@ function merchantDataTab(business, missing, categories = []) {
           ${missing.length || !app.online ? 'disabled' : ''}>Solicitar publicación</button>` : ''}
       ${business.status === 'active' ? `
         <button class="button secondary full" type="button" data-action="business-status"
-          data-business="${esc(business.id)}" data-status="paused">Pausar el comercio</button>` : ''}
+          data-business="${esc(business.id)}" data-status="paused">Pausar el comercio</button>
+        <p class="microcopy">Pausado no aparece en CAUCE ni recibe pedidos. Para un día sin atención alcanza con “Cerrar atención”.</p>` : ''}
       ${business.status === 'paused' ? `
         <button class="button full" type="button" data-action="business-status"
           data-business="${esc(business.id)}" data-status="active">Reactivar el comercio</button>` : ''}
@@ -1559,9 +1888,11 @@ function merchantRidersTab(business, riders) {
     <section class="panel-section">
       <h2 class="checkout-section-title">Reparto del comercio</h2>
       <p class="quiet">Cada comercio administra su propio reparto. CAUCE no opera una flota.</p>
-      ${riders.length ? `<ul class="plain-list">${riders.map(rider => `
-        <li><strong>${esc(rider.name)}</strong>${rider.phone ? ` · ${esc(rider.phone)}` : ''}</li>`).join('')}</ul>`
-        : '<p class="quiet">Todavía no cargaste personas de reparto.</p>'}
+      ${riders.length ? `<ul class="plain-list rider-list">${riders.map(rider => `
+        <li class="${rider.active === false ? 'is-inactive' : ''}"><span><strong>${esc(rider.name)}</strong>${rider.phone ? ` · ${esc(rider.phone)}` : ''}${rider.active === false ? ' · <span class="quiet">inactivo</span>' : ''}</span>
+          ${isConnected() ? `<button class="link-button" type="button" data-action="rider-toggle" data-rider="${esc(rider.id)}"
+            data-active="${rider.active === false ? 'true' : 'false'}">${rider.active === false ? 'Reactivar' : 'Pausar'}</button>` : ''}</li>`).join('')}</ul>`
+        : '<p class="quiet">Todavía no cargaste personas de reparto. Si repartís vos, cargate con tu nombre.</p>'}
       <form class="checkout-form" data-form="rider-create" data-business="${esc(business.id)}">
         <div class="field">
           <label for="rider-name">Nombre</label>
@@ -1585,10 +1916,13 @@ async function viewAdmin() {
       <div class="notice error"><strong>Sección restringida.</strong> Requiere una cuenta con rol de administración.</div>
       <a class="button full" href="#cuenta">Ingresar</a>`;
   }
-  const [queue, metrics] = await Promise.all([
+  const [queue, metrics, events] = await Promise.all([
     app.repository.query('adminQueue'),
     app.repository.query('adminMetrics'),
+    isConnected() ? app.repository.query('adminClientEvents').catch(() => []) : [],
   ]);
+  const published = (queue.allBusinesses || []).filter(item => ['active', 'paused'].includes(item.status));
+  const suspended = (queue.allBusinesses || []).filter(item => item.status === 'suspended');
 
   const reviewCard = (item, kind) => `
     <article class="review-card">
@@ -1638,11 +1972,25 @@ async function viewAdmin() {
         : '<p class="quiet">No hay comercios esperando revisión.</p>'}
     </section>
 
-    <section class="panel-section">
+    ${feature('taxi') ? `<section class="panel-section">
       <h2 class="checkout-section-title">Taxistas pendientes (${queue.drivers.length})</h2>
       ${queue.drivers.length ? `<div class="stack">${queue.drivers.map(item => reviewCard(item, 'driver')).join('')}</div>`
         : '<p class="quiet">No hay altas de conductores esperando revisión.</p>'}
-    </section>
+    </section>` : ''}
+
+    ${isConnected() ? `<section class="panel-section">
+      <h2 class="checkout-section-title">Comercios publicados (${published.length})</h2>
+      ${published.length ? `<ul class="plain-list admin-business-list">${published.map(item => `
+        <li><span><strong>${esc(item.name)}</strong> · ${esc(businessStatusLabel(item.status))} · ${esc(item.category || 'sin rubro')}</span>
+          <button class="link-button danger" type="button" data-action="admin-business-status" data-business="${esc(item.id)}"
+            data-status="suspended" data-name="${esc(item.name)}">Suspender</button></li>`).join('')}</ul>`
+        : '<p class="quiet">Todavía no hay comercios publicados.</p>'}
+      ${suspended.length ? `<h3 class="checkout-section-title">Suspendidos (${suspended.length})</h3>
+      <ul class="plain-list admin-business-list">${suspended.map(item => `
+        <li><span><strong>${esc(item.name)}</strong>${item.reviewNote ? ` · ${esc(item.reviewNote)}` : ''}</span>
+          <button class="link-button" type="button" data-action="admin-business-status" data-business="${esc(item.id)}"
+            data-status="active" data-name="${esc(item.name)}">Rehabilitar</button></li>`).join('')}</ul>` : ''}
+    </section>` : ''}
 
     <section class="panel-section">
       <h2 class="checkout-section-title">Operación registrada</h2>
@@ -1650,15 +1998,24 @@ async function viewAdmin() {
       <dl class="metrics-grid">
         ${counter('Comercios publicados', metrics.businesses.active || 0)}
         ${counter('Comercios en revisión', metrics.businesses.pending_review || 0)}
-        ${counter('Taxistas habilitados', metrics.drivers.active || 0)}
+        ${feature('taxi') ? counter('Taxistas habilitados', metrics.drivers.active || 0) : ''}
         ${counter('Pedidos registrados', metrics.orders.total)}
         ${counter('Pedidos entregados', metrics.orders.delivered)}
         ${counter('Pedidos cancelados', metrics.orders.canceled)}
-        ${counter('Viajes solicitados', metrics.trips.total)}
-        ${counter('Viajes aceptados', metrics.trips.accepted)}
+        ${feature('taxi') ? counter('Viajes solicitados', metrics.trips.total) : ''}
+        ${feature('taxi') ? counter('Viajes aceptados', metrics.trips.accepted) : ''}
       </dl>
       <p class="microcopy">Vista agregada: no incluye direcciones de clientes, teléfonos ni recorridos individuales.</p>
-    </section>`;
+    </section>
+
+    ${isConnected() ? `<section class="panel-section">
+      <h2 class="checkout-section-title">Errores recientes en dispositivos (${events.length})</h2>
+      ${events.length ? `<ul class="plain-list event-list">${events.map(event => `
+        <li><span class="quiet">${esc(shortDate(event.created_at))}</span> · <strong>${esc(event.kind)}</strong> · ${esc(event.code)}
+          ${event.route ? `· ${esc(event.route)}` : ''}<br><span class="microcopy">${esc(event.message)}</span></li>`).join('')}</ul>`
+        : '<p class="quiet">Sin errores registrados.</p>'}
+      <p class="microcopy">Sin datos personales: correos, teléfonos y tokens se descartan antes de guardar.</p>
+    </section>` : ''}`;
 }
 
 // ───────────────────────── taxis ─────────────────────────
@@ -1971,7 +2328,53 @@ async function viewDriver() {
 
 // ───────────────────────── institucional ─────────────────────────
 
+async function viewInstitutionalConnected() {
+  const counts = await app.repository.query('snapshotCounts');
+  return `
+    ${backLink('#inicio', 'Inicio')}
+    <section class="page-header">
+      <span class="eyebrow">CAUCE · ALUMINÉ</span>
+      <h1 class="page-title">Qué es CAUCE</h1>
+      <p class="quiet">Una plataforma local para que los comercios de Aluminé reciban pedidos en línea
+        y los vecinos compren fácil, con trato directo con cada comercio.</p>
+    </section>
+    <section class="checkout-section">
+      <h2 class="checkout-section-title">Para quienes compran</h2>
+      <ul class="plain-list">
+        <li>Elegís un comercio, armás tu pedido y lo confirmás sin crear una cuenta.</li>
+        <li>Retirás en el local o lo recibís con el reparto del propio comercio.</li>
+        <li>Pagás directamente al comercio, al retirar o al recibir. CAUCE no cobra nada.</li>
+        <li>Seguís el estado del pedido en vivo y guardás un enlace para verlo desde cualquier lugar.</li>
+      </ul>
+    </section>
+    <section class="checkout-section">
+      <h2 class="checkout-section-title">Para los comercios</h2>
+      <ul class="plain-list">
+        <li>Cargás tus datos, horarios y catálogo; CAUCE revisa el alta antes de publicarla.</li>
+        <li>Recibís los pedidos en un panel que funciona en el celular, con aviso sonoro.</li>
+        <li>Sumás a tu equipo con distintos permisos y administrás tu propio reparto.</li>
+      </ul>
+      <a class="button full" href="#alta-comercio">Sumar mi comercio</a>
+    </section>
+    <section class="checkout-section">
+      <h2 class="checkout-section-title">Responsabilidades</h2>
+      <ul class="plain-list">
+        <li><strong>LUNA</strong> desarrolla y opera la plataforma y revisa las altas dentro de CAUCE.</li>
+        <li><strong>Cada comercio</strong> responde por sus precios, su stock, la preparación, su reparto y las habilitaciones de su actividad.</li>
+        <li>La aprobación de CAUCE habilita la publicación en la plataforma; no reemplaza permisos municipales.</li>
+      </ul>
+    </section>
+    <section class="checkout-section">
+      <h2 class="checkout-section-title">Hoy en CAUCE</h2>
+      <dl class="metrics-grid">
+        <div class="metric"><dt>Comercios publicados</dt><dd>${counts.activeBusinesses}</dd></div>
+        <div class="metric"><dt>Productos disponibles</dt><dd>${counts.products}</dd></div>
+      </dl>
+    </section>`;
+}
+
 async function viewInstitutional() {
+  if (isConnected()) return viewInstitutionalConnected();
   const counts = await app.repository.query('snapshotCounts');
   return `
     ${backLink('#inicio', 'Inicio')}
@@ -2065,9 +2468,13 @@ async function withBusy(element, operation) {
     await operation();
   } catch (error) {
     if (isNetworkError(error)) {
-      toast('Sin conexión con el servidor. No se envió nada: reintentá cuando vuelva.', 'error');
+      toast('Sin conexión con CAUCE. No se envió nada: reintentá cuando vuelva.', 'error');
     } else {
-      toast(error?.message || 'No se pudo completar la operación.', 'error');
+      toast(userMessage(error), 'error');
+    }
+    // Un conflicto de versión o de estado se resuelve mostrando lo actual.
+    if (['U0001', '42501', 'PRICES_CHANGED', 'U0003'].includes(error?.code) || error?.technical?.code === 'U0001') {
+      render();
     }
   } finally {
     element.dataset.busy = 'false';
@@ -2153,11 +2560,17 @@ const ACTIONS = {
   },
   async 'order-transition'(element) {
     const { order, version, next } = element.dataset;
-    let reason;
+    let reason = '';
     if (element.dataset.reason === 'required') {
-      reason = window.prompt('Indicá el motivo para que la persona sepa qué pasó:');
+      // Rechazar o cancelar es destructivo: se confirma y se explica.
+      reason = await askReason({
+        title: next === 'canceled' && element.textContent.trim() === 'Rechazar'
+          ? `Rechazar el pedido ${element.dataset.code || ''}` : `Cancelar el pedido ${element.dataset.code || ''}`,
+        message: 'La persona ve este motivo en su pedido.',
+        label: 'Motivo', placeholder: 'Por ejemplo: nos quedamos sin stock de un producto',
+        confirmLabel: element.textContent.trim() || 'Confirmar',
+      });
       if (reason === null) return;
-      if (!reason.trim()) { toast('Hace falta un motivo.', 'error'); return; }
     }
     await runCommand('order.transition', {
       orderId: order, expectedVersion: Number(version), nextStatus: next, reason,
@@ -2165,12 +2578,79 @@ const ACTIONS = {
     await render();
   },
   async 'cancel-order'(element) {
-    const reason = window.prompt('¿Por qué cancelás el pedido? (opcional)') ?? '';
+    const reason = await askReason({
+      title: '¿Cancelar el pedido?', message: 'El comercio deja de prepararlo. No se puede deshacer.',
+      label: 'Motivo', required: false, confirmLabel: 'Sí, cancelar', cancelLabel: 'No, volver',
+    });
+    if (reason === null) return;
     await runCommand('order.transition', {
       orderId: element.dataset.order, expectedVersion: Number(element.dataset.version),
       nextStatus: 'canceled', reason,
     });
     toast('Pedido cancelado.');
+    await render();
+  },
+  async 'remove-unavailable'(element) {
+    await runCommand('cart.removeUnavailable', { businessId: element.dataset.business });
+    toast('Quitamos los productos que ya no están disponibles.');
+    await render();
+  },
+  async 'copy-tracking'(element) {
+    const url = element.dataset.url;
+    try {
+      await navigator.clipboard.writeText(url);
+      toast('Enlace copiado. Guardalo para seguir tu pedido.');
+    } catch {
+      await askConfirm({ title: 'Enlace de seguimiento', message: url, confirmLabel: 'Listo', cancelLabel: 'Cerrar', danger: false });
+    }
+  },
+  async 'share-tracking'(element) {
+    try {
+      await navigator.share({ title: `Pedido ${element.dataset.code} · CAUCE`, url: element.dataset.url });
+    } catch { /* compartir cancelado */ }
+  },
+  async 'refresh-panel'() {
+    app.repository.invalidateSession?.();
+    await render();
+    toast('Panel actualizado.');
+  },
+  'enable-sound'() {
+    unlockSound();
+    setTimeout(() => render(), 150);
+    toast(soundReady() || unlockSound() ? 'Sonido activado para pedidos nuevos.' : 'Este navegador no permite reproducir sonido.');
+  },
+  async 'team-role'(element) {
+    const { business, user, role } = element.dataset;
+    await runCommand('team.setRole', { businessId: business, userId: user, role });
+    toast(role === 'manager' ? 'Ahora administra el comercio.' : 'Ahora atiende pedidos.');
+    await render();
+  },
+  async 'team-remove'(element) {
+    const { business, user, name } = element.dataset;
+    const confirmed = await askConfirm({ title: `¿Quitar a ${name} del equipo?`,
+      message: 'Deja de ver los pedidos y el panel en el momento. Podés volver a sumarle después.',
+      confirmLabel: 'Quitar', cancelLabel: 'Volver' });
+    if (!confirmed) return;
+    await runCommand('team.remove', { businessId: business, userId: user });
+    toast(`${name} ya no forma parte del equipo.`);
+    await render();
+  },
+  async 'admin-business-status'(element) {
+    const { business, status, name } = element.dataset;
+    let note = '';
+    if (status === 'suspended') {
+      note = await askReason({ title: `Suspender ${name}`, message: 'Deja de aparecer y de recibir pedidos. El comercio ve el motivo.',
+        label: 'Motivo', confirmLabel: 'Suspender' });
+      if (note === null) return;
+    } else if (!await askConfirm({ title: `Rehabilitar ${name}`, message: 'Vuelve a aparecer en CAUCE.', confirmLabel: 'Rehabilitar', danger: false })) {
+      return;
+    }
+    await runCommand('admin.setBusinessStatus', { businessId: business, status, note });
+    toast(status === 'suspended' ? 'Comercio suspendido.' : 'Comercio rehabilitado.');
+    await render();
+  },
+  async 'rider-toggle'(element) {
+    await runCommand('rider.setActive', { riderId: element.dataset.rider, active: element.dataset.active === 'true' });
     await render();
   },
   async 'driver-availability'(element) {
@@ -2232,8 +2712,28 @@ const FORMS = {
     await render();
   },
   async 'password-update'(form) {
-    await app.repository.updatePassword(new FormData(form).get('password'));
+    const data = new FormData(form);
+    await app.repository.updatePassword(data.get('password'),
+      isConnected() ? { currentPassword: data.get('currentPassword') || '' } : undefined);
     form.reset(); app.authNotice = 'Contraseña actualizada.'; toast('Contraseña actualizada.'); await render();
+  },
+  async 'password-recovery'(form) {
+    const data = new FormData(form);
+    const password = String(data.get('password') || '');
+    if (password !== String(data.get('confirm') || '')) { toast('Las dos contraseñas no coinciden.', 'error'); return; }
+    await app.repository.updatePassword(password);
+    app.recovering = false;
+    app.session = await app.repository.session({ fresh: true });
+    app.authNotice = '';
+    toast('Listo: tu contraseña nueva ya funciona.');
+    go(hasRole('merchant') ? '#panel' : '#cuenta');
+    await render({ focus: true });
+  },
+  async 'resend-confirmation'(form) {
+    await app.repository.resendConfirmation(new FormData(form).get('email'));
+    form.reset();
+    app.authNotice = 'Si hay una cuenta sin confirmar con ese correo, te reenviamos el enlace. Revisá también la carpeta de spam.';
+    await render();
   },
   async 'business-rename'(form) {
     await app.repository.command('business.rename', Object.fromEntries(new FormData(form)));
@@ -2250,8 +2750,9 @@ const FORMS = {
     const data = Object.fromEntries(new FormData(form));
     await app.repository.signIn({ email: data.email, password: data.password });
     app.session = await app.repository.session();
+    app.authNotice = '';
     toast(`Hola, ${actor().name}.`);
-    go('#actividad');
+    go(hasRole('admin') ? '#admin' : hasRole('merchant') ? '#panel' : '#actividad');
     await render({ focus: true });
   },
 
@@ -2259,7 +2760,8 @@ const FORMS = {
     const data = Object.fromEntries(new FormData(form));
     const result = await app.repository.register(data);
     if (result?.confirmationRequired) {
-      form.reset(); app.authNotice = 'Revisá tu correo y confirmá la cuenta antes de ingresar.';
+      form.reset();
+      app.authNotice = `Te enviamos un correo a ${data.email} para confirmar la cuenta. Abrí el enlace (vale una hora) y después ingresá. Si no llega, revisá la carpeta de spam o pedí que lo reenviemos.`;
       await render(); return;
     }
     app.session = await app.repository.session();
@@ -2289,19 +2791,45 @@ const FORMS = {
       deliveryFee: Number(data.get('deliveryFee') || 0),
       minimumOrder: Number(data.get('minimumOrder') || 0),
     };
+    if (isConnected()) {
+      Object.assign(patch, { description: data.get('description'), publicPhone: data.get('publicPhone'),
+        whatsapp: data.get('whatsapp'), prepMinutes: data.get('prepMinutes'), deliveryMinutes: data.get('deliveryMinutes') });
+    }
     await runCommand('business.update', { businessId: form.dataset.business, patch });
     toast('Datos guardados.');
+    await render();
+  },
+
+  async 'business-hours'(form) {
+    await runCommand('business.setHours', { businessId: form.dataset.business, hours: readHoursForm(form) });
+    toast('Horarios guardados.');
+    await render();
+  },
+
+  async 'team-add'(form) {
+    const data = Object.fromEntries(new FormData(form));
+    await runCommand('team.add', { businessId: form.dataset.business, email: data.email, role: data.role });
+    form.reset();
+    toast('Listo: ya puede usar el panel de este comercio.');
+    await render();
+  },
+
+  async 'product-stock'(form) {
+    await runCommand('product.update', { businessId: form.dataset.business, productId: form.dataset.product,
+      patch: { stock: Number(new FormData(form).get('stock')), available: form.dataset.available === 'true' } });
+    toast('Stock actualizado.');
     await render();
   },
 
   async 'product-create'(form) {
     const data = Object.fromEntries(new FormData(form));
     const image = form.querySelector('input[type="file"][name="image"]')?.files?.[0] || null;
+    const trackStock = isConnected() ? data.trackStock === 'on' : true;
     await runCommand('product.create', {
       businessId: form.dataset.business,
       product: {
         name: data.name, description: data.description, category: data.category,
-        price: Number(data.price), stock: Number(data.stock), available: true,
+        price: Number(data.price), stock: trackStock ? Number(data.stock || 0) : 0, trackStock, available: true,
         variants: parseVariants(data.variants),
       },
       image: image && image.size ? image : null,
@@ -2331,9 +2859,10 @@ const FORMS = {
 
   async 'product-update'(form) {
     const data = Object.fromEntries(new FormData(form));
+    const patch = { price: Number(data.price) };
+    if (form.dataset.track !== 'false') patch.stock = Number(data.stock);
     await runCommand('product.update', {
-      businessId: form.dataset.business, productId: form.dataset.product,
-      patch: { price: Number(data.price), stock: Number(data.stock) },
+      businessId: form.dataset.business, productId: form.dataset.product, patch,
     });
     toast('Producto actualizado.');
     await render();
@@ -2375,25 +2904,50 @@ const FORMS = {
     draft(`checkout:${businessId}`, {
       ...data, zoneAcknowledged: new FormData(form).get('zoneAcknowledged') === 'on',
     });
+    app.checkoutNotice = null;
     if (isShared() && !app.online) {
       toast('Sin conexión: no se confirmó nada. Reintentá cuando vuelva.', 'error');
       return;
     }
     // El identificador de intento se pide una sola vez por carrito: si la
-    // confirmación se repite, el servidor devuelve el mismo pedido.
+    // confirmación se repite (doble toque, red lenta, recarga), el servidor
+    // devuelve el mismo pedido.
     const requestId = await runCommand('cart.prepareRequest', { businessId });
-    const order = await runCommand('order.create', {
-      businessId,
-      requestId,
-      fulfillment: data.fulfillment,
-      paymentMethod: data.paymentMethod || 'cash_demo',
-      customer: {
-        name: data.name, phone: data.phone, address: data.address, notes: data.notes,
-        zoneAcknowledged: new FormData(form).get('zoneAcknowledged') === 'on',
-      },
-    });
+    const expected = Number(form.dataset.expectedTotal);
+    let order;
+    try {
+      order = await runCommand('order.create', {
+        businessId,
+        requestId,
+        expectedTotal: Number.isSafeInteger(expected) && expected > 0 ? expected : undefined,
+        fulfillment: data.fulfillment,
+        paymentMethod: data.paymentMethod || 'cash_demo',
+        customer: {
+          name: data.name, phone: data.phone, address: data.address, notes: data.notes,
+          zoneAcknowledged: new FormData(form).get('zoneAcknowledged') === 'on',
+        },
+      });
+    } catch (error) {
+      app.telemetry?.orderFailed(error, { business: businessId, fulfillment: data.fulfillment });
+      if (error?.code === 'PRICES_CHANGED') {
+        app.checkoutNotice = { businessId, tone: 'error', message: Number.isFinite(error.newTotal)
+          ? `Los precios cambiaron mientras confirmabas: el nuevo total es ${money(error.newTotal)}. Revisalo y confirmá de nuevo.`
+          : error.message };
+        await render();
+        return;
+      }
+      if (error?.code === 'GUEST_CHECKOUT_UNAVAILABLE') {
+        app.authNotice = 'Para confirmar el pedido, ingresá con tu cuenta. Tu carrito queda guardado.';
+        go('#cuenta');
+        return;
+      }
+      throw error;
+    }
     app.formDrafts.delete(`checkout:${businessId}`);
-    toast(`Pedido ${order.code} enviado al comercio.`);
+    app.session = await app.repository.session();
+    toast(order.alreadyExisted
+      ? `Ese pedido ya estaba enviado: ${order.code}.`
+      : `Pedido ${order.code} enviado. Te avisamos acá cuando el comercio lo acepte.`);
     go(`#pedido/${order.id}`);
     await render({ focus: true });
   },
@@ -2440,7 +2994,34 @@ const VIEWS = {
   viaje: viewTrip,
   taxista: viewDriver,
   institucional: viewInstitutional,
+  recuperar: viewRecovery,
+  seguimiento: viewTracking,
 };
+
+// Títulos por ruta y rutas que nunca se indexan (paneles y datos personales).
+const ROUTE_TITLES = Object.freeze({
+  inicio: 'CAUCE · Aluminé', comercios: 'Comercios · CAUCE', carrito: 'Carrito · CAUCE', pedido: 'Tu pedido · CAUCE',
+  actividad: 'Mis pedidos · CAUCE', cuenta: 'Tu cuenta · CAUCE', 'alta-comercio': 'Sumar mi comercio · CAUCE',
+  panel: 'Panel del comercio · CAUCE', admin: 'Administración · CAUCE', institucional: 'Qué es CAUCE',
+  recuperar: 'Recuperar contraseña · CAUCE', seguimiento: 'Seguimiento de pedido · CAUCE',
+});
+const PRIVATE_ROUTES = new Set(['carrito', 'pedido', 'actividad', 'cuenta', 'alta-comercio', 'panel', 'admin',
+  'recuperar', 'seguimiento', 'taxista', 'viaje']);
+const TAXI_ROUTES = new Set(['taxi', 'viaje', 'taxista']);
+
+function applyRouteMeta(page) {
+  if (typeof document === 'undefined') return;
+  const title = ROUTE_TITLES[page] || 'CAUCE · Aluminé';
+  setBaseTitle(title);
+  if (!/^\(\d+\) Pedido nuevo · /.test(document.title) || page !== 'panel') document.title = title;
+  let robots = document.querySelector('meta[name="robots"]');
+  if (!robots) {
+    robots = document.createElement('meta');
+    robots.name = 'robots';
+    document.head.append(robots);
+  }
+  robots.content = PRIVATE_ROUTES.has(page) ? 'noindex, nofollow' : 'index, follow';
+}
 
 let renderToken = 0;
 
@@ -2450,34 +3031,58 @@ let renderToken = 0;
 // Al cambiar de vista el canal se cierra; no quedan canales abiertos de fondo.
 const live = { key: '', stop: null, timer: null };
 
+// Realtime es la vía principal; el sondeo es el respaldo. Un teléfono que se
+// bloquea o una red móvil que cambia cortan el WebSocket sin aviso: el panel
+// igual se actualiza cada 30 segundos y al volver a la pestaña.
+const POLL_MS = Object.freeze({ panel: 30000, pedido: 45000, seguimiento: 30000, taxista: 15000 });
+
 function syncLive(page, param) {
-  if (!app.repository?.capabilities?.realtime) return;
   const me = actor();
+  const connected = Boolean(app.repository?.capabilities?.realtime);
   const scopes = [];
-  if (page === 'panel' && param) scopes.push({ kind: 'businessOrders', businessId: param });
-  else if (page === 'pedido' && param) scopes.push({ kind: 'order', orderId: param });
-  else if (['inicio', 'actividad'].includes(page) && me?.id) {
-    scopes.push({ kind: 'myOrders', customerId: me.id }, { kind: 'myTrips', passengerId: me.id });
-  } else if (['taxi', 'viaje'].includes(page) && me?.id) scopes.push({ kind: 'myTrips', passengerId: me.id });
-  else if (page === 'taxista' && me?.driverId) scopes.push({ kind: 'driverTrips', driverId: me.driverId });
-  const key = `${page}:${param || ''}:${me?.id || ''}:${scopes.length}`;
+  if (connected) {
+    if (page === 'panel' && param) scopes.push({ kind: 'businessOrders', businessId: param });
+    else if (page === 'pedido' && param) scopes.push({ kind: 'order', orderId: param });
+    else if (['inicio', 'actividad'].includes(page) && me?.id) {
+      scopes.push({ kind: 'myOrders', customerId: me.id });
+      if (feature('taxi')) scopes.push({ kind: 'myTrips', passengerId: me.id });
+    } else if (['taxi', 'viaje'].includes(page) && me?.id && feature('taxi')) scopes.push({ kind: 'myTrips', passengerId: me.id });
+    else if (page === 'taxista' && me?.driverId && feature('taxi')) scopes.push({ kind: 'driverTrips', driverId: me.driverId });
+  }
+  const pollEvery = connected && ((page === 'panel' && param) || (page === 'pedido' && param)
+    || (page === 'seguimiento' && param) || (page === 'taxista' && me?.driverId)) ? POLL_MS[page] : 0;
+  const key = `${page}:${param || ''}:${me?.id || ''}:${scopes.length}:${pollEvery}`;
   if (key === live.key) return;
   live.stop?.();
   live.stop = null;
   live.key = key;
-  if (!scopes.length) return;
+  app.liveHealthy = true;
+  if (!scopes.length && !pollEvery) return;
   // Un cambio remoto vuelve a pedir los datos por la vía normal, que aplica RLS
   // otra vez: la carga útil del evento nunca se pinta directamente.
   const refresh = () => {
     clearTimeout(live.timer);
-    live.timer = setTimeout(() => { if (route().page === page) render(); }, 250);
+    live.timer = setTimeout(() => {
+      if (route().page === page && !document.hidden && !isEditing()) render();
+    }, 250);
   };
-  const stops = scopes.map(scope => app.repository.watch(scope, refresh));
-  // Las solicitudes de taxi todavía sin aceptar no son legibles por ningún
-  // conductor, así que tampoco pueden llegar por Realtime sin revelarlas: el
-  // panel las vuelve a pedir cada quince segundos mientras está abierto.
-  const poll = page === 'taxista' && me?.driverId ? setInterval(refresh, 15000) : null;
+  const onStatus = status => {
+    const healthy = status === 'SUBSCRIBED';
+    if (healthy === app.liveHealthy) return;
+    app.liveHealthy = healthy;
+    if (!healthy) app.telemetry?.record('supabase_error', { code: `REALTIME_${status}`, message: 'Canal en vivo interrumpido' });
+    refresh();
+  };
+  const stops = scopes.map(scope => app.repository.watch(scope, refresh, onStatus));
+  const poll = pollEvery ? setInterval(refresh, pollEvery) : null;
   live.stop = () => { clearTimeout(live.timer); if (poll) clearInterval(poll); for (const stop of stops) stop(); };
+}
+
+// No se redibuja mientras la persona escribe: se perdería lo que tipeó.
+function isEditing() {
+  const active = document.activeElement;
+  return Boolean(active && main?.contains(active) && /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName)
+    && active.type !== 'button' && active.type !== 'submit');
 }
 
 // Rutas cuyo contenido depende de los permisos de la cuenta. En el entorno con
@@ -2501,8 +3106,12 @@ async function render({ focus = false } = {}) {
   }
   const view = VIEWS[page];
   main.setAttribute('aria-busy', 'true');
+  applyRouteMeta(page);
   try {
-    const markup = view
+    const markup = TAXI_ROUTES.has(page) && !feature('taxi')
+      ? emptyState('Sección no disponible', 'Por ahora CAUCE funciona para comercios de Aluminé. Esta sección no está habilitada.',
+        '#comercios', 'Ver comercios', 'bag')
+      : view
       ? await view(param)
       : emptyState('Página no encontrada', 'Volvé al inicio para seguir navegando.', '#inicio', 'Ir al inicio');
     if (token !== renderToken) return;
@@ -2512,11 +3121,16 @@ async function render({ focus = false } = {}) {
     main.innerHTML = errorView(error);
   }
 
-  // El contador del carrito alimenta la barra inferior en cualquier vista.
+  // El contador del carrito alimenta la barra inferior en cualquier vista. En
+  // el entorno conectado se lee del dispositivo, sin consultar la red.
   try {
-    const carts = await app.repository.query('carts');
-    app.cartCount = carts.reduce((total, entry) =>
-      total + entry.cart.lines.reduce((sum, line) => sum + line.quantity, 0), 0);
+    if (isConnected()) {
+      app.cartCount = await app.repository.query('cartCount');
+    } else {
+      const carts = await app.repository.query('carts');
+      app.cartCount = carts.reduce((total, entry) =>
+        total + entry.cart.lines.reduce((sum, line) => sum + line.quantity, 0), 0);
+    }
   } catch { app.cartCount = app.cartCount || 0; }
   if (token !== renderToken) return;
 
@@ -2597,28 +3211,108 @@ function bindEvents() {
   window.addEventListener('online', () => {
     app.online = true;
     updateShell();
-    toast('Conexión recuperada. Podés reintentar.');
-    if (isConnected()) applyOfflineState();
-    else render();
+    toast('Conexión recuperada.');
+    applyOfflineState();
+    // Con backend, volver a tener red es volver a pedir lo actual, salvo que
+    // la persona esté escribiendo.
+    if (!isConnected() || !isEditing()) render();
   });
+
+  // Volver a la pestaña (o desbloquear el teléfono) actualiza lo que se ve.
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden || !isConnected()) return;
+    const { page } = route();
+    if (['panel', 'pedido', 'seguimiento', 'actividad', 'inicio'].includes(page) && !isEditing()) render();
+  });
+
+  // El navegador sólo deja sonar avisos después de una interacción.
+  document.addEventListener('pointerdown', () => { if (route().page === 'panel') unlockSound(); }, { passive: true });
+
+  window.addEventListener('error', event => app.telemetry?.error(event.error || event.message, { where: 'window' }));
+  window.addEventListener('unhandledrejection', event => app.telemetry?.error(event.reason, { where: 'promise' }));
+}
+
+// Pantalla de error de arranque. Sin handlers inline: la CSP no los permite.
+function fatalView(title, message, { retry = true } = {}) {
+  if (retry) {
+    main.addEventListener('click', event => {
+      if (event.target.closest('[data-reload]')) location.reload();
+    });
+  }
+  return `<section class="notice error" role="alert">
+    <h2>${esc(title)}</h2>
+    <p>${esc(message)}</p>
+    ${retry ? '<div class="modal-actions"><button class="button" type="button" data-reload>Reintentar</button></div>' : ''}
+  </section>`;
 }
 
 async function start() {
   main.setAttribute('aria-busy', 'true');
+  // Un panel dentro de un iframe ajeno es un vector de clickjacking y GitHub
+  // Pages no permite la cabecera frame-ancestors: CAUCE no se dibuja embebido.
+  if (window.top !== window.self) {
+    main.innerHTML = `<section class="notice"><h2>Abrí CAUCE en su propia ventana</h2>
+      <p><a class="button" href="${esc(location.href)}" target="_top" rel="noopener">Abrir CAUCE</a></p></section>`;
+    main.setAttribute('aria-busy', 'false');
+    return;
+  }
+  app.telemetry = createTelemetry({ release: RUNTIME_ENV.release || RUNTIME_ENV.environment, route: () => location.hash,
+    send: RUNTIME_ENV.environment === 'supabase' ? event => app.repository?.reportEvent?.(event) : null });
   try {
     app.repository = createRepository(CONFIG, {
       runtime: RUNTIME_ENV,
       storage: globalThis.localStorage,
+      // Cada falla del backend queda registrada (sin datos personales).
+      onError: error => {
+        if (!['23514', 'invalid_credentials', 'weak_password', 'INVALID_CURRENT_PASSWORD'].includes(error?.technical?.code || error?.code)) {
+          const technical = { code: error.technical?.code || error.code, message: error.technical?.message || error.message };
+          app.telemetry.record(classify(technical, 'supabase_error'), technical);
+        }
+      },
     });
-    updateShell();
+  } catch (error) {
+    app.telemetry.critical(error, { where: 'config' });
+    main.innerHTML = fatalView('CAUCE no pudo iniciar', 'La configuración de esta versión no es válida. Avisanos para revisarla.', { retry: false });
+    main.setAttribute('aria-busy', 'false');
+    return;
+  }
+  updateShell();
+
+  if (isConnected()) {
+    // Contrato con la base: sin la versión de esquema esperada no se opera.
+    let status;
+    try {
+      status = await app.repository.query('appStatus');
+    } catch (error) {
+      main.innerHTML = isNetworkError(error)
+        ? fatalView('Sin conexión con CAUCE', 'Revisá tu conexión a internet y volvé a intentar.')
+        : fatalView('CAUCE está en mantenimiento', 'Estamos actualizando la plataforma. Probá de nuevo en unos minutos.');
+      if (!isNetworkError(error)) app.telemetry.critical(error, { where: 'app_status' });
+      main.setAttribute('aria-busy', 'false');
+      return;
+    }
+    if (!(Number(status?.schema) >= REQUIRED_SCHEMA)) {
+      app.telemetry.critical({ code: 'SCHEMA_MISMATCH', message: `Esquema ${status?.schema} < ${REQUIRED_SCHEMA}` });
+      main.innerHTML = fatalView('CAUCE está en mantenimiento', 'Estamos actualizando la plataforma. Probá de nuevo en unos minutos.');
+      main.setAttribute('aria-busy', 'false');
+      return;
+    }
+    app.features = status.features || {};
+  }
+
+  try {
     if (isConnected()) {
       app.repository.onAuthChange(event => {
         if (event === 'PASSWORD_RECOVERY') app.recovering = true;
-        if (!app.started || !['SIGNED_OUT', 'PASSWORD_RECOVERY'].includes(event)) return;
-        // Avoid SDK calls inside its auth lock callback.
+        if (!app.started || !['SIGNED_OUT', 'SIGNED_IN', 'PASSWORD_RECOVERY', 'USER_UPDATED'].includes(event)) return;
+        // Otra pestaña cerró la sesión, o la sesión venció: la vista se ajusta
+        // al estado real. Nunca se llama al SDK dentro de su propio callback.
         setTimeout(async () => {
           try {
-            app.session = await app.repository.session();
+            app.repository.invalidateSession?.();
+            const before = actor()?.id || null;
+            app.session = await app.repository.session({ fresh: true });
+            if (event === 'SIGNED_OUT' && before && !isSignedIn()) toast('Tu sesión se cerró.');
             if (event === 'PASSWORD_RECOVERY') go('#recuperar');
             await render();
           } catch (error) { main.innerHTML = errorView(error); }
@@ -2626,21 +3320,27 @@ async function start() {
       });
       const callback = await app.repository.completeAuthRedirect(location.href,
         () => history.replaceState(null, '', location.pathname));
-      if (callback.handled) app.recovering = callback.recovery;
+      if (callback.handled) {
+        app.recovering = callback.recovery;
+        if (callback.error) {
+          app.authNotice = callback.error.message;
+          location.hash = '#cuenta';
+        } else if (callback.confirmed) {
+          app.authNotice = 'Tu correo quedó confirmado. Ya podés usar tu cuenta.';
+          location.hash = '#cuenta';
+        }
+      }
     }
-    app.session = await app.repository.session();
+    app.session = await app.repository.session({ verify: true });
   } catch (error) {
-    main.innerHTML = `<section class="notice error">
-      <h2>CAUCE no pudo iniciar</h2>
-      <p>${esc(error.message)}</p>
-      <p class="microcopy">Entorno declarado: ${esc(RUNTIME_ENV.environment)}.</p>
-    </section>`;
+    main.innerHTML = fatalView(isNetworkError(error) ? 'Sin conexión con CAUCE' : 'No pudimos abrir tu sesión',
+      userMessage(error));
     main.setAttribute('aria-busy', 'false');
     return;
   }
   bindEvents();
   app.started = true;
-  if (app.recovering) { app.authNotice = 'Elegí una nueva contraseña para tu cuenta.'; go('#recuperar'); }
+  if (app.recovering) { app.authNotice = ''; go('#recuperar'); }
   if (!location.hash) location.hash = '#inicio';
   await render();
   registerServiceWorker();

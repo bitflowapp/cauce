@@ -79,7 +79,10 @@ for (const path of await walk(resolve(root, 'js'))) {
   const text = await readFile(path, 'utf8');
   if (CREDENTIAL_PATTERN.test(text)) failures.push(`Posible credencial embebida: ${name}`);
   if (NETWORK_ALLOWED.has(name)) continue;
-  if (/https?:\/\//i.test(text.replace(/^\s*\/\/.*$/gm, ''))) failures.push(`URL de red en el runtime: ${name}`);
+  // Enlaces de navegación permitidos (abren otra app, no conectan datos):
+  // WhatsApp como canal de contacto de cada comercio con sus clientes.
+  const code = text.replace(/^\s*\/\/.*$/gm, '').replace(/https:\/\/wa\.me\//g, '');
+  if (/https?:\/\//i.test(code)) failures.push(`URL de red en el runtime: ${name}`);
   if (NETWORK_PATTERN.test(text)) failures.push(`Operación de red inesperada: ${name}`);
 }
 

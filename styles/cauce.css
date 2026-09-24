@@ -1,3 +1,6 @@
+/* Un elemento oculto queda oculto aunque su clase declare otro display. */
+[hidden] { display: none !important; }
+
 /* ==========================================================================
    CAUCE · ALUMINÉ — DESIGN SYSTEM v0.3.2
    Gastronomía Local Cordillerana · Patagonia Norte

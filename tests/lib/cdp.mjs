@@ -48,6 +48,8 @@ export async function launchBrowser({ port = 9300 + Math.floor(Math.random() * 4
     'about:blank',
   ];
   if (headless) args.unshift('--headless=new');
+  // Chrome no arranca como root sin desactivar su sandbox (contenedores de CI).
+  if (typeof process.getuid === 'function' && process.getuid() === 0) args.unshift('--no-sandbox');
   const child = spawn(binary, args, { stdio: 'ignore' });
   const version = await fetchJson(`http://127.0.0.1:${port}/json/version`);
   return {

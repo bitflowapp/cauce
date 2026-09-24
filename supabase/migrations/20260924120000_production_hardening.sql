@@ -152,6 +152,41 @@ with check (private.is_business_member(business_id, array['owner', 'manager']));
 create policy business_hours_delete on public.business_hours for delete to authenticated
 using (private.is_business_member(business_id, array['owner', 'manager']));
 
+-- Reemplazo atómico de la semana completa: o quedan los horarios nuevos o
+-- quedan los anteriores, nunca una semana a medias.
+create function private.set_business_hours(business uuid, hours jsonb) returns integer
+language plpgsql security definer set search_path = '' as $$
+declare item jsonb; total integer := 0;
+begin
+  if not private.is_business_member(business, array['owner', 'manager']) then
+    raise exception 'Not allowed for this business' using errcode = '42501';
+  end if;
+  if hours is null or jsonb_typeof(hours) <> 'array' or jsonb_array_length(hours) > 21 then
+    raise exception 'Invalid hours' using errcode = '23514';
+  end if;
+  delete from public.business_hours where business_id = business;
+  for item in select * from jsonb_array_elements(hours) loop
+    if jsonb_typeof(item) <> 'object'
+       or coalesce(item ->> 'weekday', '') !~ '^[0-6]$'
+       or coalesce(item ->> 'opens', '') !~ '^([01][0-9]|2[0-3]):[0-5][0-9](:00)?$'
+       or coalesce(item ->> 'closes', '') !~ '^([01][0-9]|2[0-3]):[0-5][0-9](:00)?$' then
+      raise exception 'Invalid hours' using errcode = '23514';
+    end if;
+    insert into public.business_hours (business_id, weekday, opens, closes)
+      values (business, (item ->> 'weekday')::smallint, (item ->> 'opens')::time, (item ->> 'closes')::time);
+    total := total + 1;
+  end loop;
+  return total;
+end;
+$$;
+revoke all on function private.set_business_hours(uuid, jsonb) from public, anon, authenticated;
+grant execute on function private.set_business_hours(uuid, jsonb) to authenticated;
+create function public.set_business_hours(business uuid, hours jsonb) returns integer
+language sql security invoker set search_path = ''
+as $$ select private.set_business_hours(business, hours); $$;
+revoke all on function public.set_business_hours(uuid, jsonb) from public, anon, authenticated;
+grant execute on function public.set_business_hours(uuid, jsonb) to authenticated;
+
 -- ¿Está dentro de su horario en este momento? Sin horarios cargados, sí: manda
 -- sólo el interruptor manual.
 create function private.within_business_hours(business uuid, at_time timestamptz default now())

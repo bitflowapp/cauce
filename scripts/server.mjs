@@ -6,7 +6,10 @@ import { fileURLToPath } from 'node:url';
 export const ROOT = fileURLToPath(new URL('../', import.meta.url));
 const CSP = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'none'; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-ancestors 'none'";
 const WORKER_CSP = "default-src 'self'; connect-src 'self'; base-uri 'none'; object-src 'none'";
-export function createStaticServer({ root = ROOT, supabase = false } = {}) {
+// Modo `preview`: sirve un build conectado (dist-production o .local/preview)
+// con la misma CSP que declara su index.html, más frame-ancestors, que sólo
+// existe como cabecera. Es el comportamiento de un hosting con cabeceras.
+export function createStaticServer({ root = ROOT, supabase = false, preview = false } = {}) {
   const base = resolve(root);
   return createServer(async (req, res) => {
     // La CSP del documento no aplica al service worker: el worker hereda la de
@@ -15,7 +18,8 @@ export function createStaticServer({ root = ROOT, supabase = false } = {}) {
     const isWorker = (req.url || '').startsWith('/service-worker.js');
     // Cabecera y meta se aplican las dos: si acá falta el origen de las
     // imágenes de CAUCE, la vitrina queda sin fotos aunque el meta lo permita.
-    const documentCsp = supabase
+    const previewCsp = preview ? await builtCsp(root) : null;
+    const documentCsp = previewCsp ? `${previewCsp}; frame-ancestors 'none'` : supabase
       ? CSP.replace("connect-src 'none'", "connect-src 'self' https://ygqbcvxdrewcnzedfcyo.supabase.co wss://ygqbcvxdrewcnzedfcyo.supabase.co")
         .replace("img-src 'self' data:", "img-src 'self' data: blob: https://ygqbcvxdrewcnzedfcyo.supabase.co")
       : CSP;
@@ -31,19 +35,24 @@ export function createStaticServer({ root = ROOT, supabase = false } = {}) {
       let path = decodeURIComponent(parsed.pathname);
       if (path === '/') path = '/index.html';
       if (path.includes('\0') || path.includes('\\') || path.split('/').some(part=>part==='..'||part==='.')) return finish(400,'Ruta inválida.');
-      const allowed = path === '/index.html' || path === '/manifest.webmanifest' || path === '/service-worker.js' || /^\/(js|styles|assets)\//.test(path);
+      const allowed = path === '/index.html' || path === '/manifest.webmanifest' || path === '/service-worker.js'
+        || (preview && ['/robots.txt', '/404.html'].includes(path)) || /^\/(js|styles|assets)\//.test(path);
       if (!allowed) return finish(404,'No encontrado.');
       const target = resolve(base, `.${path}`);
       if (!target.startsWith(base + sep)) return finish(403,'Ruta no permitida.');
       const actual = await realpath(target);
       if (!actual.startsWith(base + sep)) return finish(403,'Ruta no permitida.');
-      const mime = {'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.webmanifest':'application/manifest+json; charset=utf-8','.svg':'image/svg+xml','.webp':'image/webp','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.avif':'image/avif'}[extname(actual)];
+      const mime = {'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.webmanifest':'application/manifest+json; charset=utf-8','.svg':'image/svg+xml','.webp':'image/webp','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.avif':'image/avif','.txt':'text/plain; charset=utf-8'}[extname(actual)];
       if (!mime || !(await stat(actual)).isFile()) return finish(404,'No encontrado.');
       res.setHeader('Content-Type',mime);
       if (req.method==='HEAD') return finish(200,'');
       res.end(await readFile(actual));
     } catch(error) { finish(error.code === 'ENOENT' || error.code === 'ENOTDIR' ? 404 : 400, 'No se pudo abrir el recurso.'); }
   });
+}
+async function builtCsp(root) {
+  const html = await readFile(resolve(root, 'index.html'), 'utf8').catch(() => '');
+  return /http-equiv="Content-Security-Policy" content="([^"]+)"/.exec(html)?.[1] || null;
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const port=Number(process.env.PORT||4173);

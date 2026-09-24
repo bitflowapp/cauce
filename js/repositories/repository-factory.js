@@ -27,7 +27,7 @@ export function createRepository(config, options = {}) {
       throw new CauceError('INVALID_PRODUCTION_CONFIG', 'La configuración conectada de CAUCE no es válida.');
     }
     return createSupabaseRepository({ client: options.runtime.client, redirectTo: options.runtime.redirectTo,
-      storage: options.storage });
+      storage: options.storage, onError: options.onError });
   }
   assertNonProductionConfig(config);
   const runtime = options.runtime;

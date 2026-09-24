@@ -170,6 +170,18 @@ test('un horario que cruza la medianoche se interpreta en la hora local', async 
   ok(await owner.from('business_hours').delete().eq('business_id', A.id));
 });
 
+test('la semana de horarios se reemplaza completa o no se toca', async () => {
+  const owner = people.owner.client;
+  const week = [1, 2, 3, 4, 5].map(weekday => ({ weekday, opens: '09:00', closes: '13:00' }));
+  assert.equal(ok(await owner.rpc('set_business_hours', { business: A.id, hours: week })), 5);
+  const broken = [...week, { weekday: 6, opens: '25:00', closes: '13:00' }];
+  failsWith(await owner.rpc('set_business_hours', { business: A.id, hours: broken }), '23514');
+  assert.equal(ok(await owner.from('business_hours').select('weekday').eq('business_id', A.id)).length, 5,
+    'un error no deja la semana a medias');
+  failsWith(await people.ownerB.client.rpc('set_business_hours', { business: A.id, hours: [] }), '42501');
+  assert.equal(ok(await owner.rpc('set_business_hours', { business: A.id, hours: [] })), 0);
+});
+
 test('límite contra abuso: pocos pedidos sin atender por persona', async () => {
   const buyer = nextCustomer();
   const ids = [];
