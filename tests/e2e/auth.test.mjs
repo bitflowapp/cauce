@@ -35,8 +35,16 @@ for (const engine of browsersToRun) {
       await phone.page.fill('#signin-password', password);
       await phone.page.locator('form[data-form="sign-in"] button[type="submit"]').click();
       assert.match(await toastText(phone.page), /Confirmá tu correo/);
+      const first = linkFrom(await mailFor(email, { subject: 'Confirmá tu correo en CAUCE', after: since }));
 
-      const link = linkFrom(await mailFor(email, { subject: 'Confirmá tu correo en CAUCE', after: since }));
+      // "¿No te llegó?": se reenvía desde la misma pantalla y vale el enlace nuevo.
+      await phone.page.waitForTimeout(1500); // tope de Auth: un correo por segundo por casilla
+      const resentAt = Date.now();
+      await phone.page.fill('#resend-email', email);
+      await phone.page.locator('form[data-form="resend-confirmation"] button[type="submit"]').click();
+      await phone.page.getByText('Si hay una cuenta sin confirmar con ese correo').waitFor({ timeout: 15000 });
+      const link = linkFrom(await mailFor(email, { subject: 'Confirmá tu correo en CAUCE', after: resentAt }));
+      assert.notEqual(link.searchParams.get('token_hash'), first.searchParams.get('token_hash'), 'el reenvío trae un enlace nuevo');
       await laptop.page.goto(link.href);
       await laptop.page.getByText('Tu correo quedó confirmado').waitFor({ timeout: 15000 });
       assert.equal(await laptop.page.evaluate(() => location.search), '', 'el token no queda en la barra de direcciones');
@@ -66,6 +74,20 @@ for (const engine of browsersToRun) {
       await ready(page);
       assert.notEqual(await page.locator('#account-link').textContent(), 'Ingresar', 'la sesión sobrevive a la recarga');
 
+      // Cambiar la clave con la sesión abierta exige la actual.
+      const previous = user.password;
+      const changed = `Cambio${randomUUID().slice(0, 8)}5`;
+      await open(page, '#cuenta');
+      await page.fill('#current-password', 'NoEsLaActual9');
+      await page.fill('#new-password', changed);
+      await page.locator('form[data-form="password-update"] button[type="submit"]').click();
+      await expectToast(page, 'La contraseña actual no es correcta.');
+      await page.fill('#current-password', previous);
+      await page.fill('#new-password', changed);
+      await page.locator('form[data-form="password-update"] button[type="submit"]').click();
+      await expectToast(page, 'Contraseña actualizada.');
+      user.password = changed;
+
       // Misma persona, segunda pestaña del mismo navegador.
       const second = await tab.context.newPage();
       await second.goto(`${page.url().split('#')[0]}#actividad`);
@@ -73,6 +95,15 @@ for (const engine of browsersToRun) {
       await second.getByRole('button', { name: /Cerrar sesión/ }).click();
       await ready(second);
       await page.waitForFunction(() => document.querySelector('#account-link')?.textContent === 'Ingresar', null, { timeout: 15000 });
+
+      // La clave anterior ya no entra; la nueva sí.
+      await open(page, '#cuenta');
+      await page.fill('#signin-email', user.email);
+      await page.fill('#signin-password', previous);
+      await page.locator('#toast').evaluate(element => { element.hidden = true; });
+      await page.locator('form[data-form="sign-in"] button[type="submit"]').click();
+      assert.equal(await toastText(page), 'Correo o contraseña incorrectos.');
+      await signIn(page, user);
       assert.deepEqual(tab.problems, []);
     } finally { await browser.close(); }
   });
