@@ -1,14 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  TAXI_STATUSES,
-  TAXI_STATUS_LABELS,
-  canTransitionTaxi,
-  validateTaxiTransition,
-  isTaxiCancelable,
-  isTaxiActive,
-  getDriverNextAction,
-  getPassengerTimelineIndex,
+  TAXI_STATUSES, TAXI_STATUS_LABELS, canTransitionTaxi, validateTaxiTransition, isTaxiCancelable, getDriverNextAction, getPassengerTimelineIndex,
 } from '../js/core/taxi-workflow.js';
 
 test('estados de taxi definen exactamente los 11 estados requeridos', () => {

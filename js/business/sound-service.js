@@ -2,6 +2,7 @@
 // Reciclado y adaptado de La Taba (business-sound-service.js).
 // Cumple con CSP (sin red, sin archivos externos, sintetizador armónico nativo).
 
+/** @param {{ audioContextFactory?: () => any }} [options] */
 export function createBusinessSoundService({ audioContextFactory } = {}) {
   let muted = false;
   let context = null;

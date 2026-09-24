@@ -6,6 +6,7 @@
 //
 //   npm run smoke:production
 //   CAUCE_SITE_URL=https://bitflowapp.github.io/cauce npm run smoke:production
+//   node tests/production-smoke.mjs --predeploy   → antes de publicar: todo menos el sitio
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import { REQUIRED_SCHEMA } from '../js/core/contract.js';
 
@@ -13,6 +14,9 @@ const project = JSON.parse(await readFile(new URL('../supabase/project.json', im
 const url = process.env.CAUCE_SUPABASE_URL || project.url;
 const key = process.env.CAUCE_SUPABASE_PUBLISHABLE_KEY || project.publishableKey;
 const site = (process.env.CAUCE_SITE_URL || 'https://bitflowapp.github.io/cauce').replace(/\/+$/, '');
+// Antes del deploy el sitio todavía sirve la versión anterior: sólo se exige
+// que el backend esté listo para recibir este frontend.
+const predeploy = process.argv.includes('--predeploy');
 const headers = { apikey: key, 'Content-Type': 'application/json' };
 const results = [];
 const check = async (name, fn) => {
@@ -57,7 +61,7 @@ await check('compra sin cuenta habilitada en Auth', async () => {
   if (!settings.external?.anonymous_users) throw new Error('falta habilitar anonymous sign-ins (scripts/configure-auth.mjs)');
 });
 
-await check('sitio publicado sirve el build conectado', async () => {
+if (!predeploy) await check('sitio publicado sirve el build conectado', async () => {
   const response = await fetch(`${site}/index.html`);
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const html = await response.text();
@@ -70,7 +74,8 @@ await check('sitio publicado sirve el build conectado', async () => {
 });
 
 await mkdir('evidence', { recursive: true });
-await writeFile('evidence/production-smoke.json', JSON.stringify({ at: new Date().toISOString(), url, site, results }, null, 2));
+await writeFile(`evidence/production-smoke${predeploy ? '-predeploy' : ''}.json`,
+  JSON.stringify({ at: new Date().toISOString(), url, site, predeploy, results }, null, 2));
 const failed = results.filter(result => !result.ok).length;
 console.log(`\n${results.length - failed} de ${results.length} comprobaciones en verde.`);
 process.exitCode = failed ? 1 : 0;

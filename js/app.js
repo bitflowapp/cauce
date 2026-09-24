@@ -35,7 +35,7 @@ import { formatDeliveryCode } from './core/delivery-code.js';
 import { confirmedPrice, isCommerciallyPurchasable, knownStock } from './core/commercial.js';
 import { formatArgentinePhone } from './core/validators.js';
 
-const main = document.querySelector('#main');
+const main = /** @type {HTMLElement} */ (document.querySelector('#main'));
 
 const app = {
   repository: null,
@@ -62,8 +62,6 @@ const isConnected = () => app.repository?.environment === 'supabase';
 const actor = () => app.session?.actor || null;
 const isSignedIn = () => actor()?.kind === 'account';
 const hasRole = role => Boolean(actor()?.roles?.includes(role));
-// Sesión anónima de compra: tiene pedidos propios pero no es una cuenta.
-const isGuestSession = () => Boolean(actor()?.anonymous);
 // Verticales: en la demostración todo sigue encendido; en el entorno conectado
 // decide la base (app_status), para habilitar o apagar sin tocar código.
 const feature = name => !isConnected() || app.features?.[name] === true;
@@ -250,7 +248,7 @@ const go = hash => { location.hash = hash; };
 // ───────────────────────── utilidades de interfaz ─────────────────────────
 
 function toast(message, tone = 'info') {
-  const element = document.querySelector('#toast');
+  const element = /** @type {HTMLElement|null} */ (document.querySelector('#toast'));
   if (!element) return;
   clearTimeout(app.toastTimer);
   element.textContent = message;
@@ -338,7 +336,7 @@ function applyOfflineState() {
   // vista deshabilitó por otro motivo (carrito con productos no disponibles,
   // comercio cerrado, datos en revisión) sigue deshabilitado.
   for (const form of main.querySelectorAll(isConnected() ? 'form' : OPERATION_FORMS)) {
-    for (const submit of form.querySelectorAll('button[type="submit"]')) {
+    for (const submit of /** @type {NodeListOf<HTMLButtonElement>} */ (form.querySelectorAll('button[type="submit"]'))) {
       if (!app.online && !submit.disabled) {
         submit.disabled = true;
         submit.dataset.offlineDisabled = 'true';
@@ -367,7 +365,7 @@ function errorView(error) {
 function updateShell() {
   const { page } = route();
   const signedIn = isSignedIn();
-  const envChip = document.querySelector('#env-chip');
+  const envChip = /** @type {HTMLElement|null} */ (document.querySelector('#env-chip'));
   if (envChip) {
     // En la cabecera va la forma corta, para que entre a 360 px sin recortarse;
     // el pie lleva la frase completa y el detalle está en el título accesible.
@@ -382,7 +380,7 @@ function updateShell() {
   if (footerEnv && !isConnected()) {
     footerEnv.textContent = `${RUNTIME_ENV.label} · ${RUNTIME_ENV.description}`;
   }
-  for (const element of document.querySelectorAll('a[href="#taxi"], a[href="#taxista"]')) {
+  for (const element of /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('a[href="#taxi"], a[href="#taxista"]'))) {
     element.hidden = !feature('taxi');
   }
 
@@ -394,10 +392,10 @@ function updateShell() {
   }
 
   const cartCount = app.cartCount || 0;
-  const cartItem = document.querySelector('#bnav-carrito');
+  const cartItem = /** @type {HTMLElement|null} */ (document.querySelector('#bnav-carrito'));
   if (cartItem) {
     cartItem.hidden = cartCount === 0;
-    const badge = cartItem.querySelector('.bnav-badge');
+    const badge = /** @type {HTMLElement|null} */ (cartItem.querySelector('.bnav-badge'));
     if (badge) { badge.textContent = String(cartCount); badge.hidden = cartCount === 0; }
   }
 
@@ -2695,7 +2693,7 @@ const ACTIONS = {
   },
   async retry() { await render(); },
   'use-location'(element) {
-    const input = document.querySelector('#taxi-origin');
+    const input = /** @type {HTMLInputElement} */ (document.querySelector('#taxi-origin'));
     if (!navigator.geolocation) { toast('Este navegador no ofrece ubicación.', 'error'); return; }
     element.disabled = true;
     element.textContent = 'Buscando ubicación…';
@@ -3027,7 +3025,7 @@ function applyRouteMeta(page) {
   const title = ROUTE_TITLES[page] || 'CAUCE · Aluminé';
   setBaseTitle(title);
   if (!/^\(\d+\) Pedido nuevo · /.test(document.title) || page !== 'panel') document.title = title;
-  let robots = document.querySelector('meta[name="robots"]');
+  let robots = /** @type {HTMLMetaElement|null} */ (document.querySelector('meta[name="robots"]'));
   if (!robots) {
     robots = document.createElement('meta');
     robots.name = 'robots';
@@ -3101,7 +3099,7 @@ function syncLive(page, param) {
 
 // No se redibuja mientras la persona escribe: se perdería lo que tipeó.
 function isEditing() {
-  const active = document.activeElement;
+  const active = /** @type {HTMLInputElement|null} */ (document.activeElement);
   return Boolean(active && main?.contains(active) && /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName)
     && active.type !== 'button' && active.type !== 'submit');
 }
@@ -3171,7 +3169,7 @@ async function render({ focus = false } = {}) {
 
 function bindEvents() {
   document.addEventListener('click', event => {
-    const target = event.target.closest('[data-action]');
+    const target = /** @type {HTMLElement|null} */ (/** @type {HTMLElement} */ (event.target).closest('[data-action]'));
     if (!target) return;
     const handler = ACTIONS[target.dataset.action];
     if (!handler) return;
@@ -3181,11 +3179,11 @@ function bindEvents() {
   });
 
   document.addEventListener('submit', event => {
-    const form = event.target;
+    const form = /** @type {HTMLFormElement} */ (event.target);
     const handler = FORMS[form.dataset.form];
     if (!handler) return;
     event.preventDefault();
-    const submitter = event.submitter;
+    const submitter = /** @type {SubmitEvent} */ (event).submitter;
     const button = submitter || form.querySelector('button[type="submit"]');
     withBusy(button || form, () => handler(form, submitter));
   });
@@ -3193,13 +3191,15 @@ function bindEvents() {
   // La búsqueda se aplica al escribir, sin recargar la vista entera en cada tecla.
   let searchTimer;
   document.addEventListener('input', event => {
-    if (event.target.closest('form')?.dataset.form !== 'search') return;
+    const searchForm = /** @type {HTMLElement} */ (event.target).closest('form');
+    if (searchForm?.dataset.form !== 'search') return;
     clearTimeout(searchTimer);
-    searchTimer = setTimeout(() => FORMS.search(event.target.closest('form')), 220);
+    searchTimer = setTimeout(() => FORMS.search(searchForm), 220);
   });
 
   document.addEventListener('change', event => {
-    const form = event.target.closest('form');
+    const field = /** @type {HTMLInputElement} */ (event.target);
+    const form = field.closest('form');
     if (form?.dataset.form !== 'checkout') return;
     // Marcar la opción elegida sin volver a dibujar: no se pierde el foco.
     for (const choice of form.querySelectorAll('.choice')) {
@@ -3207,7 +3207,7 @@ function bindEvents() {
     }
     // Cambiar de modalidad sí cambia el formulario (dirección, zona) y el total,
     // así que se guarda lo escrito y se vuelve a dibujar la vista.
-    if (event.target.name === 'fulfillment') {
+    if (field.name === 'fulfillment') {
       const data = Object.fromEntries(new FormData(form));
       draft(`checkout:${form.dataset.business}`, {
         ...data,
@@ -3257,7 +3257,7 @@ function bindEvents() {
 function fatalView(title, message, { retry = true } = {}) {
   if (retry) {
     main.addEventListener('click', event => {
-      if (event.target.closest('[data-reload]')) location.reload();
+      if (/** @type {HTMLElement} */ (event.target).closest('[data-reload]')) location.reload();
     });
   }
   return `<section class="notice error" role="alert">

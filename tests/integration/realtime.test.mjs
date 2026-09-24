@@ -4,14 +4,15 @@ import assert from 'node:assert/strict';
 import { account, anonClient, makeAdmin, publishedBusiness, order, transition, ok, closeAll } from './harness.mjs';
 
 const people = {};
-let A, B;
+let A;
 const channels = [];
 
 before(async () => {
   for (const name of ['ownerA', 'ownerB', 'customerA', 'customerB', 'admin']) people[name] = await account(name);
   await makeAdmin(people.admin);
   A = await publishedBusiness(people.ownerA, people.admin, { name: 'Vivo' });
-  B = await publishedBusiness(people.ownerB, people.admin, { name: 'Otro' });
+  // B es un comercio real: escucha como comercio, no como cuenta sin rol.
+  await publishedBusiness(people.ownerB, people.admin, { name: 'Otro' });
 });
 // Cada canal abierto mantiene vivo un WebSocket: se cierran todos.
 after(async () => { await closeAll([...Object.values(people), ...channels]); });

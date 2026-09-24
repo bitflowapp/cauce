@@ -2,12 +2,7 @@ import { CauceError, requireValue, clone } from './errors.js';
 import { randomUuid } from './identifiers.js';
 import { validateCustomerName, isValidArgentinePhone, sanitizeText } from './validators.js';
 import {
-  TAXI_STATUSES,
-  TAXI_STATUS_LABELS,
-  validateTaxiTransition,
-  isTaxiCancelable,
-  isTaxiActive,
-  getDriverNextAction,
+  TAXI_STATUS_LABELS, validateTaxiTransition, isTaxiCancelable, isTaxiActive, getDriverNextAction,
 } from './taxi-workflow.js';
 
 export const TAXI_STORAGE_KEY = 'cauce:demo:taxi:v1';
@@ -29,7 +24,7 @@ export const ALUMINE_TAXI_LOCATIONS = Object.freeze([
   { id: 'puente', name: 'Acceso Puente Aluminé', address: 'Acceso a la localidad' },
 ]);
 
-export function estimateTaxiFare(origin, destination) {
+export function estimateTaxiFare(_origin, _destination) {
   // Prototipo: no se emiten cotizaciones ni distancias GPS simuladas sin validación real
   return {
     fareEstimated: 0,
@@ -63,7 +58,7 @@ export function getTaxiState(customStorage) {
   const storage = resolveStorage(customStorage);
   if (!storage) return initialTaxiState();
 
-  let raw = null;
+  let raw;
   try {
     raw = storage.getItem(TAXI_STORAGE_KEY);
   } catch {
@@ -123,8 +118,8 @@ export function createTaxiTrip(
     }
   }
 
-  const cleanOrigin = sanitizeText(origin, 120);
-  const cleanDest = sanitizeText(destination, 120);
+  const cleanOrigin = sanitizeText(origin, { maxLength: 120 });
+  const cleanDest = sanitizeText(destination, { maxLength: 120 });
   requireValue(
     cleanOrigin.length >= 3,
     'INVALID_ORIGIN',
@@ -136,7 +131,7 @@ export function createTaxiTrip(
     'Ingresá una dirección o lugar de destino válido en Aluminé.'
   );
 
-  const cleanName = sanitizeText(passengerName, 80);
+  const cleanName = sanitizeText(passengerName, { maxLength: 80 });
   const nameCheck = validateCustomerName(cleanName);
   requireValue(
     nameCheck.ok,
@@ -160,7 +155,7 @@ export function createTaxiTrip(
     status: 'requested',
     localityId: 'alumine',
     origin: cleanOrigin,
-    originNote: sanitizeText(originNote, 120),
+    originNote: sanitizeText(originNote, { maxLength: 120 }),
     destination: cleanDest,
     passenger: {
       name: cleanName,
@@ -299,6 +294,6 @@ export function resetTaxiState(storage = null) {
   if (s) {
     try {
       s.removeItem(TAXI_STORAGE_KEY);
-    } catch (_) {}
+    } catch (_) { /* almacenamiento bloqueado: se ignora */ }
   }
 }

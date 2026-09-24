@@ -107,6 +107,7 @@ function normalizeIsoDate(value, fallback = '') {
 
 function sanitizeCodeMeta(value, maxLength) {
   return String(value || '')
+    // eslint-disable-next-line no-control-regex -- se eliminan caracteres de control a propósito
     .replace(/[\u0000-\u001f\u007f]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()

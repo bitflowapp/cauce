@@ -1123,6 +1123,10 @@ export type Database = {
         Args: { decision: string; driver: string; note?: string }
         Returns: string
       }
+      set_business_hours: {
+        Args: { business: string; hours: Json }
+        Returns: number
+      }
       set_business_member_role: {
         Args: { business: string; member: string; member_role: string }
         Returns: string

@@ -2,8 +2,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   finiteCoordinate,
-  finiteLatitude,
-  finiteLongitude,
 } from '../js/core/geo-point.js';
 import {
   normalizeDeliveryLocation,

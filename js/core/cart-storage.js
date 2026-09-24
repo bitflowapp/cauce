@@ -39,7 +39,7 @@ export function mergeCartMutation(baseValue, localValue, remoteValue) {
 
 export function readScopedCart(storage, localityId, businessId, { now = Date.now() } = {}) {
   const key = buildScopedCartKey(localityId, businessId);
-  let raw = null;
+  let raw;
   try {
     raw = storage?.getItem(key) ?? null;
   } catch (_) {
@@ -48,7 +48,7 @@ export function readScopedCart(storage, localityId, businessId, { now = Date.now
 
   if (!raw) return sanitizeCartSnapshot({ localityId, businessId, lines: [] });
 
-  let parsed = null;
+  let parsed;
   try {
     parsed = JSON.parse(raw);
   } catch (_) {
@@ -58,13 +58,13 @@ export function readScopedCart(storage, localityId, businessId, { now = Date.now
   if (!parsed
     || Number(parsed.schemaVersion) !== CART_SCHEMA_VERSION
     || isExpired(parsed.savedAt, now)) {
-    try { storage?.removeItem(key); } catch (_) {}
+    try { storage?.removeItem(key); } catch (_) { /* almacenamiento bloqueado: se ignora */ }
     return sanitizeCartSnapshot({ localityId, businessId, lines: [] });
   }
 
   const snapshot = sanitizeCartSnapshot(parsed);
   if (!snapshot.lines.length) {
-    try { storage?.removeItem(key); } catch (_) {}
+    try { storage?.removeItem(key); } catch (_) { /* almacenamiento bloqueado: se ignora */ }
   }
   return snapshot;
 }
@@ -73,7 +73,7 @@ export function writeScopedCart(storage, localityId, businessId, value, { now = 
   const key = buildScopedCartKey(localityId, businessId);
   const snapshot = sanitizeCartSnapshot({ ...value, localityId, businessId });
   if (!snapshot.lines.length) {
-    try { storage?.removeItem(key); } catch (_) {}
+    try { storage?.removeItem(key); } catch (_) { /* almacenamiento bloqueado: se ignora */ }
     return true;
   }
   const payload = JSON.stringify({
@@ -93,7 +93,7 @@ function keptTimestamp(storage, key, snapshot, now) {
   try {
     const raw = storage?.getItem(key);
     if (raw) previous = JSON.parse(raw);
-  } catch (_) {}
+  } catch (_) { /* un carrito ilegible cuenta como nuevo */ }
   if (!previous || Number(previous.schemaVersion) !== CART_SCHEMA_VERSION) return now;
   const previousAt = Date.parse(String(previous.savedAt || ''));
   if (!Number.isFinite(previousAt) || isExpired(previous.savedAt, now)) return now;

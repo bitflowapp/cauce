@@ -6,7 +6,7 @@ import { createLocalRepository } from '../js/repositories/local-repository.js';
 import { calculateBusinessMetrics } from '../js/core/business-metrics.js';
 import { buildKitchenTicket } from '../js/core/kitchen-ticket.js';
 import { createBusinessSoundService } from '../js/business/sound-service.js';
-import { scopeOf } from '../js/core/scope.js';
+import {  } from '../js/core/scope.js';
 
 function setupRepo() {
   const values = new Map();

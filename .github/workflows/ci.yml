@@ -1,50 +1,98 @@
-name: Verificación de rama
+name: CI
 
-# Verifica cualquier rama que no sea main y los pull requests.
-# NO publica nada: el despliegue a GitHub Pages sigue siendo exclusivo de
-# .github/workflows/pages.yml, que corre sólo en main.
+# Corre en cada push (incluido main) y en cada pull request. No publica nada:
+# el despliegue es exclusivo de pages.yml. Ningún secreto de producción entra
+# acá: la integración y los E2E usan un stack Supabase local, efímero, dentro
+# del propio runner.
 on:
   push:
-    branches-ignore:
-      - main
+    branches: ['**']
   pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   verificar:
+    name: Lint, tipos, unitarias, SQL y builds
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - name: Clonar el repositorio
-        uses: actions/checkout@v4
-
-      - name: Preparar Node.js 22
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
-
+          cache: npm
+      - name: Instalación limpia desde el lockfile
+        run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Typecheck
+        run: npm run typecheck
       - name: Comprobaciones estáticas y compuertas
         run: npm run check
-
-      - name: Instalar dependencias de pruebas fijadas en lockfile
-        run: npm ci
-
-      - name: Pruebas de dominio, backend e interfaz
+      - name: Pruebas unitarias
         run: npm test
-
-      - name: Migraciones y aislamiento RLS en PostgreSQL embebido
+      - name: Migraciones y RLS en PostgreSQL embebido
         run: npm run test:db
-
-      - name: Compilación estática y paquete sin conexión
+      - name: Builds (demo, demo sin conexión y producción)
         run: |
           npm run build
           npm run build:offline
-          npm run build:supabase
+          npm run build:production
 
+  supabase:
+    name: Integración, seguridad y E2E contra Supabase
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Instalación limpia desde el lockfile
+        run: npm ci
+      - name: Stack Supabase local (Postgres, Auth, REST, Storage, Realtime, Mailpit) con las migraciones
+        run: npm run db:start
+      - name: Integración y seguridad (RLS, multi-comercio, pedidos, auth, storage, realtime)
+        run: npm run test:integration
+      - name: Navegadores Chromium y WebKit
+        run: npx playwright install --with-deps chromium webkit
+      - name: E2E en Chromium y WebKit
+        run: npm run e2e:local
+      - name: Guardar evidencia
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: evidencia-supabase-${{ github.sha }}
+          path: evidence/
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Apagar el stack
+        if: always()
+        run: npx supabase stop --no-backup
+
+  demo:
+    name: Demostración y backend de desarrollo
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Instalación limpia desde el lockfile
+        run: npm ci
+      - name: Build de la demostración
+        run: npm run build
       - name: Recorridos de navegador y auditoría visual
-        # Una regresión de navegador debe bloquear la verificación.
         env:
           CAUCE_CHROME_PATH: /usr/bin/google-chrome
         run: |
@@ -52,12 +100,11 @@ jobs:
           npm run e2e:demo
           npm run audit:visual
           npm run audit:visual:backend
-
-      - name: Guardar la evidencia de esta corrida
+      - name: Guardar evidencia
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: evidencia-${{ github.sha }}
+          name: evidencia-demo-${{ github.sha }}
           path: evidence/
           if-no-files-found: ignore
           retention-days: 14

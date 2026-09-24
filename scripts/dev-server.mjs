@@ -10,7 +10,7 @@
 // escucha en 127.0.0.1.
 import { createServer } from 'node:http';
 import { readFile, realpath, stat, mkdir, writeFile } from 'node:fs/promises';
-import { resolve, extname, sep, dirname } from 'node:path';
+import { resolve, extname, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { randomBytes, scryptSync, timingSafeEqual, createHash } from 'node:crypto';

@@ -1,4 +1,4 @@
-import { CauceError, requireValue } from './errors.js';
+import { requireValue } from './errors.js';
 
 export const TAXI_STATUSES = Object.freeze([
   'requested',

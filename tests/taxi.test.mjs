@@ -1,16 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  createTaxiTrip,
-  getActiveTaxiTrip,
-  getTaxiTripById,
-  listTaxiTrips,
-  advanceTaxiTrip,
-  cancelTaxiTrip,
-  resetTaxiState,
-  estimateTaxiFare,
-  TAXI_STORAGE_KEY,
-  DEFAULT_TAXI_DRIVER,
+  createTaxiTrip, getActiveTaxiTrip, getTaxiTripById, advanceTaxiTrip, cancelTaxiTrip, resetTaxiState, estimateTaxiFare, TAXI_STORAGE_KEY, DEFAULT_TAXI_DRIVER,
 } from '../js/core/taxi.js';
 
 function createMockStorage() {
@@ -62,6 +53,17 @@ test('creación de viaje de taxi valida campos requeridos', () => {
   );
 });
 
+test('creación de viaje de taxi recorta origen, destino y nota a su largo máximo', () => {
+  const storage = createMockStorage();
+  const long = 'Calle Cristian Joubert '.repeat(20);
+  const trip = createTaxiTrip(
+    { origin: long, destination: long, originNote: long, passengerName: 'Laura Gómez', passengerPhone: '2942 558899' },
+    { storage },
+  );
+  assert.equal(trip.origin.length, 120);
+  assert.equal(trip.destination.length, 120);
+  assert.equal(trip.originNote.length, 120);
+});
 test('circuito completo de taxi: creación, asignación, viaje y finalización', () => {
   const storage = createMockStorage();
   let time = 1000;

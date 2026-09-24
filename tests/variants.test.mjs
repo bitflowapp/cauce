@@ -5,7 +5,7 @@ import { createLocalRepository } from '../js/repositories/local-repository.js';
 import { initialState } from '../js/domain/state.js';
 import { normalizeVariants, MAX_PRODUCT_VARIANTS } from '../js/core/catalog-rules.js';
 import { changeQuantity, quoteCart, resolveVariant, lineUnitPrice } from '../js/core/cart.js';
-import { scopeOf } from '../js/core/scope.js';
+import {  } from '../js/core/scope.js';
 
 const code = expected => error => error.code === expected;
 

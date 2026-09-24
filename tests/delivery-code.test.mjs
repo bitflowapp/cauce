@@ -1,14 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  createDeliveryCode,
-  buildDeliveryCode,
-  normalizeDeliveryCode,
-  normalizeDeliveryCodeValue,
-  verifyDeliveryCodeValue,
-  formatDeliveryCode,
-  isDeliveryCodeConfirmed,
-  formatDeliveryCodeTime,
+  createDeliveryCode, buildDeliveryCode, verifyDeliveryCodeValue, formatDeliveryCode, isDeliveryCodeConfirmed, formatDeliveryCodeTime,
 } from '../js/core/delivery-code.js';
 
 test('createDeliveryCode genera exactamente 4 dígitos', () => {

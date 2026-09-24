@@ -134,7 +134,10 @@ export function toCauceError(error) {
 }
 
 // El SDK se inyecta sólo en el build conectado. La demo no incluye ningún SDK.
-export function createSupabaseRepository({ client, redirectTo, storage, onError = null } = {}) {
+/**
+ * @param {{ client: any, redirectTo?: string, storage?: Storage, onError?: ((error: CauceError) => void)|null }} options
+ */
+export function createSupabaseRepository({ client, redirectTo, storage, onError = null }) {
   requireValue(client?.auth && client?.from, 'SUPABASE_CONFIG_REQUIRED', 'Falta la conexión segura de CAUCE.');
   const store = storage || globalThis.localStorage;
   const fail = error => {
@@ -358,10 +361,13 @@ export function createSupabaseRepository({ client, redirectTo, storage, onError 
       }
     } catch { /* sin almacenamiento no hay carrito que adoptar */ }
   }
+  /** @typedef {{ businessId: string, localityId: string, version: number, lines: Array<{ productId: string, variantId: string|null, quantity: number }>, requestId?: string }} Cart */
+  /** @returns {Cart} */
   function readCart(ownerId, businessId) {
+    /** @type {Cart} */
     const base = { businessId, localityId: LOCALITY, version: 1, lines: [] };
     if (!ownerId) return base;
-    let parsed = null;
+    let parsed;
     try { parsed = JSON.parse(store?.getItem(cartKey(ownerId, businessId)) || 'null'); } catch { parsed = null; }
     if (!parsed || !Array.isArray(parsed.lines)) return base;
     const lines = parsed.lines
@@ -1142,6 +1148,7 @@ export function createSupabaseRepository({ client, redirectTo, storage, onError 
     // Sincronización en vivo: un canal acotado por comercio o por cuenta.
     // Nunca se escucha la tabla entera: el filtro viaja en la suscripción y el
     // servidor vuelve a aplicar RLS sobre cada fila antes de entregarla.
+    /** @param {any} scope @param {(payload: any) => void} handler @param {(status: string) => void} [onStatus] */
     watch(scope, handler, onStatus = () => {}) {
       const filters = {
         businessOrders: { table: 'orders', filter: `business_id=eq.${scope.businessId}` },

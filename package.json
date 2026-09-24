@@ -15,6 +15,8 @@
     "build:supabase": "node scripts/build-production.mjs",
     "preview": "node scripts/preview-server.mjs",
     "dev:supabase": "npm run build:local && npm run preview",
+    "lint": "eslint .",
+    "typecheck": "tsc -p jsconfig.json",
     "check": "node scripts/check.mjs",
     "test": "node --test tests/*.test.mjs",
     "test:db": "node --test tests/db/*.test.mjs",
@@ -31,15 +33,19 @@
     "e2e:demo": "node tests/e2e-demo.mjs",
     "audit:visual": "node tests/visual-audit.mjs",
     "audit:visual:backend": "node tests/visual-audit.mjs --backend",
-    "verify": "npm run check && npm test && npm run test:db && npm run build && npm run build:offline",
+    "verify": "npm run lint && npm run typecheck && npm run check && npm test && npm run test:db && npm run build && npm run build:offline && npm run build:production",
     "verify:full": "npm run verify && npm run e2e && npm run e2e:demo && npm run audit:visual && npm run audit:visual:backend"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.8",
+    "@eslint/js": "10.0.1",
     "esbuild": "0.28.2",
+    "eslint": "10.11.0",
+    "globals": "17.12.0",
     "playwright": "1.56.1",
     "postgres": "3.4.9",
-    "supabase": "2.117.0"
+    "supabase": "2.117.0",
+    "typescript": "7.0.2"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.116.0"

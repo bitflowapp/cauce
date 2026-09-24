@@ -3,10 +3,15 @@
 // foco al botón que lo abrió y nunca confirma por omisión.
 import { esc } from './format.js';
 
+/**
+ * @param {{ title: string, message?: string, label?: string, required?: boolean, confirmLabel?: string,
+ *   cancelLabel?: string, danger?: boolean, placeholder?: string, minLength?: number }} options
+ * @returns {Promise<string|null>}
+ */
 export function askReason({ title, message = '', label = 'Motivo', required = true, confirmLabel = 'Confirmar',
-  cancelLabel = 'Volver', danger = true, placeholder = '', minLength = 3 } = {}) {
+  cancelLabel = 'Volver', danger = true, placeholder = '', minLength = 3 }) {
   if (typeof document === 'undefined' || typeof HTMLDialogElement === 'undefined') return Promise.resolve(null);
-  const opener = document.activeElement;
+  const opener = /** @type {HTMLElement|null} */ (document.activeElement);
   const dialog = document.createElement('dialog');
   dialog.className = 'cauce-dialog';
   dialog.setAttribute('aria-labelledby', 'cauce-dialog-title');
@@ -38,7 +43,7 @@ export function askReason({ title, message = '', label = 'Motivo', required = tr
     };
     const form = dialog.querySelector('form');
     const field = dialog.querySelector('textarea');
-    const errorText = dialog.querySelector('.field-error');
+    const errorText = /** @type {HTMLElement} */ (dialog.querySelector('.field-error'));
     dialog.querySelector('[data-dialog-cancel]').addEventListener('click', () => finish(null));
     dialog.addEventListener('cancel', event => { event.preventDefault(); finish(null); });
     form.addEventListener('submit', event => {
@@ -54,10 +59,11 @@ export function askReason({ title, message = '', label = 'Motivo', required = tr
       finish(field ? reason : '');
     });
     dialog.showModal();
-    (field || dialog.querySelector('button[type="submit"]')).focus();
+    (field || /** @type {HTMLElement} */ (dialog.querySelector('button[type="submit"]'))).focus();
   });
 }
 
+/** @param {Parameters<typeof askReason>[0]} options */
 export function askConfirm(options) {
   return askReason({ ...options, label: '', required: false }).then(value => value !== null);
 }

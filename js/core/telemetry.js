@@ -3,6 +3,7 @@
 // correos ni teléfonos: todo texto pasa por `scrub` antes de salir.
 export const EVENT_KINDS = Object.freeze(['frontend_error', 'supabase_error', 'auth_error', 'order_failed', 'critical']);
 
+/** @type {Array<[RegExp, string]>} */
 const PATTERNS = [
   [/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, '[token]'],
   [/sb_(?:secret|publishable)_[A-Za-z0-9_-]+/g, '[token]'],
