@@ -1,12 +1,13 @@
 name: Deploy CAUCE a GitHub Pages
 
-# Qué se publica lo decide la variable del repositorio CAUCE_DEPLOY_TARGET:
-#   - sin definir o "demo": la demostración sin red (comportamiento anterior).
+# Qué se publica lo decide el archivo versionado .github/deploy-target
+# ("demo" o "production"); la variable del repositorio CAUCE_DEPLOY_TARGET, si
+# existe, tiene prioridad (sirve para volver a la demo sin commit).
+#   - "demo": la demostración sin red (comportamiento anterior).
 #   - "production": el build conectado a Supabase. Antes de publicar se exige
 #     que el proyecto remoto tenga el esquema que este frontend necesita; si
 #     faltan migraciones, no se publica nada.
-# Así, integrar a main nunca cambia el sitio por accidente: pasar a producción
-# es una decisión explícita (ver PRODUCTION_READINESS.md).
+# Pasar a producción es un commit revisable (ver PRODUCTION_READINESS.md).
 on:
   push:
     branches:
@@ -23,7 +24,6 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  TARGET: ${{ vars.CAUCE_DEPLOY_TARGET || 'demo' }}
   CAUCE_SITE_URL: ${{ vars.CAUCE_SITE_URL || 'https://bitflowapp.github.io/cauce' }}
 
 jobs:
@@ -32,8 +32,19 @@ jobs:
     timeout-minutes: 20
     outputs:
       folder: ${{ steps.pick.outputs.folder }}
+      target: ${{ steps.target.outputs.target }}
     steps:
       - uses: actions/checkout@v4
+      - name: Destino
+        id: target
+        env:
+          VAR_TARGET: ${{ vars.CAUCE_DEPLOY_TARGET }}
+        run: |
+          target="${VAR_TARGET:-$(tr -d '[:space:]' < .github/deploy-target 2>/dev/null)}"
+          case "$target" in demo|production) ;; *) target=demo ;; esac
+          echo "target=$target" >> "$GITHUB_OUTPUT"
+          echo "TARGET=$target" >> "$GITHUB_ENV"
+          echo "Destino: $target"
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -80,8 +91,8 @@ jobs:
   verificar-publicado:
     name: Verificación del sitio publicado
     runs-on: ubuntu-latest
-    needs: deploy
-    if: ${{ (vars.CAUCE_DEPLOY_TARGET || 'demo') == 'production' }}
+    needs: [build, deploy]
+    if: needs.build.outputs.target == 'production'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

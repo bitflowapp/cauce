@@ -4,25 +4,30 @@
 
 ## Estado
 
-**NOT_READY para operar con comercios y clientes reales.** El código, el
-esquema y las pruebas están listos y verificados contra un stack Supabase
-completo; lo que falta está **fuera del repositorio** y requiere credenciales
-que este trabajo no tuvo (ni debía tener):
+**NOT_READY.** El código, el esquema y las pruebas están listos (CI verde en
+el PR #3). Cada paso sobre el proyecto real quedó **automatizado y ensayado**
+contra Supabase local; lo único que falta para ejecutarlos es que existan los
+secretos, que este entorno no tiene ni puede crear:
 
-| # | Bloqueante | Estado real verificado | Quién lo resuelve |
-| --- | --- | --- | --- |
-| B1 | La migración `20260924120000_production_hardening` no está aplicada en el proyecto real. | `app_status` no existe en `ygqbcvxdrewcnzedfcyo` (`npm run smoke:production`). | Operador con `SUPABASE_ACCESS_TOKEN` y la contraseña de la base (§3.1). |
-| B2 | Auth del proyecto real: sin SMTP propio, compra sin cuenta (anonymous sign-ins) deshabilitada y `site_url` apuntando al preview local. | `/auth/v1/settings`: `anonymous_users: false`; sin SMTP. | Operador con cuenta SMTP y dominio verificado (§3.2). |
-| B3 | La recuperación de contraseña no está verificada de punta a punta **en producción**. | Verificada con correo real (Mailpit) en el stack local y en la E2E, no con una casilla real. | Operador, después de B2 (§3.3). |
-| B4 | El sitio publicado sigue siendo la demostración. | `https://bitflowapp.github.io/cauce/` sirve `connect-src 'none'`. | Operador: variable `CAUCE_DEPLOY_TARGET=production` (§3.6), sólo después de B1–B3. |
-| B5 | No existe ninguna cuenta administradora real. | Las pruebas crean una sintética en el stack local. | Operador (§3.4). |
-| B6 | Backups del proyecto real sin verificar y sin simulacro de restauración. | No hubo acceso al dashboard desde este trabajo. | Operador, antes del primer pedido real (§6). |
+| # | Gate | Qué ejecuta la operación | Ensayo | Falta |
+| --- | --- | --- | --- | --- |
+| B1 | Migración `20260924120000` en el proyecto real | `migrar`: historial, dry-run (sólo esa migración o STOP), **ensayo sobre una copia de los datos reales**, push, sincronización y smoke | `scripts/ensayo-migracion.mjs` sobre un Supabase con sólo las 8 migraciones de producción y datos de esa versión: PASS | `SUPABASE_ACCESS_TOKEN` |
+| B2 | Auth real | `auth`: `site_url`/retornos del sitio real sin localhost, compra sin cuenta, confirmación obligatoria, SMTP, plantillas, verificación | — (configura el proyecto real) | `SUPABASE_ACCESS_TOKEN` + SMTP |
+| B3 | SMTP, confirmación y recuperación reales | `correo`: alta → correo real → enlace en otro dispositivo → ingreso; recuperación → correo real → contraseña nueva → la vieja rechazada → enlace no reutilizable; borra la cuenta | Stack local con Mailpit: 15/15 | SMTP con dominio verificado |
+| B4 | Deploy de producción | commit de `.github/deploy-target` = `production` + integrar el PR; Pages exige el esquema antes de publicar | — | B1–B3 |
+| B5 | Administración real | `admin`: invitación por correo (la persona elige su contraseña; sin contraseñas temporales) y privilegio en `private.platform_admins` | local: existente, invitación y correo malicioso rechazado | correo de la persona + B3 |
+| B6 | Backup y restauración | `backup`: backups de Supabase (API), dump sin sesiones ni tokens, restauración en un stack nuevo con las migraciones, conteos, RLS, contrato, API, desvío de esquema, copia cifrada AES-256; semanal | local: 12/12 | `SUPABASE_ACCESS_TOKEN` + `CAUCE_BACKUP_PASSPHRASE` |
+| — | Smoke post-deploy | `smoke-publicado`: comercios CAUCE QA, compra sin cuenta y con cuenta, retiro y envío, titular/encargado/equipo, seguridad, 320–1440 px, Chromium y WebKit; borra los datos QA | local: ver §1 | B4 |
 
-Integrar esta rama a `main` **no publica el build conectado**: el workflow de
-Pages vuelve a publicar la demostración (con este código, sin red) hasta que la
-variable del repositorio diga lo contrario, y aun así se niega a publicar si el
-esquema remoto no es compatible. Pasar a producción es una decisión explícita,
-después de cerrar B1–B6.
+Estado real del proyecto (24/09/2026, smoke de sólo lectura y workflow de
+operación): sin `app_status` (migración pendiente), compra sin cuenta
+deshabilitada, sitio publicado = demostración, y **ningún secreto cargado en
+GitHub** (`✘` en los cinco).
+
+Integrar esta rama a `main` **no publica el build conectado** mientras
+`.github/deploy-target` diga `demo`: Pages vuelve a publicar la demostración
+(con este código, sin red). Y aun con `production`, se niega a publicar si el
+esquema remoto no es compatible.
 
 ## 1. Compuertas y cómo se verifican
 
@@ -44,6 +49,18 @@ local efímero dentro del runner.
 | Smoke de producción | `npm run smoke:production` | sólo lectura contra el proyecto y el sitio reales | 2/5 (B1, B2, B4) |
 
 `npm run verify` agrupa lint, tipos, compuertas, unitarias, SQL y builds.
+
+Ensayos de la operación del proyecto real (no corren en CI: levantan stacks
+Supabase temporales y tardan varios minutos):
+
+| Ensayo | Comando | Resultado |
+| --- | --- | --- |
+| B1 de punta a punta sobre Supabase real con sólo las 8 migraciones de producción y datos de esa versión | `node scripts/ensayo-migracion.mjs` | PASS: migró con el mismo comando que en producción, filas intactas, contrato publicado por la API, pedidos en curso operables |
+| Paso `migrar`: al día, pendiente exacta y divergencia simulada | `node scripts/operacion.mjs migrar --local` | PASS · PASS · STOP como corresponde |
+| Paso `correo` (confirmación y recuperación) | `node scripts/operacion.mjs correo --local` | 15/15 |
+| Paso `admin` (existente, invitación, correo malicioso) | `node scripts/operacion.mjs admin --local …` | PASS · PASS · rechazado |
+| Paso `backup` con restauración | `CAUCE_BACKUP_PASSPHRASE=… node scripts/operacion.mjs backup --local` | 12/12, esquema idéntico a las migraciones |
+| Smoke post-deploy | `CAUCE_SMOKE_LOCAL=1 npm run smoke:publicado` | ver abajo |
 
 ### Qué cubren las pruebas de seguridad (contra el stack real)
 
@@ -114,78 +131,64 @@ Supabase ygqbcvxdrewcnzedfcyo (sa-east-1)
   recibe la versión nueva; nunca cachea respuestas de Supabase ni URLs con
   parámetros (los enlaces de recuperación no quedan guardados).
 
-## 3. Pasos del operador para pasar a producción
+## 3. Cómo se pasa a producción
 
-Hacerlos en este orden. Ningún paso requiere guardar un secreto en el
-repositorio: los tokens se exportan en la terminal y se descartan.
+### 3.1 Secretos (lo único manual)
 
-### 3.1 Aplicar la migración (B1)
+GitHub → repositorio `bitflowapp/cauce` → **Settings → Secrets and variables →
+Actions → New repository secret**. Nunca se pegan en un chat, un issue ni un
+archivo del repositorio.
 
-```bash
-export SUPABASE_ACCESS_TOKEN=...            # token personal; no se guarda
-npx supabase link --project-ref ygqbcvxdrewcnzedfcyo   # pide la contraseña de la base
-npx supabase migration list                 # 20260924120000 debe figurar sólo en "Local"
-npx supabase db push --dry-run              # revisar que sea sólo esa migración
-npx supabase db push
-node tests/production-smoke.mjs --predeploy # "esquema remoto compatible" en verde
-```
+| Secreto | Dónde se obtiene | Para |
+| --- | --- | --- |
+| `SUPABASE_ACCESS_TOKEN` | supabase.com → avatar → **Account preferences → Access Tokens → Generate new token** (nombre: `cauce-operacion`). Se muestra una sola vez. | B1, B2, B5, B6 y el smoke |
+| `SUPABASE_DB_PASSWORD` (recomendado) | Dashboard del proyecto `ygqbcvxdrewcnzedfcyo` → **Project Settings → Database → Database password** (si no se conoce: *Reset database password*; la app no la usa). Sin ella la CLI pide una credencial temporal a la API. | B1, B6 |
+| `CAUCE_SMTP_PASS` | resend.com → **Domains → Add domain** (un dominio propio; cargar en el DNS los registros SPF, DKIM y MX que muestra y esperar *Verified*) → **API Keys → Create API key** (permiso *Sending access*, ese dominio). Empieza con `re_`. | B2, B3 |
+| `CAUCE_SMTP_SENDER` | Remitente del dominio verificado, por ejemplo `CAUCE Aluminé <hola@el-dominio>` | B2, B3 |
+| `CAUCE_BACKUP_PASSPHRASE` | Frase larga (16+ caracteres) generada por quien opera y guardada también **fuera** de GitHub: sin ella no se pueden abrir las copias cifradas. | B6 |
+
+Con otro proveedor SMTP se cargan además `CAUCE_SMTP_HOST`, `CAUCE_SMTP_PORT`
+y `CAUCE_SMTP_USER`. Si se usa el ambiente `produccion` de GitHub con
+revisores obligatorios, cada paso espera esa aprobación.
+
+### 3.2 Pedidos de operación, en orden
+
+Cada paso se pide con un commit que cambia `ops/solicitud.json` (ver
+`ops/README.md`) o a mano desde **Actions → Operación de producción → Run
+workflow**. Sin `"aplicar": true` y `"confirmar": "ygqbcvxdrewcnzedfcyo"`,
+ningún paso escribe. La evidencia (sin secretos) queda como artefacto del run.
+
+1. `estado` — qué hay hoy: proyecto, plan, migraciones, Auth, backups, smoke público.
+2. `backup` — **antes de migrar**: backups de Supabase + restauración de prueba
+   + copia cifrada (B6).
+3. `migrar` — dry-run; después `aplicar` (ensaya sobre una copia de los datos y
+   recién ahí migra) (B1).
+4. `auth` con `aplicar` — URLs del sitio real, compra sin cuenta, SMTP (B2).
+5. `correo` — confirmación y recuperación con entrega real (B3).
+6. `admin` con `email`, `invitar` y `aplicar` — la persona acepta la invitación
+   y elige su contraseña; después `admin` con `aplicar` otorga el privilegio (B5).
+7. Commit `.github/deploy-target` → `production`, CI verde, integrar el PR:
+   Pages exige el esquema y publica el build conectado (B4).
+8. `smoke-publicado` — smoke obligatorio sobre el sitio publicado.
+
+Lo mismo desde una terminal: `SUPABASE_ACCESS_TOKEN=… node scripts/operacion.mjs <paso> [--aplicar]`
+y `npm run smoke:publicado`.
+
+### 3.3 Notas de la migración (B1)
 
 - `db push` aplica **sólo migraciones**; nunca ejecutar `supabase config push`
   desde la raíz (el `supabase/config.toml` es del stack local). Los ajustes
   intencionales del proyecto remoto están en `supabase/remote/supabase/config.toml`.
 - La migración es aditiva: agrega columnas con valores por defecto, tablas y
   funciones; reemplaza `create_order` (el frontend conectado nunca se
-  publicó, así que no hay clientes con la firma vieja). Está probada **sobre datos existentes** (`tests/db/upgrade.test.mjs`):
-  comercio publicado, pedidos en todos los estados, historial y stock se
-  conservan, y los pedidos en curso siguen su ciclo con las reglas nuevas.
-- Antes de aplicarla, verificar que haya un backup reciente (§6).
-- Si el proyecto tiene residuos de QA de corridas anteriores (cuentas
-  `cauce-qa-…@example.com`), se limpian antes de abrir al público con
-  `node scripts/clean-qa-residue.mjs` (sin `--apply` sólo lista; requiere la
-  CLI autenticada y nunca toca cuentas que no sigan ese patrón).
+  publicó, así que no hay clientes con la firma vieja). Está probada sobre
+  datos existentes en PGlite (`tests/db/upgrade.test.mjs`) y en Supabase real
+  (`scripts/ensayo-migracion.mjs`), y el paso `migrar` la ensaya además sobre
+  una copia de los datos de producción antes de aplicarla.
+- Residuos de QA de corridas anteriores (cuentas `cauce-qa-…@example.com`):
+  `node scripts/clean-qa-residue.mjs` (sin `--apply` sólo lista).
 
-### 3.2 Configurar Auth y correo (B2)
-
-Hace falta un proveedor SMTP con **dominio propio verificado** (SPF y DKIM);
-sin dominio, los proveedores sólo entregan a la casilla de la propia cuenta.
-Ejemplo con Resend (cualquier SMTP sirve):
-
-```bash
-export SUPABASE_ACCESS_TOKEN=...
-export CAUCE_SITE_URL=https://bitflowapp.github.io/cauce
-export CAUCE_SMTP_HOST=smtp.resend.com CAUCE_SMTP_PORT=465 CAUCE_SMTP_USER=resend
-export CAUCE_SMTP_PASS=...                  # API key del proveedor; no se guarda
-export CAUCE_SMTP_SENDER="CAUCE Aluminé <hola@dominio-verificado>"
-node scripts/configure-auth.mjs             # muestra qué cambiaría, sin aplicar
-node scripts/configure-auth.mjs --apply     # aplica y muestra el estado real
-```
-
-Aplica: plantillas en castellano con `token_hash` (el enlace funciona aunque se
-abra en otro dispositivo), `site_url` y URLs permitidas sin comodines, compra
-sin cuenta (anonymous sign-ins) con tope por IP de 150/h, confirmación de
-correo obligatoria y SMTP con tope de 30 correos/h. El script nunca imprime la
-contraseña ni el token. Verificar después: `npm run smoke:production` debe
-mostrar "compra sin cuenta habilitada" en verde.
-
-Además, en el dashboard de Supabase (Authentication → Attack Protection):
-habilitar CAPTCHA para registro y sesiones anónimas si aparece abuso (requiere
-agregar el widget en la app; hoy no está).
-
-### 3.3 Verificar la recuperación de contraseña real (B3)
-
-Con una casilla real (no del equipo de Supabase), desde un teléfono:
-
-1. Registrarse en el sitio → llega el correo de confirmación (revisar spam y
-   remitente) → abrir el enlace **en el teléfono**, no en la computadora →
-   la cuenta queda confirmada.
-2. Cerrar sesión → "¿Olvidaste tu contraseña?" → llega el correo → el enlace
-   abre `#recuperar` → nueva contraseña → ingresar con ella.
-3. Abrir el mismo enlace otra vez → la app dice que venció o ya se usó.
-4. Ingresar con la contraseña vieja → rechazado.
-
-Hasta completar esto, `PASSWORD_RESET` no está verificado en producción.
-
-### 3.4 Cuenta administradora (B5)
+### 3.4 Cuenta administradora a mano (alternativa a `admin`)
 
 La persona crea su cuenta desde el sitio y confirma el correo. Después, en el
 SQL editor del proyecto:
@@ -205,19 +208,18 @@ Supabase" y "Demostración y backend de desarrollo") antes de integrar.
 
 ### 3.6 Publicar (B4)
 
-1. GitHub → Settings → Secrets and variables → Actions → **Variables**:
-   `CAUCE_DEPLOY_TARGET = production` (y `CAUCE_SITE_URL` si cambia el dominio).
-   No hace falta ningún secreto: el build sólo usa la publishable key.
-2. Actions → "Deploy CAUCE a GitHub Pages" → Run workflow sobre `main`.
-   El workflow corre las compuertas, exige esquema compatible
-   (`--predeploy`), construye `dist-production/`, publica y corre el smoke
-   contra el sitio publicado.
-3. `npm run smoke:production` en una terminal: 5 de 5 en verde.
+Pasar a producción es un commit: `.github/deploy-target` con `production`.
+La variable del repositorio `CAUCE_DEPLOY_TARGET`, si existe, tiene prioridad
+(sirve para volver a `demo` sin commit). Al integrar a `main`, "Deploy CAUCE a
+GitHub Pages" corre las compuertas, exige el esquema (`--predeploy`), construye
+`dist-production/`, publica y verifica el sitio. Después, el paso
+`smoke-publicado` hace el recorrido completo con navegadores reales.
 
 ### 3.7 Rollback
 
-- **Frontend:** revertir el commit en `main` (se republica solo) o volver la
-  variable a `demo` y relanzar el workflow. El service worker versionado hace
+- **Frontend:** revertir el commit en `main` (se republica solo), o
+  `.github/deploy-target` → `demo` (o la variable del repositorio
+  `CAUCE_DEPLOY_TARGET=demo` y relanzar el workflow). El service worker versionado hace
   que las visitas tomen la versión publicada en la siguiente carga.
 - **Base de datos:** las migraciones son hacia adelante. Si una migración
   futura sale mal, se corrige con otra migración. Restaurar un backup (§6)
@@ -289,27 +291,27 @@ final en pesos, foto si tiene, y si controla stock o sólo marca "agotado".
   lectura todos los días cuando `CAUCE_DEPLOY_TARGET=production`; un fallo
   queda en rojo en Actions.
 
-## 6. Backups y restauración (estado real)
+## 6. Backups y restauración
 
-- **No verificado desde este trabajo** (no hubo acceso al dashboard). Según
-  la documentación de Supabase, el plan Pro (el de la organización) incluye
-  backups diarios con 7 días de retención; PITR es un complemento pago cuya
-  activación no está confirmada.
-- **Qué hacer antes de abrir:** en Database → Backups, confirmar que existan
-  backups diarios recientes; hacer **un simulacro de restauración** a un
-  proyecto nuevo y correr `node tests/production-smoke.mjs --predeploy`
-  contra él (`CAUCE_SUPABASE_URL`, `CAUCE_SUPABASE_PUBLISHABLE_KEY`).
-- **Copia lógica propia (recomendado semanal):**
-
-  ```bash
-  npx supabase db dump --linked -f cauce-schema.sql
-  npx supabase db dump --linked --data-only -f cauce-data.sql
-  ```
-
-  Guardarla fuera del repositorio y cifrada: contiene datos personales.
+- **Lo que ofrece Supabase no está verificado todavía**: el paso `backup`
+  lo consulta por la API (backups completos, último, PITR y plan) y lo
+  informa como `BACKUP_AVAILABLE`, `BACKUP_FREQUENCY` y `BACKUP_RETENTION`.
+  Según la documentación de Supabase, el plan Pro incluye backups diarios con
+  7 días de retención; PITR es un complemento pago.
+- **Backup propio, semanal y automático** (workflow "Operación de
+  producción", lunes 03:30 en Aluminé, una vez cargados los secretos): dump
+  de esquema y datos **sin sesiones ni tokens**, restauración de prueba en un
+  stack nuevo construido con las migraciones del repo (así vuelven también
+  las políticas de Storage, que el dump de esquema no incluye), verificación
+  de conteos, RLS, contrato, API y desvío de esquema, y copia cifrada con
+  AES-256 (`CAUCE_BACKUP_PASSPHRASE`) guardada 30 días como artefacto.
+- **Restaurar de verdad** (desastre): descargar el artefacto, descifrar con
+  `gpg --decrypt`, crear un proyecto nuevo, `supabase db push` con las
+  migraciones del repo y cargar `data.sql` como `supabase_admin`
+  (`psql -v ON_ERROR_STOP=1 -f data.sql`), igual que hace la prueba.
 - **Storage no entra en los backups de la base.** Las imágenes de
-  `business-media` se pueden volver a subir desde el panel; si se quiere
-  copia, descargarlas con la API de Storage.
+  `business-media` se vuelven a subir desde el panel; si se quiere copia,
+  descargarlas con la API de Storage.
 
 ## 7. Secretos
 

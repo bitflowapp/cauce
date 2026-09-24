@@ -322,6 +322,8 @@ try {
 } catch (error) {
   if (error instanceof MissingCredential) {
     list.fail('credenciales', `${error.message} Cargarla como secreto del repositorio (ver PRODUCTION_READINESS.md §3).`);
+    // Sin token igual se puede mirar lo público, como cualquier visita.
+    if (step === 'estado') await publicSmoke({ url: PROJECT.url, publishableKey: PROJECT.publishableKey }, list).catch(() => {});
   } else {
     list.fail('ejecución', redact(error?.stack || error?.message || String(error)).split('\n').slice(0, 4).join(' | '));
   }
