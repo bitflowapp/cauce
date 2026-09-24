@@ -16,6 +16,10 @@ async function as(name, sql, params = []) {
   return db.transaction(async tx => {
     await tx.exec(`set local role ${name === 'anon' ? 'anon' : 'authenticated'}`);
     await tx.query("select set_config('request.jwt.claim.sub', $1, true)", [ids[name] || '']);
+    // Igual que PostgREST: los claims completos del JWT, con is_anonymous.
+    await tx.query("select set_config('request.jwt.claims', $1, true)", [ids[name]
+      ? JSON.stringify({ sub: ids[name], role: 'authenticated', is_anonymous: name.startsWith('guest') })
+      : '']);
     return tx.query(sql, params);
   });
 }
@@ -26,9 +30,13 @@ before(async () => {
     create role anon nologin;
     create role authenticated nologin;
     create schema auth;
-    create table auth.users (id uuid primary key, raw_user_meta_data jsonb default '{}');
+    create table auth.users (id uuid primary key, email text, is_anonymous boolean not null default false,
+      deleted_at timestamptz, raw_user_meta_data jsonb default '{}');
     create function auth.uid() returns uuid language sql stable as
       $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
+    create function auth.jwt() returns jsonb language sql stable as
+      $$ select coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb $$;
+    grant execute on function auth.jwt() to anon, authenticated;
     grant usage on schema auth to anon, authenticated;
     grant usage on schema public to anon, authenticated;
     grant execute on function auth.uid() to anon, authenticated;
@@ -52,7 +60,7 @@ before(async () => {
     await db.exec(await readFile(new URL(file, dir), 'utf8'));
   }
   for (const [name, id] of Object.entries(ids)) {
-    await db.query('insert into auth.users (id) values ($1)', [id]);
+    await db.query('insert into auth.users (id, email) values ($1, $2)', [id, `${name.toLowerCase()}@cauce.test`]);
     await as(name, 'insert into public.profiles (user_id, display_name) values ($1, $2)', [id, `Synthetic ${name}`]);
   }
   await db.query('insert into private.platform_admins (user_id) values ($1)', [ids.admin]);
@@ -152,7 +160,7 @@ let categoryA, productA, productB;
 test('owner builds a catalog; the neighbouring business cannot read or touch it', async () => {
   categoryA = rows(await as('merchantA', "insert into public.product_categories(business_id,name) values ($1,'Panificados') returning id", [businessA]))[0].id;
   productA = rows(await as('merchantA',
-    "insert into public.products(business_id,category_id,name,price_ars,stock) values ($1,$2,'Pan casero',1800,10) returning id",
+    "insert into public.products(business_id,category_id,name,price_ars,stock,track_stock) values ($1,$2,'Pan casero',1800,10,true) returning id",
     [businessA, categoryA]))[0].id;
   productB = rows(await as('merchantB',
     "insert into public.products(business_id,name,price_ars,stock) values ($1,'Producto B',2500,5) returning id", [businessB]))[0].id;
@@ -221,6 +229,10 @@ test('publication requires a complete application and is decided only by adminis
   await assert.rejects(as('merchantA', 'select public.submit_business_for_review($1)', [businessA]), error => error.code === '23514');
   await as('merchantA', `update public.businesses set address='Ruta 23', hours_label='9 a 13 y 17 a 21',
     category_id=(select id from public.business_categories where slug='panaderia') where id=$1`, [businessA]);
+  // Sin un canal de contacto para clientes todavía no se puede publicar.
+  assert.deepEqual(rows(await as('merchantA', 'select public.business_missing_requirements($1) as missing', [businessA]))[0].missing,
+    ['Teléfono o WhatsApp para clientes']);
+  await as('merchantA', "update public.businesses set whatsapp='2942 555000' where id=$1", [businessA]);
   assert.deepEqual(rows(await as('merchantA', 'select public.business_missing_requirements($1) as missing', [businessA]))[0].missing, []);
   await denied(as('customerA', 'select public.submit_business_for_review($1)', [businessA]));
   assert.equal(rows(await as('merchantA', 'select public.submit_business_for_review($1) as status', [businessA]))[0].status, 'pending_review');
@@ -415,6 +427,14 @@ test('delivery assigns only riders of the same business and cancelling returns s
   assert.equal(rows(await as('customerA', 'select stock from public.products where id=$1', [productA]))[0].stock, 7);
 });
 
+test('taxi is switched off by default and its logic survives for a later stage', async () => {
+  await denied(as('driverA', "select public.apply_as_driver('Conductor Sintético A','Móvil 1','Auto','AAA111','2942000333')"));
+  await denied(as('customerA', "select public.request_trip('Ruta 23','Hospital','',1,'Vecina Sintética','2942000111')"));
+  assert.deepEqual(rows(await as('driverA', 'select * from public.driver_offers()')), []);
+  // Habilitar la vertical es una decisión de operación, no de código.
+  await db.query("update private.platform_features set enabled = true where key = 'taxi'");
+});
+
 test('a driver only exists after administration approves the application', async () => {
   await as('driverA', "select public.apply_as_driver('Conductor Sintético A','Móvil 1','Auto','AAA111','2942000333')");
   await as('driverB', "select public.apply_as_driver('Conductor Sintético B','Móvil 2','Auto','BBB222','2942000444')");
@@ -488,11 +508,14 @@ test('two lines of the same product neither oversell nor block an available sale
 });
 
 // ───────────────── auditoría del esquema construido ─────────────────
-test('no anonymous account can execute any CAUCE function', async () => {
+test('a visitor without session executes only the explicit public contract', async () => {
   const result = await db.query(`select n.nspname||'.'||p.proname as name
     from pg_proc p join pg_namespace n on n.oid=p.pronamespace
-    where n.nspname in ('public','private') and has_function_privilege('anon', p.oid, 'EXECUTE')`);
-  assert.deepEqual(result.rows, []);
+    where n.nspname in ('public','private') and has_function_privilege('anon', p.oid, 'EXECUTE') order by 1`);
+  assert.deepEqual(result.rows.map(row => row.name), [
+    'private.app_status', 'private.business_open_now', 'private.report_client_event', 'private.track_order',
+    'public.app_status', 'public.open_now', 'public.report_client_event', 'public.track_order',
+  ]);
 });
 test('every CAUCE function pins its search_path and stays out of public if privileged', async () => {
   const loose = await db.query(`select n.nspname||'.'||p.proname as name
@@ -520,7 +543,8 @@ test('no anonymous or authenticated account writes a table directly beyond its c
     where grantee='authenticated' and privilege_type in ('INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER')
       and table_schema in ('public','private') order by 1`);
   assert.deepEqual(writes.rows.map(row => row.grant_name), [
-    'business_riders DELETE', 'product_categories DELETE', 'product_variants DELETE', 'products DELETE',
+    'business_hours DELETE', 'business_riders DELETE', 'product_categories DELETE', 'product_variants DELETE',
+    'products DELETE',
   ]);
 });
 test('orders and trips accept no direct writes from any client role', async () => {

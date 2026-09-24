@@ -7,11 +7,6 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
-  __InternalSupabase: {
-    PostgrestVersion: "14.5"
-  }
   public: {
     Tables: {
       business_categories: {
@@ -68,6 +63,35 @@ export type Database = {
             foreignKeyName: "business_contacts_business_id_fkey"
             columns: ["business_id"]
             isOneToOne: true
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      business_hours: {
+        Row: {
+          business_id: string
+          closes: string
+          opens: string
+          weekday: number
+        }
+        Insert: {
+          business_id: string
+          closes: string
+          opens: string
+          weekday: number
+        }
+        Update: {
+          business_id?: string
+          closes?: string
+          opens?: string
+          weekday?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "business_hours_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
             referencedRelation: "businesses"
             referencedColumns: ["id"]
           },
@@ -186,6 +210,7 @@ export type Database = {
           created_at: string
           delivery_enabled: boolean
           delivery_fee_ars: number
+          delivery_minutes: number | null
           delivery_zone: string
           description: string
           hours_label: string
@@ -196,9 +221,13 @@ export type Database = {
           name: string
           open: boolean
           pickup_enabled: boolean
+          prep_minutes: number | null
+          public_phone: string
           slug: string
           status: string
           updated_at: string
+          whatsapp: string
+          open_now: boolean | null
         }
         Insert: {
           address?: string
@@ -207,6 +236,7 @@ export type Database = {
           created_at?: string
           delivery_enabled?: boolean
           delivery_fee_ars?: number
+          delivery_minutes?: number | null
           delivery_zone?: string
           description?: string
           hours_label?: string
@@ -217,9 +247,12 @@ export type Database = {
           name: string
           open?: boolean
           pickup_enabled?: boolean
+          prep_minutes?: number | null
+          public_phone?: string
           slug: string
           status?: string
           updated_at?: string
+          whatsapp?: string
         }
         Update: {
           address?: string
@@ -228,6 +261,7 @@ export type Database = {
           created_at?: string
           delivery_enabled?: boolean
           delivery_fee_ars?: number
+          delivery_minutes?: number | null
           delivery_zone?: string
           description?: string
           hours_label?: string
@@ -238,9 +272,12 @@ export type Database = {
           name?: string
           open?: boolean
           pickup_enabled?: boolean
+          prep_minutes?: number | null
+          public_phone?: string
           slug?: string
           status?: string
           updated_at?: string
+          whatsapp?: string
         }
         Relationships: [
           {
@@ -321,18 +358,21 @@ export type Database = {
           id: string
           name: string
           slug: string
+          timezone: string
         }
         Insert: {
           active?: boolean
           id?: string
           name: string
           slug: string
+          timezone?: string
         }
         Update: {
           active?: boolean
           id?: string
           name?: string
           slug?: string
+          timezone?: string
         }
         Relationships: []
       }
@@ -664,6 +704,7 @@ export type Database = {
           position: number
           price_ars: number
           stock: number
+          track_stock: boolean
           updated_at: string
         }
         Insert: {
@@ -681,6 +722,7 @@ export type Database = {
           position?: number
           price_ars: number
           stock?: number
+          track_stock?: boolean
           updated_at?: string
         }
         Update: {
@@ -698,6 +740,7 @@ export type Database = {
           position?: number
           price_ars?: number
           stock?: number
+          track_stock?: boolean
           updated_at?: string
         }
         Relationships: [
@@ -887,6 +930,21 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      add_business_member: {
+        Args: { business: string; member_email: string; member_role?: string }
+        Returns: string
+      }
+      admin_client_events: {
+        Args: { max_rows?: number }
+        Returns: {
+          code: string
+          created_at: string
+          kind: string
+          message: string
+          release: string
+          route: string
+        }[]
+      }
       admin_drivers: {
         Args: never
         Returns: {
@@ -911,6 +969,10 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      admin_set_business_status: {
+        Args: { business: string; next_status: string; note?: string }
+        Returns: string
+      }
       admin_snapshot: {
         Args: never
         Returns: Database["public"]["CompositeTypes"]["admin_overview"]
@@ -921,6 +983,7 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      app_status: { Args: never; Returns: Json }
       apply_as_driver: {
         Args: {
           display_name: string
@@ -955,6 +1018,16 @@ export type Database = {
         Args: { business: string }
         Returns: string[]
       }
+      business_team: {
+        Args: { business: string }
+        Returns: Database["public"]["CompositeTypes"]["team_member"][]
+        SetofOptions: {
+          from: "*"
+          to: "team_member"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       create_business: {
         Args: {
           business_name: string
@@ -967,6 +1040,7 @@ export type Database = {
         Args: {
           business: string
           contact: Json
+          expected_total?: number
           fulfillment: string
           idem: string
           items: Json
@@ -985,6 +1059,27 @@ export type Database = {
         }
       }
       my_access: { Args: never; Returns: boolean }
+      open_now: {
+        Args: { "": Database["public"]["Tables"]["businesses"]["Row"] }
+        Returns: {
+          error: true
+        } & "the function public.open_now with parameter or with a single unnamed json/jsonb parameter, but no matches were found in the schema cache"
+      }
+      remove_business_member: {
+        Args: { business: string; member: string }
+        Returns: boolean
+      }
+      report_client_event: {
+        Args: {
+          code?: string
+          context?: Json
+          kind: string
+          message?: string
+          release?: string
+          route?: string
+        }
+        Returns: boolean
+      }
       request_trip: {
         Args: {
           destination: string
@@ -1026,6 +1121,10 @@ export type Database = {
       }
       review_driver: {
         Args: { decision: string; driver: string; note?: string }
+        Returns: string
+      }
+      set_business_member_role: {
+        Args: { business: string; member: string; member_role: string }
         Returns: string
       }
       set_business_presence: {
@@ -1073,6 +1172,7 @@ export type Database = {
           position: number
           price_ars: number
           stock: number
+          track_stock: boolean
           updated_at: string
         }
         SetofOptions: {
@@ -1086,6 +1186,7 @@ export type Database = {
         Args: { business: string }
         Returns: string
       }
+      track_order: { Args: { token: string }; Returns: Json }
       transition_order: {
         Args: {
           expected_version?: number
@@ -1186,6 +1287,14 @@ export type Database = {
         vehicle: string | null
         plate: string | null
         phone: string | null
+      }
+      team_member: {
+        user_id: string | null
+        display_name: string | null
+        email: string | null
+        role: string | null
+        created_at: string | null
+        is_self: boolean | null
       }
       trip_offer: {
         id: string | null
@@ -1325,3 +1434,4 @@ export const Constants = {
     Enums: {},
   },
 } as const
+

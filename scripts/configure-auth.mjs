@@ -29,38 +29,33 @@ const apply = process.argv.includes('--apply');
 const endpoint = `https://api.supabase.com/v1/projects/${project.projectRef}/config/auth`;
 const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 
-const brand = body => `<div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:#0f172a;line-height:1.6">
-  <p style="font-size:18px;font-weight:700;color:#143d34;margin:0 0 12px">CAUCE · Aluminé</p>
-  ${body}
-  <p style="font-size:12px;color:#536b63;margin-top:24px">Si no pediste esto, podés ignorar este mensaje.
-  Nadie puede entrar a tu cuenta sólo por recibirlo.</p>
-</div>`;
-
-// Plantillas en castellano rioplatense, sin tecnicismos y sin exponer el token
-// fuera del enlace.
-const templates = {
-  mailer_subjects_confirmation: 'Confirmá tu correo en CAUCE',
-  mailer_templates_confirmation_content: brand(`
-  <p>Tocá el botón para confirmar este correo y terminar de crear tu cuenta.</p>
-  <p><a href="{{ .ConfirmationURL }}" style="display:inline-block;background:#143d34;color:#fff;padding:12px 20px;border-radius:10px;text-decoration:none;font-weight:600">Confirmar mi correo</a></p>
-  <p style="font-size:13px;color:#536b63">El enlace vence en una hora y se usa una sola vez.</p>`),
-  mailer_subjects_recovery: 'Recuperar tu contraseña de CAUCE',
-  mailer_templates_recovery_content: brand(`
-  <p>Pediste cambiar la contraseña de tu cuenta. Tocá el botón para elegir una nueva.</p>
-  <p><a href="{{ .ConfirmationURL }}" style="display:inline-block;background:#143d34;color:#fff;padding:12px 20px;border-radius:10px;text-decoration:none;font-weight:600">Elegir una contraseña nueva</a></p>
-  <p style="font-size:13px;color:#536b63">El enlace vence en una hora y se usa una sola vez.
-  Tu contraseña actual sigue funcionando hasta que elijas la nueva.</p>`),
-  mailer_subjects_email_change: 'Confirmá tu nuevo correo en CAUCE',
-  mailer_templates_email_change_content: brand(`
-  <p>Pediste usar {{ .NewEmail }} como correo de tu cuenta. Confirmalo para que el cambio tenga efecto.</p>
-  <p><a href="{{ .ConfirmationURL }}" style="display:inline-block;background:#143d34;color:#fff;padding:12px 20px;border-radius:10px;text-decoration:none;font-weight:600">Confirmar el nuevo correo</a></p>`),
-  mailer_subjects_magic_link: 'Tu enlace de acceso a CAUCE',
-  mailer_templates_magic_link_content: brand(`
-  <p>Tocá el botón para entrar a tu cuenta.</p>
-  <p><a href="{{ .ConfirmationURL }}" style="display:inline-block;background:#143d34;color:#fff;padding:12px 20px;border-radius:10px;text-decoration:none;font-weight:600">Entrar a CAUCE</a></p>`),
+// Las plantillas son las mismas que usa el stack local (supabase/templates):
+// una sola fuente. Los enlaces vuelven a la aplicación con token_hash, así que
+// funcionan aunque la persona abra el correo en otro navegador o dispositivo.
+const TEMPLATES = {
+  confirmation: 'Confirmá tu correo en CAUCE',
+  recovery: 'Recuperar tu contraseña de CAUCE',
+  email_change: 'Confirmá tu nuevo correo en CAUCE',
+  magic_link: 'Tu enlace de acceso a CAUCE',
+  invite: 'Te invitaron a CAUCE',
 };
+const templates = {};
+for (const [name, subject] of Object.entries(TEMPLATES)) {
+  const html = await readFile(new URL(`../supabase/templates/${name}.html`, import.meta.url), 'utf8');
+  if (!html.includes('{{ .TokenHash }}')) throw new Error(`La plantilla ${name} no usa token_hash.`);
+  templates[`mailer_subjects_${name}`] = subject;
+  templates[`mailer_templates_${name}_content`] = html;
+}
 
-const payload = { ...templates };
+const payload = {
+  ...templates,
+  // Compra sin cuenta: sesión anónima real, limitada por RLS a sus pedidos.
+  external_anonymous_users_enabled: true,
+  // Muchas personas comparten IP detrás de la red móvil: el tope por IP no
+  // puede ser el de pruebas (30/h) sin frenar compras legítimas.
+  rate_limit_anonymous_users: Number(process.env.CAUCE_ANONYMOUS_RATE_LIMIT || 150),
+  mailer_autoconfirm: false,
+};
 
 // URLs: el enlace del correo vuelve exactamente a donde se sirve la aplicación.
 const site = process.env.CAUCE_SITE_URL;
@@ -72,6 +67,8 @@ if (site) {
   const base = url.origin + url.pathname.replace(/\/$/, '');
   payload.site_url = base;
   payload.uri_allow_list = [`${base}/index.html`, `${base}/`].join(',');
+  // Sin comodines: el enlace de un correo sólo puede volver a CAUCE.
+  if (/[*?]/.test(payload.uri_allow_list)) throw new Error('La lista de URLs no admite comodines.');
 }
 
 // SMTP propio. Sin estas variables el proyecto sigue con el correo interno de
@@ -104,7 +101,7 @@ const visible = Object.fromEntries(Object.entries(payload)
   .filter(([key]) => !key.startsWith('mailer_templates_')));
 console.log(apply ? 'Aplicando a CAUCE:' : 'Cambios previstos (no se aplicó nada):');
 console.log(JSON.stringify(visible, null, 2));
-console.log(`Plantillas de correo: ${Object.keys(templates).filter(key => key.startsWith('mailer_templates_')).length} en castellano.`);
+console.log(`Plantillas de correo: ${Object.keys(templates).filter(key => key.startsWith('mailer_templates_')).length} en castellano, con token_hash.`);
 
 if (!apply) {
   console.log('\nEjecutá otra vez con --apply para escribir la configuración.');
@@ -126,6 +123,8 @@ console.log(JSON.stringify({
   smtp_sender: current.smtp_admin_email || null,
   rate_limit_email_sent: current.rate_limit_email_sent,
   mailer_autoconfirm: current.mailer_autoconfirm,
+  anonymous_sign_ins: current.external_anonymous_users_enabled,
+  rate_limit_anonymous_users: current.rate_limit_anonymous_users,
   password_hibp_enabled: current.password_hibp_enabled,
   minimum_password_length: current.password_min_length,
 }, null, 2));
