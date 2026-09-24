@@ -93,6 +93,9 @@ jobs:
       - name: Build de la demostración
         run: npm run build
       - name: Recorridos de navegador y auditoría visual
+        # Tarda 1-2 minutos; con el tope, un navegador trabado falla rápido en
+        # vez de retener el job media hora.
+        timeout-minutes: 10
         env:
           CAUCE_CHROME_PATH: /usr/bin/google-chrome
         run: |
