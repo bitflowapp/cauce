@@ -1,0 +1,8 @@
+{
+  "paso": "estado",
+  "aplicar": false,
+  "confirmar": "",
+  "email": "",
+  "invitar": false,
+  "motivo": "Comprobar el mecanismo de pedidos del workflow de operación y qué secretos están cargados. Sólo lectura."
+}
