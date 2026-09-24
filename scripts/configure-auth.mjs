@@ -75,10 +75,13 @@ const site = process.env.CAUCE_SITE_URL || 'https://bitflowapp.github.io/cauce';
 
 // SMTP propio. Sin estas variables el proyecto sigue con el correo interno de
 // Supabase, que sólo entrega a integrantes del equipo: no sirve para vecinos.
+// Con Resend alcanzan la clave y el remitente: servidor, puerto y usuario son
+// siempre los mismos (smtp.resend.com, 465, "resend").
+const resend = Boolean(process.env.CAUCE_SMTP_PASS?.startsWith('re_'));
 const smtp = {
-  host: process.env.CAUCE_SMTP_HOST,
-  port: process.env.CAUCE_SMTP_PORT,
-  user: process.env.CAUCE_SMTP_USER,
+  host: process.env.CAUCE_SMTP_HOST || (resend ? 'smtp.resend.com' : undefined),
+  port: process.env.CAUCE_SMTP_PORT || (resend ? '465' : undefined),
+  user: process.env.CAUCE_SMTP_USER || (resend ? 'resend' : undefined),
   pass: process.env.CAUCE_SMTP_PASS,
   sender: process.env.CAUCE_SMTP_SENDER,
 };
