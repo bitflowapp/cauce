@@ -23,6 +23,7 @@
     "db:stop": "supabase stop",
     "test:integration": "node --test --test-concurrency=1 --test-timeout=180000 tests/integration/*.test.mjs",
     "smoke:production": "node tests/production-smoke.mjs",
+    "e2e:local": "npm run build:local && node --test --test-concurrency=1 --test-timeout=1200000 tests/e2e/*.test.mjs",
     "build": "node scripts/build.mjs",
     "build:icons": "node scripts/build-icons.mjs",
     "build:offline": "node scripts/offline-bundle.mjs",

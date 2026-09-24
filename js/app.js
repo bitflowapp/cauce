@@ -334,9 +334,19 @@ function applyOfflineState() {
   }
   // En la demostración no hay servidor: quedarse sin conexión no impide nada.
   if (!isShared()) return;
+  // Sólo se revierte lo que deshabilitó la falta de conexión: un botón que la
+  // vista deshabilitó por otro motivo (carrito con productos no disponibles,
+  // comercio cerrado, datos en revisión) sigue deshabilitado.
   for (const form of main.querySelectorAll(isConnected() ? 'form' : OPERATION_FORMS)) {
-    const submit = form.querySelector('button[type="submit"]');
-    if (submit) submit.disabled = !app.online;
+    for (const submit of form.querySelectorAll('button[type="submit"]')) {
+      if (!app.online && !submit.disabled) {
+        submit.disabled = true;
+        submit.dataset.offlineDisabled = 'true';
+      } else if (app.online && submit.dataset.offlineDisabled === 'true') {
+        submit.disabled = false;
+        delete submit.dataset.offlineDisabled;
+      }
+    }
   }
 }
 
@@ -1553,7 +1563,10 @@ function merchantOrdersTab(business, orders, riders, fresh = []) {
     // Un envío que falla después de salir también se puede cerrar, con motivo.
     const lateCancel = isConnected() && order.fulfillment === 'delivery'
       && ['picked_up', 'on_the_way', 'arrived'].includes(order.status) ? ['canceled'] : [];
-    const options = [...new Set([...merchantOptions, ...riderOptions, ...lateCancel])];
+    // Quien reparte suele entregar sin avisar antes que llegó: la base permite
+    // pasar de "en camino" a "entregado" y el panel lo ofrece.
+    const directDelivery = isConnected() && order.fulfillment === 'delivery' && order.status === 'on_the_way' ? ['delivered'] : [];
+    const options = [...new Set([...merchantOptions, ...riderOptions, ...directDelivery, ...lateCancel])];
     const forward = options.filter(action => action !== 'canceled');
     const riderName = riders.find(rider => rider.id === order.riderId)?.name;
     const phone = String(order.customer.phone || '').replace(/[^\d+]/g, '');
@@ -3060,22 +3073,30 @@ function syncLive(page, param) {
   if (!scopes.length && !pollEvery) return;
   // Un cambio remoto vuelve a pedir los datos por la vía normal, que aplica RLS
   // otra vez: la carga útil del evento nunca se pinta directamente.
+  // También en segundo plano: un panel en otra pestaña tiene que sonar y
+  // marcar el título cuando entra un pedido.
   const refresh = () => {
     clearTimeout(live.timer);
     live.timer = setTimeout(() => {
-      if (route().page === page && !document.hidden && !isEditing()) render();
+      if (route().page === page && !isEditing()) render();
     }, 250);
   };
+  // Cerrar un canal al cambiar de vista es normal: sólo cuenta como falla lo
+  // que pasa mientras la vista sigue abierta.
+  let active = true;
   const onStatus = status => {
+    if (!active) return;
     const healthy = status === 'SUBSCRIBED';
     if (healthy === app.liveHealthy) return;
     app.liveHealthy = healthy;
-    if (!healthy) app.telemetry?.record('supabase_error', { code: `REALTIME_${status}`, message: 'Canal en vivo interrumpido' });
+    if (!healthy && status !== 'CLOSED') {
+      app.telemetry?.record('supabase_error', { code: `REALTIME_${status}`, message: 'Canal en vivo interrumpido' });
+    }
     refresh();
   };
   const stops = scopes.map(scope => app.repository.watch(scope, refresh, onStatus));
   const poll = pollEvery ? setInterval(refresh, pollEvery) : null;
-  live.stop = () => { clearTimeout(live.timer); if (poll) clearInterval(poll); for (const stop of stops) stop(); };
+  live.stop = () => { active = false; clearTimeout(live.timer); if (poll) clearInterval(poll); for (const stop of stops) stop(); };
 }
 
 // No se redibuja mientras la persona escribe: se perdería lo que tipeó.
@@ -3256,15 +3277,22 @@ async function start() {
     main.setAttribute('aria-busy', 'false');
     return;
   }
+  // Al salir de la página el navegador cancela lo que esté en vuelo: nada se
+  // reporta durante la descarga.
+  window.addEventListener('pagehide', () => { app.unloading = true; });
+  window.addEventListener('pageshow', () => { app.unloading = false; });
   app.telemetry = createTelemetry({ release: RUNTIME_ENV.release || RUNTIME_ENV.environment, route: () => location.hash,
-    send: RUNTIME_ENV.environment === 'supabase' ? event => app.repository?.reportEvent?.(event) : null });
+    send: RUNTIME_ENV.environment === 'supabase'
+      ? event => (app.unloading ? null : app.repository?.reportEvent?.(event)) : null });
   try {
     app.repository = createRepository(CONFIG, {
       runtime: RUNTIME_ENV,
       storage: globalThis.localStorage,
       // Cada falla del backend queda registrada (sin datos personales).
       onError: error => {
-        if (!['23514', 'invalid_credentials', 'weak_password', 'INVALID_CURRENT_PASSWORD'].includes(error?.technical?.code || error?.code)) {
+        // Sin red, reportar tampoco llega: los cortes quedan en la consola.
+        if (error?.code !== 'NETWORK_ERROR'
+          && !['23514', 'invalid_credentials', 'weak_password', 'INVALID_CURRENT_PASSWORD'].includes(error?.technical?.code || error?.code)) {
           const technical = { code: error.technical?.code || error.code, message: error.technical?.message || error.message };
           app.telemetry.record(classify(technical, 'supabase_error'), technical);
         }

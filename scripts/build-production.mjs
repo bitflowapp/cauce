@@ -173,6 +173,7 @@ replace('href="styles/cauce.css"', `href="${cssName}"`, 'la hoja de estilos');
 replace(/\s*<link rel="modulepreload"[^>]*>/g, '', 'los modulepreload de la demo');
 replace('<script type="module" src="js/app.js"></script>', `<script type="module" src="${jsName}"></script>`, 'el script');
 replace(/(<span class="env-chip" id="env-chip")[^>]*>[^<]*<\/span>/, '$1 hidden></span>', 'el indicador de entorno');
+replace('<main id="main" tabindex="-1" aria-busy="false">', '<main id="main" tabindex="-1" aria-busy="true">', 'el estado inicial del contenido');
 replace(/<p class="footer-note" id="footer-env">[^<]*<\/p>/,
   '<p class="footer-note" id="footer-env">CAUCE · plataforma local de LUNA para comercios de Aluminé.</p>', 'la nota del pie');
 replace(/\s*<a class="link-button" href="#taxista">[^<]*<\/a>/, '', 'el enlace de taxistas del pie');
