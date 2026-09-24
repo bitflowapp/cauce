@@ -1,0 +1,38 @@
+name: Smoke de producción
+
+# Comprobación diaria de SÓLO LECTURA contra el proyecto Supabase y el sitio
+# publicados: esquema compatible, datos privados cerrados, confirmación de
+# correo obligatoria, compra sin cuenta habilitada y sitio con el build
+# conectado. Usa la publishable key pública; no necesita ningún secreto.
+# Sólo corre cuando el deploy apunta a producción.
+on:
+  schedule:
+    - cron: '0 11 * * *' # 08:00 en Aluminé
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: Smoke de sólo lectura
+    if: ${{ vars.CAUCE_DEPLOY_TARGET == 'production' || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      CAUCE_SITE_URL: ${{ vars.CAUCE_SITE_URL || 'https://bitflowapp.github.io/cauce' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Proyecto y sitio publicados
+        run: node tests/production-smoke.mjs
+      - name: Guardar el resultado
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-produccion-${{ github.run_id }}
+          path: evidence/production-smoke.json
+          if-no-files-found: ignore
+          retention-days: 30

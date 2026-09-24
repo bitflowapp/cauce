@@ -4,7 +4,7 @@
 //
 // Uso:
 //   SUPABASE_ACCESS_TOKEN=... node scripts/configure-auth.mjs [--apply]
-//   SUPABASE_ACCESS_TOKEN=... CAUCE_SITE_URL=https://... \
+//   SUPABASE_ACCESS_TOKEN=... CAUCE_SITE_URL=https://bitflowapp.github.io/cauce \
 //     CAUCE_SMTP_HOST=smtp.resend.com CAUCE_SMTP_PORT=465 \
 //     CAUCE_SMTP_USER=resend CAUCE_SMTP_PASS=... \
 //     CAUCE_SMTP_SENDER="CAUCE Aluminé <hola@tu-dominio>" \
@@ -58,8 +58,10 @@ const payload = {
 };
 
 // URLs: el enlace del correo vuelve exactamente a donde se sirve la aplicación.
-const site = process.env.CAUCE_SITE_URL;
-if (site) {
+// Por defecto, el mismo sitio que usa build:production; olvidarse la variable
+// no puede dejar la recuperación apuntando a una máquina de desarrollo.
+const site = process.env.CAUCE_SITE_URL || 'https://bitflowapp.github.io/cauce';
+{
   const url = new URL(site);
   if (url.protocol !== 'https:' && !['127.0.0.1', 'localhost'].includes(url.hostname)) {
     throw new Error('La URL del sitio debe ser https, salvo en pruebas locales.');
