@@ -5,8 +5,8 @@
 // concurrency: the real Storage service adds its own checks on top of these rows.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile, readdir } from 'node:fs/promises';
 import { PGlite } from '@electric-sql/pglite';
+import { applyMigrations } from './fixture.mjs';
 
 const db = new PGlite();
 const ids = Object.fromEntries(['customerA', 'customerB', 'merchantA', 'merchantB', 'driverA', 'admin', 'manager', 'staff', 'driverB']
@@ -26,39 +26,7 @@ async function as(name, sql, params = []) {
 const denied = promise => assert.rejects(promise, error => error.code === '42501');
 
 before(async () => {
-  await db.exec(`
-    create role anon nologin;
-    create role authenticated nologin;
-    create schema auth;
-    create table auth.users (id uuid primary key, email text, is_anonymous boolean not null default false,
-      deleted_at timestamptz, raw_user_meta_data jsonb default '{}');
-    create function auth.uid() returns uuid language sql stable as
-      $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
-    create function auth.jwt() returns jsonb language sql stable as
-      $$ select coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb $$;
-    grant execute on function auth.jwt() to anon, authenticated;
-    grant usage on schema auth to anon, authenticated;
-    grant usage on schema public to anon, authenticated;
-    grant execute on function auth.uid() to anon, authenticated;
-    create schema storage;
-    create table storage.buckets (id text primary key, name text not null, public boolean not null default false,
-      file_size_limit bigint, allowed_mime_types text[], created_at timestamptz not null default now());
-    create table storage.objects (id uuid primary key default gen_random_uuid(),
-      bucket_id text not null references storage.buckets(id), name text not null, owner uuid,
-      metadata jsonb, created_at timestamptz not null default now(), updated_at timestamptz not null default now(),
-      unique (bucket_id, name));
-    alter table storage.objects enable row level security;
-    grant usage on schema storage to anon, authenticated;
-    grant select on storage.buckets to anon, authenticated;
-    grant select, insert, update, delete on storage.objects to anon, authenticated;
-    create publication supabase_realtime;
-    -- Exercise old Supabase defaults too: migrations must revoke these grants.
-    alter default privileges in schema public grant all on tables to anon, authenticated;
-  `);
-  const dir = new URL('../../supabase/migrations/', import.meta.url);
-  for (const file of (await readdir(dir)).filter(name => name.endsWith('.sql')).sort()) {
-    await db.exec(await readFile(new URL(file, dir), 'utf8'));
-  }
+  await applyMigrations(db);
   for (const [name, id] of Object.entries(ids)) {
     await db.query('insert into auth.users (id, email) values ($1, $2)', [id, `${name.toLowerCase()}@cauce.test`]);
     await as(name, 'insert into public.profiles (user_id, display_name) values ($1, $2)', [id, `Synthetic ${name}`]);
