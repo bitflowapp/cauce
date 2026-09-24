@@ -70,13 +70,21 @@ async function main() {
     await page.waitForFunction('document.querySelector("#main")?.getAttribute("aria-busy") === "false"');
   };
 
-  // Hace clic en el botón cuyo texto coincide exactamente, esperando a que la
-  // vista termine de redibujarse en vez de suponer que ya ocurrió.
+  // Hace clic en el botón cuyo texto coincide exactamente y espera a que la
+  // acción termine: que la vista se haya redibujado (el botón ya no está) o que
+  // el botón deje de estar ocupado. Mirar sólo aria-busy no alcanza: la acción
+  // todavía espera al servidor y el redibujo empieza después, justo cuando el
+  // paso siguiente hace clic por coordenadas (el clic se perdía).
   const clickByLabel = async (page, selector, label) => {
     const query = `[...document.querySelectorAll(${JSON.stringify(selector)})]`
       + `.find(node => node.textContent.trim() === ${JSON.stringify(label)})`;
     await page.waitForFunction(`!!${query}`);
-    await page.evaluate(`(() => { ${query}.click(); return true; })()`);
+    await page.evaluate(`(() => {
+      for (const old of document.querySelectorAll('[data-qa-clicked]')) old.removeAttribute('data-qa-clicked');
+      const node = ${query}; node.setAttribute('data-qa-clicked', ''); node.click(); return true;
+    })()`);
+    await page.waitForFunction(`(() => { const node = document.querySelector('[data-qa-clicked]');
+      return !node || node.dataset.busy !== 'true'; })()`);
     await page.waitForFunction('document.querySelector("#main")?.getAttribute("aria-busy") === "false"');
   };
 
