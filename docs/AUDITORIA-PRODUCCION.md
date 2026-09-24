@@ -117,3 +117,78 @@ P0 bloquea producción · P1 riesgo alto · P2 importante · P3 mejora.
 4. **GitHub Pages se mantiene** (ver `PRODUCTION_READINESS.md`): sirve una SPA
    estática con hash routing sobre HTTPS; sus límites (sin cabeceras propias) se
    mitigan en el documento y no justifican migrar.
+
+## Resolución (estado al cierre del hardening)
+
+**Resuelto** = corregido en el código y cubierto por una prueba automática.
+**Operación** = el código está listo, pero depende de un paso sobre el
+proyecto real que requiere credenciales (ver `PRODUCTION_READINESS.md`).
+**Mitigado** = el riesgo se redujo; queda un límite documentado.
+
+### P0
+
+| ID | Estado | Cómo / dónde se prueba |
+| --- | --- | --- |
+| P0-01 | **Operación** | PR contra `main`; el deploy de producción queda detrás de `CAUCE_DEPLOY_TARGET` y exige el esquema remoto. Falta aplicar la migración y publicar. |
+| P0-02 | **Operación** | `scripts/configure-auth.mjs` aplica SMTP, plantillas y URLs; faltan una cuenta SMTP y un dominio verificado. |
+| P0-03 | Resuelto en código · **Operación** para habilitarlo | Compra con sesión anónima real (`tests/integration/security.test.mjs`, E2E `flows`). En el proyecto real, anonymous sign-ins sigue deshabilitado hasta correr `configure-auth.mjs --apply`. |
+| P0-04 | Resuelto | Vista `#recuperar`; E2E `auth` (recuperación con el enlace abierto en otro dispositivo, enlace reusado). |
+| P0-05 | Resuelto | El redirect sale de `CAUCE_SITE_URL` (con `/cauce/`); `site_url` por defecto en `configure-auth.mjs` y `supabase/remote`. |
+| P0-06 | Resuelto (build de producción) | Documento network-first, JS/CSS con nombre por contenido, caché con nombre por build, `skipWaiting` + `clients.claim` y borrado de cachés viejas. |
+| P0-07 | Resuelto | Plantillas `token_hash`; confirmación y recuperación abiertas desde otro navegador en integración y E2E. |
+
+### P1
+
+| ID | Estado | Cómo / dónde se prueba |
+| --- | --- | --- |
+| P1-01 | Resuelto | `expected_total` → U0005 sin crear pedido; E2E `edge` muestra el total nuevo. |
+| P1-02 | Resuelto | Diálogo accesible; "Volver" nunca cancela (E2E `edge`). |
+| P1-03 | Resuelto | Sonido, vibración, título y distintivo de pedidos nuevos; sondeo de 30 s si Realtime cae; refresco al confirmarse la suscripción (ver N-01). |
+| P1-04 | Resuelto | `products.track_stock` opcional; los productos existentes siguen controlando stock (`tests/db/upgrade.test.mjs`). |
+| P1-05 | Resuelto | Equipo owner/manager/staff por la interfaz; quitar a alguien corta el acceso en el acto (integración). |
+| P1-06 | Resuelto | Taxi apagado en la base (`Feature disabled`) y fuera del build. |
+| P1-07 | Resuelto | Copy del build conectado sin textos de demostración (`npm run check`). |
+| P1-08 | Resuelto | Bundle de producción sin demo ni backend de desarrollo, minificado: 465 KB (126 KB gzip), con presupuesto en el build. |
+| P1-09 | Resuelto | Mensajes en castellano por código; el detalle técnico sólo va a la telemetría. |
+| P1-10 | Resuelto | `private.client_events` sin datos personales, con tope y retención de 30 días; visible para administración. |
+| P1-11 | Resuelto | Cancelación con motivo desde `picked_up`, `on_the_way` y `arrived` (integración, PGlite, actualización). |
+| P1-12 | Resuelto | `from_status` en cada transición y reconstruido para el historial existente (`upgrade.test.mjs`). |
+| P1-13 | Resuelto | `Reason required` en el servidor. |
+| P1-14 | Resuelto | U0002 muestra el pedido existente o renueva el intento. |
+| P1-15 | Resuelto | Panel según rol; E2E "staff no administra". |
+| P1-16 | Resuelto | `app_status` + `REQUIRED_SCHEMA`: la app muestra mantenimiento y el deploy no publica sin esquema compatible. |
+| P1-17 | Resuelto | Stack Supabase completo y efímero en CI; sin credenciales de producción. |
+
+### P2 y P3
+
+| ID | Estado |
+| --- | --- |
+| P2-01 | Resuelto: una sola consulta de búsqueda. |
+| P2-02 | Resuelto: el panel trae pedidos abiertos y de las últimas 36 h (tope 150). |
+| P2-03 | Resuelto: sesión en caché 15 s; verificación por red al arrancar y ante eventos de Auth. |
+| P2-04 | Resuelto: horarios por día en la zona horaria de la localidad, incluso cruzando medianoche. |
+| P2-05 | Resuelto: teléfono y WhatsApp públicos, tiempos de preparación y envío. |
+| P2-06 | Resuelto: suspender/rehabilitar con motivo; el comercio no la levanta. |
+| P2-07 | **Mitigado**: defensa anti-iframe en JS; Pages no permite `frame-ancestors`. |
+| P2-08 | Resuelto: OpenGraph, canonical, `robots.txt`, `noindex` en rutas privadas. |
+| P2-09 | Resuelto: diálogo propio para motivos y confirmaciones destructivas. |
+| P2-10 | Resuelto: U0006 (pocos pedidos sin atender y ritmo humano por persona). |
+| P2-11 | Resuelto: al volver la conexión o la pestaña, se vuelve a consultar. |
+| P2-12 | **Mitigado**: los productos se archivan, no se borran; un reemplazo borra el archivo anterior y, si falla, queda registrado (`MEDIA_ORPHAN`). No hay limpieza periódica. |
+| P2-13 | **Operación**: procedimiento documentado; backups del proyecto real no verificados desde este trabajo. |
+| P3-01 | Resuelto: roles en castellano. |
+| P3-02 | Resuelto: el HTML de producción no menciona la demostración. |
+| P3-03 | Resuelto: al ingresar, comercio va al panel y administración a su pantalla. |
+
+### Hallazgos nuevos durante el hardening
+
+| ID | Nivel | Hallazgo | Estado |
+| --- | --- | --- | --- |
+| N-01 | P1 | Realtime confirma `SUBSCRIBED` antes de que fluyan los cambios de Postgres (~3 s, y otra vez tras cada reconexión): un pedido creado en ese hueco no aparecía hasta el sondeo. | Resuelto: se vuelve a consultar al confirmarse la suscripción (`tests/supabase-watch.test.mjs`, `tests/integration/realtime.test.mjs`). |
+| N-02 | P1 | El panel en una pestaña en segundo plano no refrescaba: el aviso de pedido nuevo no sonaba. | Resuelto (E2E `flows`). |
+| N-03 | P1 | Sin `CAUCE_SITE_URL`, `configure-auth.mjs` dejaba `site_url` en el preview local: los correos llevarían a una URL inexistente. | Resuelto: por defecto, la URL de producción. |
+| N-04 | P2 | Al volver la conexión se reactivaban botones deshabilitados por otros motivos (confirmar con un producto agotado). | Resuelto (E2E `edge`). |
+| N-05 | P2 | "En camino" no ofrecía "Marcar entregado" aunque la base lo permite. | Resuelto (E2E `flows`). |
+| N-06 | P2 | `main` sin margen lateral en todos los anchos (regla de safe-area), pestañas del panel y campos de hora fuera de pantalla a 320–375 px, texto del inicio con contraste bajo. | Resuelto (E2E `audit`, 7 anchos). |
+| N-07 | P2 | El interruptor de compra sin cuenta, apagado desde la base, mostraba un error genérico, y al ingresar la persona terminaba en *Mis pedidos* en vez de su carrito. | Resuelto: pide ingresar, conserva el carrito y vuelve a él (integración y E2E `edge`). |
+| N-08 | P3 | El alta de taxi no recortaba origen, destino ni nota a su largo máximo. | Resuelto (prueba de regresión). |

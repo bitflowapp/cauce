@@ -1,5 +1,14 @@
 # CAUCE conectado: catálogo, pedidos, reparto y taxi reales
 
+> **Actualización (24/09/2026).** Este documento describe el modelo de
+> seguridad del entorno conectado, que se conserva. Después se hizo el
+> hardening de producción: compra sin cuenta, horarios, equipo, contrato de
+> esquema, taxi apagado, build de producción y pruebas contra un stack
+> Supabase completo en CI. El estado operativo, los comandos de prueba y los
+> pasos para publicar están en [PRODUCTION_READINESS.md](../PRODUCTION_READINESS.md);
+> los hallazgos y su resolución, en [AUDITORIA-PRODUCCION.md](AUDITORIA-PRODUCCION.md).
+> Las secciones marcadas *(histórico)* describen el estado anterior.
+
 Proyecto exclusivo: `cauce-production` (`ygqbcvxdrewcnzedfcyo`), organización
 Luna Systems, región `sa-east-1`. Rama `feat/cauce-production-foundation`.
 No hubo merge a `main` ni publicación. No se tocó ningún otro proyecto Supabase.
@@ -45,7 +54,7 @@ No se creó ninguna cuenta externa ni se contrató nada. Ver
 
 ## Migraciones
 
-Aplicadas con CLI sobre el proyecto real, en este orden:
+Las ocho primeras están aplicadas con CLI sobre el proyecto real, en este orden:
 
 | Versión | Contenido |
 | --- | --- |
@@ -57,6 +66,7 @@ Aplicadas con CLI sobre el proyecto real, en este orden:
 | `20260922023914` | Nombres propios para las claves de ámbito de pedido |
 | `20260922025918` | Corrección de contabilidad de stock con variantes |
 | `20260922030252` | Revocación de EXECUTE en funciones de trigger |
+| `20260924120000` | Hardening de producción. **Pendiente de aplicar en el proyecto real** (ver PRODUCTION_READINESS.md §3.1) |
 
 `supabase/database.types.ts` se regeneró desde el proyecto real.
 
@@ -206,9 +216,9 @@ de letras y números. La interfaz muestra el motivo en castellano.
   `node scripts/configure-auth.mjs --apply`.
 - El token viaja sólo dentro del enlace. No se escribe en registros ni en la
   evidencia.
-- `site_url` y la lista de URLs permitidas siguen apuntando al preview local
-  `http://127.0.0.1:4174`. **Hay que reemplazarlas por la URL real antes de
-  cualquier piloto público**, con el mismo script.
+- `site_url` y la lista de URLs permitidas del proyecto real todavía apuntan
+  al preview local. `configure-auth.mjs --apply` las lleva a
+  `https://bitflowapp.github.io/cauce` (o a `CAUCE_SITE_URL`).
 - La confirmación de correo sigue obligatoria (`mailer_autoconfirm = false`).
 
 ## Demostración y producción
@@ -217,16 +227,17 @@ Siguen siendo dos artefactos distintos y separados:
 
 - `npm run build` y `npm run build:offline` generan **sólo la demostración**,
   sin red, con la compuerta `mode: 'demo'` cerrada.
-- `npm run build:supabase` genera el entorno conectado en
-  `.local/supabase-preview`, con `mode: 'production'` y `liveOrders: true`.
-  `livePayments` sigue en `false`: no hay cobro en línea.
+- `npm run build:production` genera el entorno conectado en
+  `dist-production/` (`build:local` apunta al stack local), con
+  `mode: 'production'` y `liveOrders: true`. `livePayments` sigue en `false`:
+  no hay cobro en línea.
 
 `createRepository` exige que la configuración coincida con el entorno; una
 combinación que no corresponda falla al arrancar. **No hay ningún camino por el
 cual un error de Supabase haga caer la aplicación a los datos de demostración.**
 Si la sesión falla, la pantalla lo dice.
 
-## Service worker
+## Service worker *(histórico: el build de producción usa caché por versión)*
 
 Sólo guarda la cáscara estática: documento, CSS, JavaScript propio, íconos y
 fuentes del mismo origen. Ignora cualquier petición con `Authorization`,
@@ -248,7 +259,12 @@ img-src 'self' data: blob: https://ygqbcvxdrewcnzedfcyo.supabase.co
 Sin comodines. Ningún endpoint de La Taba ni de BitFlow. La demostración
 conserva `connect-src 'none'`.
 
-## Pruebas
+## Pruebas *(histórico)*
+
+Los runners contra el proyecto real (`test:supabase`, `test:supabase:ops`,
+`e2e:supabase`) se retiraron porque escribían datos sintéticos en producción.
+Hoy las mismas garantías (y más) se prueban contra un stack Supabase local
+completo: ver la tabla de compuertas en PRODUCTION_READINESS.md.
 
 ```powershell
 npm run verify              # check, 172 pruebas, 32 pruebas SQL, builds demo
@@ -310,7 +326,7 @@ Comprobado explícitamente que:
 - Un visitante sin cuenta no lee perfiles, pedidos, viajes, contactos ni
   borradores.
 
-## Qué falta configurar
+## Qué falta configurar *(histórico: la versión vigente está en PRODUCTION_READINESS.md §3)*
 
 Estas tres cosas dependen de decisiones o cuentas que no me corresponde crear:
 
