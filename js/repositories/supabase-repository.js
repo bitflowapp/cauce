@@ -1078,7 +1078,10 @@ export function createSupabaseRepository({ client, redirectTo, storage, onError 
         const { error } = await client.auth.verifyOtp({ token_hash: tokenHash, type });
         invalidate();
         if (error) return { handled: true, recovery: false, error: toCauceError(error) };
-        return { handled: true, recovery: type === 'recovery', confirmed: ['signup', 'email', 'invite'].includes(type) };
+        // Una invitación deja la sesión abierta pero sin contraseña: igual que
+        // una recuperación, lo siguiente es elegirla.
+        return { handled: true, recovery: ['recovery', 'invite'].includes(type), invited: type === 'invite',
+          confirmed: ['signup', 'email'].includes(type) };
       }
       // Enlace con código PKCE: sólo funciona en el navegador que lo pidió.
       const { error } = await client.auth.exchangeCodeForSession(code);

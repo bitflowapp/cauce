@@ -3,8 +3,8 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import {
-  account, closeAll, run, mailFor, linkFrom,
-  startPreview, stopPreview, browsersToRun, launch, person, open, ready, signIn, toastText, expectToast, shot,
+  account, admin, closeAll, run, mailFor, linkFrom,
+  BASE, startPreview, stopPreview, browsersToRun, launch, person, open, ready, signIn, toastText, expectToast, shot,
 } from './harness.mjs';
 
 const people = {};
@@ -148,6 +148,31 @@ for (const engine of browsersToRun) {
       user.password = next;
       await signIn(phone.page, user);
       assert.deepEqual([...phone.problems, ...mail.problems, ...again.problems], []);
+    } finally { await browser.close(); }
+  });
+  test(`${engine}: una invitación lleva a elegir contraseña y después se ingresa con ella`, async () => {
+    const browser = await launch(engine);
+    try {
+      const invited = await person(browser, { label: 'invitada' });
+      const email = `qa-${run}-invitada-${engine}@cauce.test`;
+      const since = Date.now() - 1000;
+      const { error } = await admin.auth.admin.inviteUserByEmail(email, { redirectTo: `${BASE}/index.html` });
+      assert.equal(error, null);
+      const link = linkFrom(await mailFor(email, { subject: 'Te invitaron a CAUCE', after: since }));
+      await invited.page.goto(link.href);
+      await invited.page.waitForFunction(() => location.hash === '#recuperar');
+      await ready(invited.page);
+      await invited.page.getByRole('heading', { name: 'Elegí tu contraseña' }).waitFor();
+      const password = `Invita${randomUUID().slice(0, 8)}3`;
+      await invited.page.fill('#recovery-password', password);
+      await invited.page.fill('#recovery-confirm', password);
+      await invited.page.locator('form[data-form="password-recovery"] button[type="submit"]').click();
+      await expectToast(invited.page, 'Listo: tu contraseña nueva ya funciona.');
+      // Desde otro dispositivo, la contraseña elegida es la que entra.
+      const later = await person(browser, { label: 'otro dispositivo' });
+      await signIn(later.page, { email, password });
+      assert.notEqual(await later.page.locator('#account-link').textContent(), 'Ingresar');
+      assert.deepEqual([...invited.problems, ...later.problems], []);
     } finally { await browser.close(); }
   });
 }

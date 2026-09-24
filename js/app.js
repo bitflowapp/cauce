@@ -1323,8 +1323,8 @@ async function viewRecovery() {
   }
   return `
     <section class="page-header">
-      <h1 class="page-title">Elegí tu nueva contraseña</h1>
-      <p class="quiet">${esc(actor().email || '')}</p>
+      <h1 class="page-title">${app.invited ? 'Elegí tu contraseña' : 'Elegí tu nueva contraseña'}</h1>
+      <p class="quiet">${app.invited ? 'Te invitaron a CAUCE. Con esta contraseña vas a ingresar a partir de ahora. · ' : ''}${esc(actor().email || '')}</p>
     </section>
     <form class="checkout-form" data-form="password-recovery" novalidate>
       <div class="field">
@@ -2736,10 +2736,11 @@ const FORMS = {
     if (password !== String(data.get('confirm') || '')) { toast('Las dos contraseñas no coinciden.', 'error'); return; }
     await app.repository.updatePassword(password);
     app.recovering = false;
+    app.invited = false;
     app.session = await app.repository.session({ fresh: true });
     app.authNotice = '';
     toast('Listo: tu contraseña nueva ya funciona.');
-    go(hasRole('merchant') ? '#panel' : '#cuenta');
+    go(hasRole('admin') ? '#admin' : hasRole('merchant') ? '#panel' : '#cuenta');
     await render({ focus: true });
   },
   async 'resend-confirmation'(form) {
@@ -3366,6 +3367,7 @@ async function start() {
         () => history.replaceState(null, '', location.pathname));
       if (callback.handled) {
         app.recovering = callback.recovery;
+        app.invited = Boolean(callback.invited);
         if (callback.error) {
           app.authNotice = callback.error.message;
           location.hash = '#cuenta';
