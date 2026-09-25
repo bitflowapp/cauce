@@ -1,8 +1,8 @@
 {
   "paso": "migrar",
-  "aplicar": false,
-  "confirmar": "",
+  "aplicar": true,
+  "confirmar": "ygqbcvxdrewcnzedfcyo",
   "email": "",
   "invitar": false,
-  "motivo": "Sandbox de Mercado Pago: dry-run exacto de la migración 20260927120000 (piloto de pagos por comercio) después del backup y la restauración de prueba en verde (run 36200528198). Sólo lectura."
+  "motivo": "Sandbox de Mercado Pago: aplicar 20260927120000 (piloto de pagos por comercio; no enciende nada: payments_online sigue apagado y no hay pilotos). Backup + restauración en verde (run 36200528198) y dry-run exacto en verde (run 36200839816)."
 }
