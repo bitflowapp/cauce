@@ -20,7 +20,7 @@ import { fileURLToPath } from 'node:url';
 import postgres from 'postgres';
 import { REQUIRED_SCHEMA } from '../../js/core/contract.js';
 import { ROOT, log, migrationFiles, redact, supabaseCli } from './proyecto.mjs';
-import { adaptDump, parseDump, quoted } from './volcado.mjs';
+import { adaptDump, compareSchemas, parseDump, quoted } from './volcado.mjs';
 
 const root = fileURLToPath(ROOT);
 const npx = process.platform === 'win32' ? 'npx.cmd' : 'npx';
@@ -53,11 +53,6 @@ export const COUNT_SQL = `select table_schema || '.' || table_name as name,
     or (table_schema, table_name) in (('auth', 'users'), ('auth', 'identities'), ('storage', 'buckets'), ('storage', 'objects')))
   order by 1`;
 const toCounts = rows => Object.fromEntries(rows.map(row => [row.name, Number(row.n)]));
-
-const normalizeSchema = text => String(text).split('\n')
-  .map(line => line.trimEnd())
-  .filter(line => line && !line.startsWith('--') && !/^SET |^SELECT pg_catalog\.set_config|^RESET ALL|^GRANT .* TO "service_role";$/.test(line))
-  .join('\n');
 
 function tempConfig(source, offset, projectId) {
   return source
@@ -273,12 +268,12 @@ export async function backup(t, list) {
       const dumpRestored = stack.cli(['db', 'dump', '--local', '-f', restoredSchema]);
       if (dumpRestored.status !== 0) list.fail('dump del esquema restaurado', redact(dumpRestored.stderr).slice(-300));
       else {
-        const a = normalizeSchema(await readFile(source.schemaFile, 'utf8')).split('\n');
-        const b = normalizeSchema(await readFile(restoredSchema, 'utf8')).split('\n');
-        const setA = new Set(a);
-        const setB = new Set(b);
-        const onlySource = a.filter(line => !setB.has(line));
-        const onlyRestored = b.filter(line => !setA.has(line));
+        const { platform, onlySource, onlyRestored } = compareSchemas(await readFile(source.schemaFile, 'utf8'),
+          await readFile(restoredSchema, 'utf8'));
+        if (platform.length) {
+          list.info('privilegios de service_role (los fija Supabase, no las migraciones)',
+            `${platform.length} diferencias: el proyecto es anterior al cambio de privilegios por defecto; CAUCE no usa service_role para tablas (N-16)`);
+        }
         list.check('el esquema de origen coincide con las migraciones', onlySource.length === 0 && onlyRestored.length === 0,
           onlySource.length || onlyRestored.length
             ? `sólo en el origen (${onlySource.length}): ${onlySource.slice(0, 8).join(' | ') || '—'} · sólo en migraciones (${onlyRestored.length}): ${onlyRestored.slice(0, 8).join(' | ') || '—'}`

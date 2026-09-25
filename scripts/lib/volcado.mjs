@@ -85,3 +85,27 @@ export function adaptDump(blocks, target) {
   }
   return { sql: out.join('\n'), tables, problems, omitted };
 }
+
+// Esquema del origen contra el restaurado. Los privilegios de service_role los
+// fija Supabase al crear el proyecto y cambiaron con el tiempo (los proyectos
+// nuevos ya no le dan ALL sobre las tablas): las migraciones de CAUCE no los
+// tocan, así que se cuentan aparte. Todo lo demás tiene que ser idéntico.
+const PLATFORM_GRANT = /^(GRANT|REVOKE) .+ (TO|FROM) "service_role";$/;
+const normalizeSchema = text => String(text).split('\n')
+  .map(line => line.trimEnd())
+  .filter(line => line && !line.startsWith('--') && !/^SET |^SELECT pg_catalog\.set_config|^RESET ALL/.test(line));
+
+export function compareSchemas(sourceText, restoredText) {
+  const a = normalizeSchema(sourceText);
+  const b = normalizeSchema(restoredText);
+  const setA = new Set(a);
+  const setB = new Set(b);
+  const onlySource = a.filter(line => !setB.has(line));
+  const onlyRestored = b.filter(line => !setA.has(line));
+  const platform = [...onlySource, ...onlyRestored].filter(line => PLATFORM_GRANT.test(line));
+  return {
+    platform,
+    onlySource: onlySource.filter(line => !PLATFORM_GRANT.test(line)),
+    onlyRestored: onlyRestored.filter(line => !PLATFORM_GRANT.test(line)),
+  };
+}

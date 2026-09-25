@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { adaptDump, parseDump } from '../scripts/lib/volcado.mjs';
+import { adaptDump, compareSchemas, parseDump } from '../scripts/lib/volcado.mjs';
 
 // Un volcado como el de `supabase db dump --data-only --use-copy`.
 const DUMP = [
@@ -93,4 +93,33 @@ test('sin diferencias, el volcado queda igual', () => {
   const adapted = adaptDump(parseDump(same), localStack());
   assert.equal(adapted.sql, same);
   assert.deepEqual(adapted.omitted, []);
+});
+
+// Lo que mostró el backup real (run 36076920287): el proyecto es anterior al
+// cambio de privilegios por defecto de service_role.
+test('los privilegios de service_role se cuentan aparte; el resto del esquema tiene que coincidir', () => {
+  const source = [
+    '-- volcado del origen',
+    'SET statement_timeout = 0;',
+    'CREATE TABLE "public"."trips" ("id" "uuid" NOT NULL);',
+    'GRANT ALL ON TABLE "public"."trips" TO "service_role";',
+    'GRANT SELECT ON TABLE "public"."trips" TO "authenticated";',
+  ].join('\n');
+  const restored = [
+    'CREATE TABLE "public"."trips" ("id" "uuid" NOT NULL);',
+    'GRANT REFERENCES,TRIGGER,TRUNCATE,MAINTAIN ON TABLE "public"."trips" TO "service_role";',
+    'GRANT SELECT ON TABLE "public"."trips" TO "authenticated";',
+    'RESET ALL;',
+  ].join('\n');
+  const same = compareSchemas(source, restored);
+  assert.equal(same.platform.length, 2);
+  assert.deepEqual([same.onlySource, same.onlyRestored], [[], []]);
+
+  // Un privilegio de más para las visitas sí es una diferencia real.
+  const drift = compareSchemas(`${source}\nGRANT ALL ON TABLE "public"."trips" TO "anon";`, restored);
+  assert.deepEqual(drift.onlySource, ['GRANT ALL ON TABLE "public"."trips" TO "anon";']);
+  // Y una columna cambiada a mano también.
+  const column = compareSchemas(source.replace('"id" "uuid" NOT NULL', '"id" "uuid"'), restored);
+  assert.equal(column.onlySource.length, 1);
+  assert.equal(column.onlyRestored.length, 1);
 });
