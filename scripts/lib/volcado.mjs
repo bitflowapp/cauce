@@ -86,26 +86,32 @@ export function adaptDump(blocks, target) {
   return { sql: out.join('\n'), tables, problems, omitted };
 }
 
-// Esquema del origen contra el restaurado. Los privilegios de service_role los
-// fija Supabase al crear el proyecto y cambiaron con el tiempo (los proyectos
-// nuevos ya no le dan ALL sobre las tablas): las migraciones de CAUCE no los
-// tocan, así que se cuentan aparte. Todo lo demás tiene que ser idéntico.
-const PLATFORM_GRANT = /^(GRANT|REVOKE) .+ (TO|FROM) "service_role";$/;
+// Esquema del origen contra el restaurado. Hay privilegios que decide Supabase
+// al crear el proyecto y que cambiaron con el tiempo (los proyectos nuevos ya
+// no le dan ALL a service_role sobre las tablas, y los privilegios por defecto
+// de anon y authenticated también cambiaron): se cuentan aparte.
+//   - Todo lo de service_role: las migraciones de CAUCE no lo tocan.
+//   - Los privilegios por defecto (ALTER DEFAULT PRIVILEGES) de anon y
+//     authenticated, sólo mientras el origen no tiene la migración que los
+//     revoca (20260924120000): después tienen que coincidir.
+// Todo lo demás tiene que ser idéntico.
+const SERVICE_ROLE = /^(GRANT|REVOKE|ALTER DEFAULT PRIVILEGES) .+ (TO|FROM) "service_role";$/;
+const DEFAULTS = /^ALTER DEFAULT PRIVILEGES .+ (TO|FROM) "(anon|authenticated)";$/;
 const normalizeSchema = text => String(text).split('\n')
   .map(line => line.trimEnd())
   .filter(line => line && !line.startsWith('--') && !/^SET |^SELECT pg_catalog\.set_config|^RESET ALL/.test(line));
 
-export function compareSchemas(sourceText, restoredText) {
+export function compareSchemas(sourceText, restoredText, { platformDefaults = false } = {}) {
   const a = normalizeSchema(sourceText);
   const b = normalizeSchema(restoredText);
   const setA = new Set(a);
   const setB = new Set(b);
+  const isPlatform = line => SERVICE_ROLE.test(line) || (platformDefaults && DEFAULTS.test(line));
   const onlySource = a.filter(line => !setB.has(line));
   const onlyRestored = b.filter(line => !setA.has(line));
-  const platform = [...onlySource, ...onlyRestored].filter(line => PLATFORM_GRANT.test(line));
   return {
-    platform,
-    onlySource: onlySource.filter(line => !PLATFORM_GRANT.test(line)),
-    onlyRestored: onlyRestored.filter(line => !PLATFORM_GRANT.test(line)),
+    platform: [...onlySource, ...onlyRestored].filter(isPlatform),
+    onlySource: onlySource.filter(line => !isPlatform(line)),
+    onlyRestored: onlyRestored.filter(line => !isPlatform(line)),
   };
 }

@@ -269,10 +269,10 @@ export async function backup(t, list) {
       if (dumpRestored.status !== 0) list.fail('dump del esquema restaurado', redact(dumpRestored.stderr).slice(-300));
       else {
         const { platform, onlySource, onlyRestored } = compareSchemas(await readFile(source.schemaFile, 'utf8'),
-          await readFile(restoredSchema, 'utf8'));
+          await readFile(restoredSchema, 'utf8'), { platformDefaults: !contract });
         if (platform.length) {
-          list.info('privilegios de service_role (los fija Supabase, no las migraciones)',
-            `${platform.length} diferencias: el proyecto es anterior al cambio de privilegios por defecto; CAUCE no usa service_role para tablas (N-16)`);
+          list.info('privilegios que fija Supabase, no las migraciones',
+            `${platform.length} diferencias (service_role${contract ? '' : ' y los por defecto de anon/authenticated, que revoca la migración pendiente'}): el proyecto es anterior al cambio de privilegios de la plataforma; CAUCE no usa service_role para tablas (N-16)`);
         }
         list.check('el esquema de origen coincide con las migraciones', onlySource.length === 0 && onlyRestored.length === 0,
           onlySource.length || onlyRestored.length

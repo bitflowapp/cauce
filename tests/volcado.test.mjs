@@ -123,3 +123,24 @@ test('los privilegios de service_role se cuentan aparte; el resto del esquema ti
   assert.equal(column.onlySource.length, 1);
   assert.equal(column.onlyRestored.length, 1);
 });
+
+// Lo que mostró el run 36077349478: los privilegios por defecto también
+// cambiaron. Los de service_role nunca son desvío; los de anon/authenticated,
+// sólo antes de la migración que los revoca.
+test('privilegios por defecto: service_role siempre aparte, anon y authenticated sólo antes de migrar', () => {
+  const source = [
+    'ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON SEQUENCES TO "anon";',
+    'ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON SEQUENCES TO "service_role";',
+  ].join('\n');
+  const restored = [
+    'ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT UPDATE ON SEQUENCES TO "anon";',
+    'ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT UPDATE ON SEQUENCES TO "service_role";',
+  ].join('\n');
+  const before = compareSchemas(source, restored, { platformDefaults: true });
+  assert.equal(before.platform.length, 4);
+  assert.deepEqual([before.onlySource, before.onlyRestored], [[], []]);
+  const after = compareSchemas(source, restored);
+  assert.equal(after.platform.length, 2);
+  assert.deepEqual(after.onlySource, ['ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON SEQUENCES TO "anon";']);
+  assert.deepEqual(after.onlyRestored, ['ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT UPDATE ON SEQUENCES TO "anon";']);
+});
