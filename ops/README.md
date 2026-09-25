@@ -4,6 +4,12 @@ Cambiar `solicitud.json` y hacer commit dispara el workflow **Operación de
 producción** (`.github/workflows/operacion.yml`) con los secretos del
 repositorio. Cada pedido queda en el historial de git.
 
+Se pide desde la rama de operación (`claude/cauce-production-hardening-km1t5s`)
+o desde la rama de una entrega por integrar (`feat/cauce-business-panel-v1`,
+`feat/cauce-rider-v1`). En ese caso el paso corre con el código de esa rama:
+así el smoke previo y una migración nueva se prueban contra el proyecto real
+antes de integrar y publicar.
+
 | Campo | Valores |
 | --- | --- |
 | `paso` | `estado`, `migrar`, `auth`, `correo`, `admin`, `backup`, `smoke-previo` (antes de publicar: build de producción contra el proyecto real), `smoke-publicado`, `limpiar-qa`, `registros` (5xx y errores de cada servicio, sólo lectura) |
