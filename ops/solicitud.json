@@ -4,5 +4,5 @@
   "confirmar": "",
   "email": "",
   "invitar": false,
-  "motivo": "P14 sobre la ventana del smoke previo (run 36081431076): respuestas 5xx de la API y errores más frecuentes de Postgres, Auth, Realtime y Storage. Sólo lectura."
+  "motivo": "P14, segundo intento con el endpoint vigente de logs: 5xx de la API y errores de Postgres, Auth, Realtime y Storage en la ventana del smoke previo. Sólo lectura."
 }
