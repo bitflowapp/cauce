@@ -12,6 +12,7 @@ const CART_PREFIX = 'cauce:production:cart:v1';
 const GUEST_KEY = 'cauce:production:guest:v1';
 const IMAGE_TYPES = Object.freeze(['image/jpeg', 'image/png', 'image/webp']);
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const REQUEST_TIMEOUT_MS = 20000;
 const SESSION_TTL_MS = 15000;
 const AUTH_LINK_TYPES = Object.freeze(['signup', 'email', 'recovery', 'invite', 'magiclink', 'email_change']);
 
@@ -135,9 +136,10 @@ export function toCauceError(error) {
 
 // El SDK se inyecta sólo en el build conectado. La demo no incluye ningún SDK.
 /**
- * @param {{ client: any, redirectTo?: string, storage?: Storage, onError?: ((error: CauceError) => void)|null }} options
+ * @param {{ client: any, redirectTo?: string, storage?: Storage, onError?: ((error: CauceError) => void)|null,
+ *   requestTimeoutMs?: number }} options
  */
-export function createSupabaseRepository({ client, redirectTo, storage, onError = null }) {
+export function createSupabaseRepository({ client, redirectTo, storage, onError = null, requestTimeoutMs = REQUEST_TIMEOUT_MS }) {
   requireValue(client?.auth && client?.from, 'SUPABASE_CONFIG_REQUIRED', 'Falta la conexión segura de CAUCE.');
   const store = storage || globalThis.localStorage;
   const fail = error => {
@@ -146,9 +148,24 @@ export function createSupabaseRepository({ client, redirectTo, storage, onError 
     onError?.(wrapped);
     throw wrapped;
   };
+  // Una red móvil que se traba no da error: la consulta queda colgada y el
+  // botón, ocupado para siempre. Pasado el tiempo se corta y se avisa; como
+  // la operación pudo haber llegado, no se dice "no se envió nada". Las
+  // subidas de imágenes (Storage) no pasan por acá: pueden tardar más.
+  const failTimeout = () => {
+    const wrapped = new CauceError('NETWORK_TIMEOUT',
+      'La conexión está muy lenta y no pudimos confirmar. Revisá cómo quedó y reintentá si hace falta.');
+    onError?.(wrapped);
+    throw wrapped;
+  };
   const read = async request => {
     let result;
-    try { result = await request; } catch (error) { fail(error); }
+    const controller = typeof request?.abortSignal === 'function' ? new AbortController() : null;
+    const timer = controller ? setTimeout(() => controller.abort(), requestTimeoutMs) : null;
+    try { result = await (controller ? request.abortSignal(controller.signal) : request); }
+    catch (error) { if (controller?.signal.aborted) failTimeout(); fail(error); }
+    finally { if (timer) clearTimeout(timer); }
+    if (controller?.signal.aborted && result?.error) failTimeout();
     fail(result.error);
     return result.data;
   };

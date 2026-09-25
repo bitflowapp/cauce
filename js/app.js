@@ -385,11 +385,12 @@ function applyOfflineState() {
 
 function errorView(error) {
   const offline = isNetworkError(error);
-  const retry = offline || isConnected()
+  const slow = error?.code === 'NETWORK_TIMEOUT';
+  const retry = offline || slow || isConnected()
     ? '<button class="button secondary" type="button" data-action="retry">Reintentar</button>'
     : '';
   return `<section class="notice error" role="alert">
-    <h2>${offline ? 'Sin conexión con CAUCE' : 'No pudimos abrir esta vista'}</h2>
+    <h2>${offline ? 'Sin conexión con CAUCE' : slow ? 'La conexión está lenta' : 'No pudimos abrir esta vista'}</h2>
     <p>${esc(userMessage(error))}</p>
     <div class="modal-actions">${retry}<a class="button secondary" href="#inicio">Volver al inicio</a></div>
   </section>`;
@@ -2513,8 +2514,9 @@ async function withBusy(element, operation) {
     } else {
       toast(userMessage(error), 'error');
     }
-    // Un conflicto de versión o de estado se resuelve mostrando lo actual.
-    if (['U0001', '42501', 'PRICES_CHANGED', 'U0003'].includes(error?.code) || error?.technical?.code === 'U0001') {
+    // Un conflicto de versión o de estado se resuelve mostrando lo actual; tras
+    // una conexión lenta también: la operación pudo haber llegado.
+    if (['U0001', '42501', 'PRICES_CHANGED', 'U0003', 'NETWORK_TIMEOUT'].includes(error?.code) || error?.technical?.code === 'U0001') {
       render();
     }
   } finally {
