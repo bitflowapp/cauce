@@ -66,6 +66,8 @@ const SERVER_MESSAGES = Object.freeze({
   'You already have a trip in progress': 'Ya tenés un viaje en curso. Finalizalo antes de aceptar otro.',
   'You already have an open request': 'Ya tenés una solicitud de viaje abierta.',
   'Authentication required': 'Ingresá a tu cuenta para continuar.',
+  'Delivery code required': 'Para entregar, ingresá el código que te dicta el cliente.',
+  'Account already linked to another rider': 'Esa cuenta ya está vinculada a otra persona de reparto de este comercio.',
 });
 
 const CODE_MESSAGES = Object.freeze({
@@ -227,15 +229,20 @@ export function createSupabaseRepository({ client, redirectTo, storage, onError 
         roles: ['customer'], name: 'Compra sin cuenta', businessIds: [], memberships: [] } };
     } else {
       const profile = await ensureProfile(user);
-      const [memberships, admin, driver] = await Promise.all([
+      const [memberships, admin, driver, riderRows] = await Promise.all([
         read(client.from('business_memberships').select('business_id,role').eq('user_id', user.id)),
         read(client.rpc('my_access')),
         read(client.from('drivers').select('id,status').eq('user_id', user.id).maybeSingle()),
+        // Reparto propio: las filas que un comercio vinculó a esta cuenta (RLS: sólo las propias).
+        read(client.from('business_riders').select('id,business_id,name,active').eq('user_id', user.id)),
       ]);
+      const riders = riderRows.filter(row => row.active);
       cachedSession = { ownerId: user.id, actor: { id: user.id, kind: 'account', name: profile.display_name,
         email: user.email, phone: profile.phone,
-        roles: ['customer', ...(memberships.length ? ['merchant'] : []), ...(driver ? ['driver'] : []), ...(admin ? ['admin'] : [])],
-        businessIds: memberships.map(item => item.business_id), memberships, driverId: driver?.id || null } };
+        roles: ['customer', ...(memberships.length ? ['merchant'] : []), ...(riders.length ? ['rider'] : []),
+          ...(driver ? ['driver'] : []), ...(admin ? ['admin'] : [])],
+        businessIds: memberships.map(item => item.business_id), memberships, driverId: driver?.id || null,
+        riderIds: riders.map(row => row.id) } };
     }
     cachedAt = Date.now();
     return cachedSession;
@@ -351,7 +358,25 @@ export function createSupabaseRepository({ client, redirectTo, storage, onError 
     reviewNote: row.review_note || '', createdAt: row.created_at, updatedAt: row.updated_at,
   });
   const mapRider = row => ({ id: row.id, businessId: row.business_id, localityId: LOCALITY,
-    name: row.name, phone: row.phone || '', active: row.active === true, createdAt: row.created_at });
+    name: row.name, phone: row.phone || '', active: row.active === true, linked: Boolean(row.user_id),
+    createdAt: row.created_at });
+  // Lo que devuelve rider_orders: lo necesario para entregar, nunca el código
+  // de entrega ni la cuenta del cliente (la base no los manda).
+  const mapRiderOrder = row => ({
+    id: row.id, code: row.code, status: row.status, version: row.version, fulfillment: 'delivery',
+    business: { id: row.business?.id, name: row.business?.name || '', address: row.business?.address || '',
+      phone: row.business?.phone || '' },
+    locality: row.locality || '', riderId: row.rider?.id || null, riderName: row.rider?.name || '',
+    customer: { name: row.contact_name || '', phone: row.contact_phone || '', address: row.address || '',
+      notes: row.notes || '' },
+    paymentMethod: row.payment_method, paymentStatus: row.payment_status,
+    subtotal: Number(row.subtotal_ars), deliveryFee: Number(row.delivery_fee_ars), total: Number(row.total_ars),
+    cancelReason: row.cancel_reason || '', codeAttemptsLeft: Number(row.code_attempts_left ?? 0),
+    lines: (row.items || []).map(item => ({ name: item.variant ? `${item.name} · ${item.variant}` : item.name,
+      quantity: Number(item.quantity) || 0 })),
+    history: (row.history || []).map(step => ({ status: step.status, at: step.at })),
+    createdAt: row.created_at, updatedAt: row.updated_at,
+  });
 
   // ── carrito: vive en el navegador hasta el checkout ──
   // Sin cuenta (o con la sesión anónima de compra) el carrito es del
@@ -566,6 +591,25 @@ export function createSupabaseRepository({ client, redirectTo, storage, onError 
       const rows = await read(client.from('business_riders').select('*')
         .eq('business_id', payload?.businessId).order('name'));
       return rows.map(mapRider);
+    },
+    // Titular y encargado/a: qué cuenta tiene vinculada cada persona de reparto.
+    async riderAccounts(payload) {
+      const rows = await read(client.rpc('business_rider_accounts', { business: payload?.businessId }));
+      return Object.fromEntries(rows.map(row => [row.rider_id, row.email]));
+    },
+    // Quien reparte: sus entregas en curso y las cerradas en los últimos 7 días.
+    async riderOrders() {
+      const user = await currentUser();
+      if (!isPermanent(user)) return [];
+      const rows = await read(client.rpc('rider_orders'));
+      return (Array.isArray(rows) ? rows : []).map(mapRiderOrder);
+    },
+    async myRiderProfiles() {
+      const user = await currentUser();
+      if (!isPermanent(user)) return [];
+      const rows = await read(client.from('business_riders').select('id,business_id,name,active,businesses(name)')
+        .eq('user_id', user.id));
+      return rows.map(row => ({ ...mapRider(row), businessName: row.businesses?.name || '' }));
     },
     async myTrips() {
       const user = await currentUser();
@@ -911,6 +955,16 @@ export function createSupabaseRepository({ client, redirectTo, storage, onError 
       requireValue(row, 'BUSINESS_FORBIDDEN', 'Tu cuenta no puede administrar el reparto de este comercio.');
       return mapRider(row);
     },
+    async 'rider.linkAccount'(payload) {
+      const email = normalizeEmail(payload?.email);
+      requireValue(isValidEmail(email), 'INVALID_EMAIL', 'Ingresá el correo de la cuenta de CAUCE de esa persona.');
+      await read(client.rpc('link_rider_account', { rider: payload?.riderId, account_email: email }));
+      return { riderId: payload?.riderId, email };
+    },
+    async 'rider.unlinkAccount'(payload) {
+      await read(client.rpc('unlink_rider_account', { rider: payload?.riderId }));
+      return { riderId: payload?.riderId };
+    },
     async 'rider.setActive'(payload) {
       const row = await read(client.from('business_riders').update({ active: payload?.active === true })
         .eq('id', payload?.riderId).select().maybeSingle());
@@ -1026,6 +1080,18 @@ export function createSupabaseRepository({ client, redirectTo, storage, onError 
         reason: text(payload?.reason, 200),
       }));
       return mapOrder({ ...row, order_items: [], order_events: [] });
+    },
+    // Entregar con el código del cliente. Un código equivocado no es un error de
+    // la base (el intento queda registrado): vuelve como { ok: false, reason }.
+    async 'order.confirmDelivery'(payload) {
+      const code = String(payload?.code || '').replace(/\D/g, '');
+      const result = await read(client.rpc('confirm_delivery', {
+        order_id: payload?.orderId,
+        expected_version: Number.isSafeInteger(Number(payload?.expectedVersion)) ? Number(payload.expectedVersion) : null,
+        code,
+      }));
+      return { ok: result?.ok === true, reason: result?.reason || '', remaining: Number(result?.remaining ?? 0),
+        status: result?.status || '', version: result?.version ?? null };
     },
     async 'driver.apply'(payload) {
       await requireAccount('Ingresá con tu cuenta para registrarte como conductor.');
@@ -1239,7 +1305,7 @@ export function createSupabaseRepository({ client, redirectTo, storage, onError 
       const run = COMMANDS[name];
       if (!run) throw new CauceError('FEATURE_UNAVAILABLE', 'Esta operación todavía no está habilitada en CAUCE.');
       const result = await run(payload);
-      if (/^(business|team|admin|driver)\./.test(name)) invalidate();
+      if (/^(business|team|admin|driver)\./.test(name) || name === 'rider.unlinkAccount') invalidate();
       return result;
     },
   });

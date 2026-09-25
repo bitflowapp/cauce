@@ -1,7 +1,9 @@
 // Smoke obligatorio después de publicar, sobre el sitio PUBLICADO y el proyecto
-// real: visita, compra sin cuenta y con cuenta, retiro y envío atendidos por
-// titular y encargado, seguimiento por enlace, seguridad (panel sin sesión,
-// comercio ajeno, precio y estado manipulados), 320–1440 px, Chromium y
+// real: visita, compra sin cuenta y con cuenta, retiro atendido por el titular,
+// y el circuito completo de un envío con el MISMO pedido (cliente → encargado →
+// persona de reparto desde su teléfono, con el código del cliente → cliente
+// ve la entrega), seguimiento por enlace, seguridad (panel sin sesión,
+// comercio ajeno, reparto, precio y estado manipulados), 320–1440 px, Chromium y
 // WebKit. Usa sólo dos comercios "CAUCE QA" creados para la corrida y los
 // borra al final (también si algo falla).
 //
@@ -32,9 +34,11 @@ before(async () => {
   if (!html.includes(new URL(t.url).host)) throw new Error(`${SITE} no apunta al proyecto ${t.ref}.`);
   try {
     people.admin = await qaAccount('admin', { admin: true });
-    for (const role of ['owner', 'manager', 'staff', 'ownerb', 'cliente']) people[role] = await qaAccount(role);
+    for (const role of ['owner', 'manager', 'staff', 'ownerb', 'cliente', 'reparto']) people[role] = await qaAccount(role);
     A = await qaBusiness(people.owner, people.admin, { label: 'Almacen', manager: people.manager, staff: people.staff });
     B = await qaBusiness(people.ownerb, people.admin, { label: 'Otro' });
+    // La persona de reparto de A entra con su cuenta: la vincula el encargado.
+    ok(await people.manager.client.rpc('link_rider_account', { rider: A.rider.id, account_email: people.reparto.email }), 'vincular reparto');
   } catch (error) { setupError = error; throw error; }
 });
 
@@ -135,11 +139,12 @@ for (const engine of engines) {
     } finally { await browser.close(); }
   });
 
-  test(`${engine}: cliente con cuenta, envío y reparto atendidos por el encargado`, async () => {
+  test(`${engine}: un envío completo con el mismo pedido: cliente, encargado, reparto desde el teléfono y entrega con código`, async () => {
     const browser = await launch(engine);
     try {
       const customer = await person(browser, { label: 'cliente' });
       const manager = await person(browser, { width: 1024, height: 900, label: 'encargado' });
+      const courier = await person(browser, { label: 'reparto' });
       const c = customer.page;
       await signIn(c, people.cliente);
       await go(c, `#comercio/${A.id}`);
@@ -157,12 +162,40 @@ for (const engine of engines) {
       await card.locator('select[name="riderId"]').selectOption({ label: A.rider.name });
       await card.getByRole('button', { name: 'Asignar reparto' }).click();
       await ready(m);
-      for (const label of ['Retirado por el reparto', 'Salió a entregar', 'Marcar entregado']) await panelAction(m, order.code, label);
+
+      // La persona de reparto, en su teléfono: ve sólo lo necesario y avanza cada paso.
+      const r = courier.page;
+      await signIn(r, people.reparto);
+      await go(r, '#entregas');
+      const delivery = r.locator(`article[aria-label="Entrega ${order.code}"]`);
+      await delivery.waitFor({ timeout: 30000 });
+      assert.match(await delivery.textContent(), /Prueba interna 45/);
+      assert.match(await delivery.getByRole('link', { name: 'Abrir en Maps' }).getAttribute('href'), /^https:\/\/www\.google\.com\/maps\/search\/\?api=1&query=/);
+      for (const label of ['Retiré el pedido', 'Salí a entregar', 'Llegué']) {
+        await r.locator(`article[aria-label="Entrega ${order.code}"]`).getByRole('button', { name: label, exact: true }).click();
+        await ready(r);
+      }
+      assert.equal((await orderRow(order.id)).status, 'arrived');
+      // El cliente ve que llegó y lee su código en su pedido; se lo dicta a quien reparte.
+      await go(c, `#pedido/${order.id}`);
+      await c.getByText('El reparto informó que llegó').waitFor({ timeout: 30000 });
+      const dictated = (await c.locator('p.microcopy', { hasText: 'Código de entrega' }).locator('strong').textContent()).trim();
+      await r.locator(`article[aria-label="Entrega ${order.code}"]`).locator('input[name="code"]').fill(dictated);
+      await r.locator(`article[aria-label="Entrega ${order.code}"]`).getByRole('button', { name: 'Entregar' }).click();
+      await ready(r);
+      assert.equal(await r.locator(`article[aria-label="Entrega ${order.code}"]`).count(), 0, 'sale de las entregas en curso');
+      assert.match(await r.locator('.rider-history').textContent(), new RegExp(`${order.code}[\\s\\S]*Entregado`));
+      await shot(r, `${engine}-publicado-reparto-entregado`);
+      const closed = await orderRow(order.id);
+      assert.equal(closed.status, 'delivered');
       await c.locator('.timeline-step.current', { hasText: 'Entregado' }).waitFor({ timeout: 30000 });
       await go(c, '#actividad');
       assert.ok(await c.getByText(order.code).first().isVisible(), 'el pedido figura en su actividad');
-      assert.deepEqual([...customer.problems, ...manager.problems], []);
-      record(`${engine}: cuenta, envío y reparto`, true);
+      // El comercio lo ve completado y sumado a lo vendido hoy.
+      await go(m, `#panel/${A.id}/inicio`);
+      assert.ok(await m.locator('.recent-sales').getByText(order.code).isVisible(), 'la venta figura en Últimas ventas');
+      assert.deepEqual([...customer.problems, ...manager.problems, ...courier.problems], []);
+      record(`${engine}: circuito completo de un envío con reparto`, true);
     } finally { await browser.close(); }
   });
 
@@ -174,8 +207,10 @@ for (const engine of engines) {
       // alcanza con cambiar el tamaño de la ventana.
       const visitor = await person(browser, { label: 'visita' });
       const owner = await person(browser, { label: 'titular' });
+      const courier = await person(browser, { label: 'reparto' });
       await open(visitor.page, '#inicio');
       await signIn(owner.page, people.owner);
+      await signIn(courier.page, people.reparto);
       for (const width of [320, 390, 430, 768, 1280, 1440]) {
         const size = { width, height: width < 900 ? 800 : 900 };
         await visitor.page.setViewportSize(size);
@@ -188,12 +223,15 @@ for (const engine of engines) {
           await go(owner.page, `#panel/${A.id}/${section}`);
           for (const issue of await layoutIssues(owner.page)) issues.push(`${width}px panel ${section}: ${issue}`);
         }
+        await courier.page.setViewportSize(size);
+        await go(courier.page, '#entregas');
+        for (const issue of await layoutIssues(courier.page)) issues.push(`${width}px entregas: ${issue}`);
         if (width === 320 || width === 1440) {
           await shot(visitor.page, `${engine}-publicado-comercio-${width}`);
           await shot(owner.page, `${engine}-publicado-panel-${width}`);
         }
       }
-      issues.push(...visitor.problems, ...owner.problems);
+      issues.push(...visitor.problems, ...owner.problems, ...courier.problems);
       assert.deepEqual(issues, []);
       record(`${engine}: anchos`, true);
     } finally { await browser.close(); }
@@ -244,6 +282,17 @@ test('seguridad sobre el sitio y la API publicados', async () => {
   const anon = await visitor.from('orders').select('id').limit(1);
   assert.ok(anon.error || anon.data.length === 0, 'una visita no lee pedidos');
   assert.equal((await visitor.from('businesses').select('id').eq('id', B.id)).data?.length, 1, 'el catálogo publicado sí es público');
+  // Reparto: la persona lee sus entregas por función, nunca la tabla, y no mueve pedidos ajenos.
+  assert.deepEqual(ok(await people.reparto.client.from('orders').select('id,delivery_code'), 'reparto lee orders'), [],
+    'quien reparte no lee la tabla de pedidos');
+  const mine = ok(await people.reparto.client.rpc('rider_orders'), 'rider_orders');
+  assert.ok(mine.every(item => !('delivery_code' in item) && !('customer_id' in item) && !('tracking_token' in item)),
+    'su lectura no trae el código ni la cuenta del cliente');
+  const foreign = await people.reparto.client.rpc('transition_order', { order_id: id, expected_version: null,
+    next_status: 'picked_up', rider: null, reason: '' });
+  assert.equal(foreign.error?.code, '42501', 'no mueve un pedido que no le asignaron');
+  const hijack = await people.reparto.client.rpc('link_rider_account', { rider: A.rider.id, account_email: people.cliente.email });
+  assert.equal(hijack.error?.code, '42501', 'no vincula cuentas');
   ok(await people.owner.client.rpc('transition_order', { order_id: id, expected_version: null, next_status: 'canceled',
     rider: null, reason: 'Prueba de seguridad QA' }), 'rechazo con motivo');
   record('seguridad', true);

@@ -155,7 +155,10 @@ async function estado(t, list) {
 }
 
 async function migrar(t, list) {
-  const expected = option('esperada') || '20260924120000';
+  // La única migración pendiente admitida es la del contrato que exige este
+  // frontend (js/core/contract.js): sin publicar código que la necesite, no se
+  // migra nada, y nunca más de una a la vez.
+  const expected = option('esperada') || String(REQUIRED_SCHEMA);
   t.link();
   const before = await migrationState(t);
   log('\nHistorial según la CLI:');

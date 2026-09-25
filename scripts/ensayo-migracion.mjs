@@ -1,7 +1,8 @@
-// Ensayo de B1 de punta a punta, sin tocar el proyecto real: un Supabase
-// temporal con SÓLO las migraciones que hoy tiene producción, datos cargados
-// con las funciones de esa versión (comercio publicado y pedidos en todos los
-// estados) y, sobre él, exactamente los comandos que se corren en producción:
+// Ensayo de la próxima migración de punta a punta, sin tocar el proyecto real:
+// un Supabase temporal con SÓLO las migraciones que hoy tiene producción (todas
+// menos la del contrato que exige este frontend), datos cargados con las
+// funciones de esa versión (comercio publicado y pedidos en todos los estados)
+// y, sobre él, exactamente los comandos que se corren en producción:
 // `operacion.mjs backup` antes y después de migrar, y `operacion.mjs migrar`
 // (que a su vez ensaya en otro stack antes de aplicar). Al final comprueba los
 // datos migrados.
@@ -16,8 +17,9 @@ import { randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { migrationFiles, redact } from './lib/proyecto.mjs';
 import { withTempStack } from './lib/respaldo.mjs';
+import { REQUIRED_SCHEMA } from '../js/core/contract.js';
 
-const PENDING = '20260924120000';
+const PENDING = String(REQUIRED_SCHEMA);
 const files = await migrationFiles();
 const applied = files.filter(file => file.split('_')[0] < PENDING);
 assert.equal(applied.length, files.length - 1, 'la migración pendiente es la última del repo');
@@ -73,6 +75,11 @@ await withTempStack({ migrations: applied, offset: 2000, projectId: 'cauce-orige
     await move(road, version, next, r || null);
   }
   const [{ n: ordersBefore }] = await db.unsafe('select count(*)::int as n from public.orders');
+  const snapshot = () => db.unsafe(`select o.id, o.code, o.status, o.version, o.total_ars::text as total, o.delivery_code,
+      o.tracking_token, (select count(*)::int from public.order_events e where e.order_id = o.id) as events
+    from public.orders o order by o.code`);
+  const stock = () => db.unsafe('select id, stock, track_stock from public.products order by id');
+  const [ordersSnapshot, stockSnapshot] = [await snapshot(), await stock()];
   console.log(`Origen con ${applied.length} migraciones: 1 comercio publicado, ${ordersBefore} pedidos en curso y cerrados.`);
 
   // ── Auth y Storage de la nube más nuevos que los de la CLI (lo visto en el
@@ -108,14 +115,17 @@ await withTempStack({ migrations: applied, offset: 2000, projectId: 'cauce-orige
   assert.match(backupAfter.stdout, /^PASS · el contrato de esquema responde/m);
 
   // ── lo migrado conserva todo y sigue funcionando ──
+  // Pedidos (estado, versión, importes, código de entrega, enlace, historial) y
+  // existencias, idénticos antes y después.
+  assert.deepEqual(await snapshot(), ordersSnapshot);
+  assert.deepEqual(await stock(), stockSnapshot);
   const [state] = await db.unsafe(`select
       (select count(*)::int from public.orders) as orders,
       (select status from public.orders where id = $1) as pending,
       (select status from public.orders where id = $2) as road,
       (select count(*)::int from public.order_events where from_status is null and to_status <> 'submitted') as orphans,
-      (select track_stock from public.products where id = $3) as tracked,
-      (select stock from public.products where id = $3) as stock`, [pending, road, product]);
-  assert.deepEqual(state, { orders: ordersBefore, pending: 'submitted', road: 'picked_up', orphans: 0, tracked: true, stock: 14 });
+      (select (private.app_status() ->> 'schema')) as schema`, [pending, road]);
+  assert.deepEqual(state, { orders: ordersBefore, pending: 'submitted', road: 'picked_up', orphans: 0, schema: PENDING });
   assert.equal((await move(road, 6, 'canceled', null, 'No se pudo entregar'))[0].status, 'canceled');
-  console.log('\nENSAYO B1 PASS · backup y restauración antes y después, migración aplicada con el mismo comando que en producción, datos intactos y operables.');
+  console.log(`\nENSAYO ${PENDING} PASS · backup y restauración antes y después, migración aplicada con el mismo comando que en producción, datos intactos y operables.`);
 });
