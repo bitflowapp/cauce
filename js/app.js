@@ -3096,7 +3096,9 @@ function syncLive(page, param) {
 function isEditing() {
   const active = /** @type {HTMLInputElement|null} */ (document.activeElement);
   return Boolean(active && main?.contains(active) && /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName)
-    && active.type !== 'button' && active.type !== 'submit');
+    && active.type !== 'button' && active.type !== 'submit')
+    // Cambios sin guardar aunque el foco ya esté en otro lado.
+    || Boolean(main?.querySelector('form[data-dirty="true"]'));
 }
 
 // Rutas cuyo contenido depende de los permisos de la cuenta. En el entorno con
@@ -3189,6 +3191,24 @@ function bindEvents() {
     const button = submitter || form.querySelector('button[type="submit"]');
     withBusy(button || form, () => handler(form, submitter));
   });
+
+  // Un formulario con cambios sin guardar queda marcado: los refrescos de
+  // fondo (Realtime, sondeo) no lo pisan hasta que se guarde o se salga.
+  const markDirty = event => {
+    const form = /** @type {HTMLElement} */ (event.target).closest?.('form');
+    if (form && main.contains(form) && form.dataset.form && !['search', 'checkout', 'assign-rider'].includes(form.dataset.form)) {
+      form.dataset.dirty = 'true';
+    }
+  };
+  document.addEventListener('input', markDirty);
+  document.addEventListener('change', markDirty);
+  // Los desplegables marcados con data-keep-open siguen abiertos al redibujar.
+  document.addEventListener('toggle', event => {
+    const details = /** @type {HTMLDetailsElement} */ (event.target);
+    const key = details?.dataset?.keepOpen;
+    if (!key) return;
+    if (details.open) app.openDetails.add(key); else app.openDetails.delete(key);
+  }, true);
 
   // La búsqueda se aplica al escribir, sin recargar la vista entera en cada tecla.
   let searchTimer;
