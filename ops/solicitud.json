@@ -1,8 +1,8 @@
 {
-  "paso": "limpiar-qa",
-  "aplicar": true,
-  "confirmar": "ygqbcvxdrewcnzedfcyo",
+  "paso": "registros",
+  "aplicar": false,
+  "confirmar": "",
   "email": "",
   "invitar": false,
-  "motivo": "Después del smoke previo (run 36081431076, 7/7): verificar QA_USERS, QA_BUSINESSES, QA_ORDERS y QA_STORAGE = 0; si quedara algo con el patrón de QA, borrarlo. No toca registros reales."
+  "motivo": "P14 sobre la ventana del smoke previo (run 36081431076): respuestas 5xx de la API y errores más frecuentes de Postgres, Auth, Realtime y Storage. Sólo lectura."
 }
