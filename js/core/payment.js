@@ -155,7 +155,9 @@ export function paymentReturnReference(hash = '', search = '') {
 }
 
 // Resultado de conectar la cuenta del comercio (#panel/<id>/pagos?conexion=…).
-export const CONNECTION_RESULTS = Object.freeze(['ok', 'cancelada', 'vencida', 'error']);
+// cuenta_real / cuenta_prueba: el proveedor dijo que la cuenta no corresponde al
+// modo del comercio (sandbox o real) y no se guardó nada.
+export const CONNECTION_RESULTS = Object.freeze(['ok', 'cancelada', 'vencida', 'cuenta_real', 'cuenta_prueba', 'error']);
 export function connectionResult(hash = '') {
   const value = new URLSearchParams(String(hash).split('?')[1] || '').get('conexion') || '';
   return CONNECTION_RESULTS.includes(value) ? value : '';

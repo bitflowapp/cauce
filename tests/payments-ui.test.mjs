@@ -52,6 +52,13 @@ test('la referencia de vuelta es un UUID puesto por CAUCE, o no se consulta nada
   assert.equal(paymentReturnReference('#pago/exito', ''), '');
   assert.equal(connectionResult('#panel/b1/pagos?conexion=ok'), 'ok');
   assert.equal(connectionResult('#panel/b1/pagos?conexion=<script>'), '');
+  // Cuenta que no corresponde al modo del comercio: se explica, no se guardó nada.
+  for (const [result, text] of [['cuenta_real', 'sólo se conectan cuentas de prueba'], ['cuenta_prueba', 'conectá la cuenta real']]) {
+    assert.equal(connectionResult(`#panel/b1/pagos?conexion=${result}`), result);
+    const html = paymentsSection(overview(), { businessId: 'b1', isOwner: true, connection: result });
+    assert.ok(html.includes(text), result);
+    assert.ok(html.includes('No se guardó nada'), result);
+  }
 });
 
 const overview = (extra = {}) => ({ enabled: true, providers: [{ provider: 'proveedor', label: 'Pagos Sur' }], accounts: [],
