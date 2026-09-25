@@ -48,7 +48,6 @@ for (const [name, subject] of Object.entries(TEMPLATES)) {
 }
 
 const payload = {
-  ...templates,
   // Compra sin cuenta: sesión anónima real, limitada por RLS a sus pedidos.
   external_anonymous_users_enabled: true,
   // Muchas personas comparten IP detrás de la red móvil: el tope por IP no
@@ -116,12 +115,21 @@ if (declared.length === 5) {
   payload.rate_limit_email_sent = Number(process.env.CAUCE_EMAIL_RATE_LIMIT || 30);
 }
 
+// Plantillas propias sólo junto con el SMTP propio: con el correo interno de
+// Supabase no llegan a vecinos igual, y la plataforma puede rechazar el cambio
+// entero (y con él todo lo demás) si se mandan sin SMTP.
+const current = await (await fetch(endpoint, { headers })).json();
+const withSmtp = declared.length === 5 || Boolean(current.smtp_host);
+if (withSmtp) Object.assign(payload, templates);
+
 const visible = Object.fromEntries(Object.entries(payload)
   .map(([key, value]) => [key, key === 'smtp_pass' ? '(oculta)' : value])
   .filter(([key]) => !key.startsWith('mailer_templates_')));
 console.log(apply ? 'Aplicando a CAUCE:' : 'Cambios previstos (no se aplicó nada):');
 console.log(JSON.stringify(visible, null, 2));
-console.log(`Plantillas de correo: ${Object.keys(templates).filter(key => key.startsWith('mailer_templates_')).length} en castellano, con token_hash.`);
+console.log(withSmtp
+  ? `Plantillas de correo: ${Object.keys(templates).filter(key => key.startsWith('mailer_templates_')).length} en castellano, con token_hash.`
+  : 'Plantillas de correo: se cargan junto con el SMTP propio (todavía no hay).');
 
 if (!apply) {
   console.log('\nEjecutá otra vez con --apply para escribir la configuración.');
@@ -134,21 +142,21 @@ if (!response.ok) {
   console.error((await response.text()).slice(0, 400));
   process.exit(1);
 }
-const current = await (await fetch(endpoint, { headers })).json();
+const after = await (await fetch(endpoint, { headers })).json();
 console.log('\nEstado real después del cambio:');
 console.log(JSON.stringify({
-  site_url: current.site_url,
-  uri_allow_list: current.uri_allow_list,
-  smtp_host: current.smtp_host || '(sin SMTP propio: sólo llega a integrantes del equipo Supabase)',
-  smtp_sender: current.smtp_admin_email || null,
-  rate_limit_email_sent: current.rate_limit_email_sent,
-  mailer_autoconfirm: current.mailer_autoconfirm,
-  anonymous_sign_ins: current.external_anonymous_users_enabled,
-  rate_limit_anonymous_users: current.rate_limit_anonymous_users,
-  password_hibp_enabled: current.password_hibp_enabled,
-  minimum_password_length: current.password_min_length,
+  site_url: after.site_url,
+  uri_allow_list: after.uri_allow_list,
+  smtp_host: after.smtp_host || '(sin SMTP propio: sólo llega a integrantes del equipo Supabase)',
+  smtp_sender: after.smtp_admin_email || null,
+  rate_limit_email_sent: after.rate_limit_email_sent,
+  mailer_autoconfirm: after.mailer_autoconfirm,
+  anonymous_sign_ins: after.external_anonymous_users_enabled,
+  rate_limit_anonymous_users: after.rate_limit_anonymous_users,
+  password_hibp_enabled: after.password_hibp_enabled,
+  minimum_password_length: after.password_min_length,
 }, null, 2));
-if (current.mailer_autoconfirm) {
+if (after.mailer_autoconfirm) {
   console.error('\nATENCIÓN: la confirmación de correo está desactivada en el proyecto.');
   process.exit(1);
 }
