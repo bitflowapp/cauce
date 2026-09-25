@@ -1,8 +1,8 @@
 {
-  "paso": "migrar",
+  "paso": "smoke-previo",
   "aplicar": true,
   "confirmar": "ygqbcvxdrewcnzedfcyo",
   "email": "",
   "invitar": false,
-  "motivo": "Fase D: aplicar la migración de métricas del piloto (20260925150000; sólo agrega funciones) en el proyecto real, después del backup con restauración, el dry-run exacto y CI verde. El paso ensaya otra vez sobre una copia de los datos antes de aplicar."
+  "motivo": "Fase D: el build de producción de feat/cauce-pilot-metrics contra el proyecto real ya migrado, antes de integrar y publicar: circuito completo con reparto y la administración con el día del piloto. Crea y borra datos CAUCE QA."
 }
