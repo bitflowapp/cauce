@@ -434,11 +434,14 @@ async function registros(t, list) {
     const query = new URLSearchParams({ sql, iso_timestamp_start: start.toISOString(), iso_timestamp_end: end.toISOString() });
     let rows;
     try {
-      const response = await t.management(`/analytics/endpoints/logs.all?${query}`);
+      // logs.all está deprecado (410): el endpoint vigente es /analytics/endpoints/logs.
+      const response = await t.management(`/analytics/endpoints/logs?${query}`);
       if (response?.error) throw new Error(typeof response.error === 'string' ? response.error : JSON.stringify(response.error));
       rows = response?.result || [];
     } catch (error) {
-      list.info(label, `no se pudo consultar: ${redact(error.message).slice(0, 200)}`);
+      // El mensaje trae la URL (larga, con el SQL): se muestra sólo el estado y la respuesta.
+      const detail = /HTTP (\d+) ([\s\S]*)$/.exec(redact(error.message));
+      list.info(label, `no se pudo consultar: ${detail ? `HTTP ${detail[1]} ${detail[2]}` : redact(error.message)}`.slice(0, 400));
       continue;
     }
     const text = rows.map(row => Object.values(row).map(value => String(value).replace(/\s+/g, ' ').slice(0, 140)).join(' · ')).join(' | ');
