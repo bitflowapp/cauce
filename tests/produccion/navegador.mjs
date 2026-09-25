@@ -1,14 +1,15 @@
-// Navegadores reales contra el sitio publicado (o el build local servido en
-// 4174 cuando se ensaya con CAUCE_SMOKE_LOCAL=1).
+// Navegadores reales contra el sitio publicado, contra el build de producción
+// servido en 4174 antes de publicar (CAUCE_SMOKE_SITE=build, proyecto real) o
+// contra el build local y el stack local (CAUCE_SMOKE_LOCAL=1).
 import { mkdir, stat, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium, webkit } from 'playwright';
 import { createStaticServer } from '../../scripts/server.mjs';
-import { LOCAL, t } from './qa.mjs';
+import { BUILD, LOCAL, t } from './qa.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
-export const SITE = LOCAL ? 'http://127.0.0.1:4174' : t.siteUrl;
+export const SITE = LOCAL || BUILD ? 'http://127.0.0.1:4174' : t.siteUrl;
 export const EVIDENCE = resolve(root, 'evidence/produccion');
 const ENGINES = { chromium, webkit };
 export const engines = (process.env.CAUCE_E2E_BROWSERS || 'chromium,webkit').split(',').map(name => name.trim())
@@ -17,9 +18,10 @@ export const engines = (process.env.CAUCE_E2E_BROWSERS || 'chromium,webkit').spl
 let server = null;
 export async function startSite() {
   await mkdir(EVIDENCE, { recursive: true });
-  if (!LOCAL) return;
-  await stat(resolve(root, '.local/preview/index.html'));
-  server = createStaticServer({ root: resolve(root, '.local/preview'), preview: true });
+  if (!LOCAL && !BUILD) return;
+  const dir = resolve(root, LOCAL ? '.local/preview' : 'dist-production');
+  await stat(resolve(dir, 'index.html'));
+  server = createStaticServer({ root: dir, preview: true });
   await new Promise((resolveListen, reject) => { server.once('error', reject); server.listen(4174, '127.0.0.1', resolveListen); });
 }
 export async function stopSite() { await new Promise(done => (server ? server.close(() => done()) : done())); }

@@ -6,12 +6,14 @@
 // borra al final (también si algo falla).
 //
 //   SUPABASE_ACCESS_TOKEN=… npm run smoke:publicado
+//   SUPABASE_ACCESS_TOKEN=… CAUCE_SMOKE_SITE=build npm run smoke:publicado
+//        antes de publicar: dist-production servido en 4174 contra el proyecto real
 //   CAUCE_SMOKE_LOCAL=1 npm run smoke:publicado     ensayo contra build y stack locales
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
-import { LOCAL, cleanup, ok, orderRow, qaAccount, qaBusiness, t } from './qa.mjs';
+import { BUILD, LOCAL, cleanup, ok, orderRow, qaAccount, qaBusiness, t } from './qa.mjs';
 import {
   SITE, engines, go, launch, layoutIssues, open, person, ready, report, shot, signIn, startSite, stopSite,
 } from './navegador.mjs';
@@ -39,7 +41,8 @@ before(async () => {
 after(async () => {
   let cleaned = 'sin limpieza';
   try { cleaned = await cleanup(people.admin); } finally {
-    await report('smoke-publicado', { at: new Date().toISOString(), site: SITE, project: t.ref, local: LOCAL, results, cleaned,
+    await report(BUILD ? 'smoke-previo' : 'smoke-publicado', { at: new Date().toISOString(), site: SITE, project: t.ref,
+      mode: LOCAL ? 'local' : BUILD ? 'build de producción contra el proyecto real' : 'sitio publicado', results, cleaned,
       setupError: setupError?.message || null });
     await stopSite();
     // Conexiones abiertas mantendrían vivo el proceso de pruebas.
@@ -163,7 +166,7 @@ for (const engine of engines) {
     } finally { await browser.close(); }
   });
 
-  test(`${engine}: 320, 390, 430, 1280 y 1440 px sin desbordes`, async () => {
+  test(`${engine}: 320, 390, 430, 768, 1280 y 1440 px sin desbordes`, async () => {
     const browser = await launch(engine);
     try {
       const issues = [];
@@ -173,7 +176,7 @@ for (const engine of engines) {
       const owner = await person(browser, { label: 'titular' });
       await open(visitor.page, '#inicio');
       await signIn(owner.page, people.owner);
-      for (const width of [320, 390, 430, 1280, 1440]) {
+      for (const width of [320, 390, 430, 768, 1280, 1440]) {
         const size = { width, height: width < 900 ? 800 : 900 };
         await visitor.page.setViewportSize(size);
         for (const hash of ['#inicio', '#comercios', `#comercio/${A.id}`]) {

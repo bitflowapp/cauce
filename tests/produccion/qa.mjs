@@ -12,6 +12,9 @@ import { createClient } from '@supabase/supabase-js';
 import { hide, target } from '../../scripts/lib/proyecto.mjs';
 
 export const LOCAL = process.env.CAUCE_SMOKE_LOCAL === '1';
+// Antes de publicar: el build de producción (dist-production, el mismo artefacto
+// que después sube Pages) servido en 4174 contra el proyecto REAL.
+export const BUILD = !LOCAL && process.env.CAUCE_SMOKE_SITE === 'build';
 export const t = await target({ local: LOCAL });
 export const run = randomBytes(4).toString('hex');
 const options = { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } };
