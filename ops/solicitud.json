@@ -1,8 +1,8 @@
 {
-  "paso": "backup",
+  "paso": "migrar",
   "aplicar": false,
   "confirmar": "",
   "email": "",
   "invitar": false,
-  "motivo": "Fase C, antes de migrar: copia cifrada del proyecto real, restauración en un stack nuevo y la migración pendiente del reparto (20260925120000) aplicada sobre la copia restaurada. Sólo lectura sobre el proyecto."
+  "motivo": "Fase C: dry-run exacto de la migración del reparto (20260925120000) contra el proyecto real, después del backup con restauración (run 36106405329). Sólo muestra qué aplicaría."
 }
