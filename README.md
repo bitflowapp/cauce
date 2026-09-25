@@ -7,14 +7,20 @@ retiro o con envío propio, y los vecinos compren sin intermediarios de pago.
   pide la publicación; administración la revisa.
 - Una persona compra **sin crear cuenta** (sesión anónima real), sigue su
   pedido en vivo o por un enlace, y paga en efectivo al retirar o al recibir.
-- El comercio atiende desde su panel: aviso sonoro de pedidos nuevos, estados
-  con reglas del servidor, reparto propio y equipo con roles.
+- El comercio atiende desde su panel, también desde el teléfono: ventas del
+  día en vivo, tablero de pedidos por estado, catálogo, horarios,
+  configuración, reparto propio y equipo con roles.
+- La persona que reparte para un comercio entra con su cuenta a **Mis
+  entregas** (`#entregas`): retira, sale, llega y entrega con el código del
+  cliente, sólo en los pedidos que su comercio le asignó.
+- La administración revisa altas, suspende y rehabilita, y ve el día del
+  piloto: pedidos, completados, volumen bruto y lo que necesita atención.
 
-**Estado: NOT_READY para operar con comercios reales.** El código, el esquema y
-las pruebas están listos; faltan pasos de operación sobre el proyecto real
-(aplicar la migración, SMTP propio, habilitar la compra sin cuenta, verificar
-la recuperación de contraseña con una casilla real y publicar). El detalle, con
-comandos, está en [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md).
+**Estado: plataforma piloto publicada** en https://bitflowapp.github.io/cauce/,
+conectada al proyecto Supabase `ygqbcvxdrewcnzedfcyo`, para 5 a 20 comercios de
+Aluminé. Cómo se verificó, qué falta (una acción humana: que la cuenta de
+administración elija su contraseña) y cómo se opera:
+[PRODUCTION_READINESS.md](PRODUCTION_READINESS.md).
 
 ---
 
@@ -33,9 +39,10 @@ backend a datos de demostración.
 | Autoridad | Funciones SQL del servidor | El navegador | El servidor local |
 | Red | Sólo el proyecto Supabase (CSP) | `connect-src 'none'` | Mismo origen |
 
-GitHub Pages publica **la demostración** hasta que la variable del
-repositorio `CAUCE_DEPLOY_TARGET` valga `production` (ver
-[PRODUCTION_READINESS.md §3.6](PRODUCTION_READINESS.md#36-publicar-b4)).
+GitHub Pages publica el build de producción: `.github/deploy-target` vale
+`production` (o la variable del repositorio `CAUCE_DEPLOY_TARGET`). Para volver
+a la demostración sin tocar código, ver
+[PRODUCTION_READINESS.md §3.7](PRODUCTION_READINESS.md#37-rollback).
 
 ---
 
@@ -129,8 +136,10 @@ con un stack Supabase efímero en el runner y sin secretos.
   `npx supabase db push`. La app exige una versión mínima de esquema
   (`js/core/contract.js`) y el deploy se niega a publicar si el proyecto no la
   tiene.
-- **Deploy:** `.github/workflows/pages.yml`, condicionado a
-  `CAUCE_DEPLOY_TARGET`; verifica el esquema antes y el sitio después.
+- **Deploy:** `.github/workflows/pages.yml`, con el destino de
+  `.github/deploy-target` (o la variable `CAUCE_DEPLOY_TARGET`); verifica el
+  esquema antes y el sitio después. El smoke de sólo lectura corre además
+  todos los días (`.github/workflows/smoke.yml`).
 - **Rollback, backups, secretos, primer comercio y límites conocidos:**
   [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md).
 
