@@ -1,8 +1,8 @@
 {
-  "paso": "limpiar-qa",
-  "aplicar": true,
-  "confirmar": "ygqbcvxdrewcnzedfcyo",
+  "paso": "registros",
+  "aplicar": false,
+  "confirmar": "",
   "email": "",
   "invitar": false,
-  "motivo": "Fase B: residuo QA en cero después del smoke publicado con el panel integrado (run 36103961675)."
+  "motivo": "Fase B: registros después de publicar el panel (main 10276df), del smoke publicado y de la limpieza QA. 5xx y errores de cada servicio. Sólo lectura."
 }
