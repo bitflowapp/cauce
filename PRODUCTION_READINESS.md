@@ -1,21 +1,38 @@
 # CAUCE · Preparación para producción
 
-Última revisión: 25 de septiembre de 2026 · rama `claude/cauce-production-hardening-km1t5s`.
+Última revisión: 25 de septiembre de 2026, sobre `main` 7e328a6 (la aplicación publicada; la entrega E no la cambia).
 
 ## Estado
 
-**READY · publicado el 25/09 a las 06:17 UTC** (`main` 2695953, build
-conectado a `ygqbcvxdrewcnzedfcyo` en https://bitflowapp.github.io/cauce/).
-Verificado sobre el sitio publicado:
+**READY_FOR_PILOT · plataforma piloto publicada** (`main` 7e328a6, build
+conectado a `ygqbcvxdrewcnzedfcyo` en https://bitflowapp.github.io/cauce/),
+para 5 a 20 comercios de Aluminé. Verificado sobre el sitio publicado, en
+Chromium y WebKit:
 
-- smoke completo 7/7 en Chromium y WebKit;
+- **el mismo pedido de punta a punta**:
+  1. el cliente compra con envío;
+  2. el encargado lo acepta, prepara y asigna desde el panel;
+  3. la persona de reparto, desde su teléfono, lo retira, sale y llega;
+  4. entrega con el código que le dicta el cliente;
+  5. el cliente lo ve entregado y el comercio lo suma a sus ventas del día;
+- compra sin cuenta con retiro y seguimiento por enlace;
+- administración con el día del piloto;
+- seguridad sobre la API publicada: comercio ajeno, reparto ajeno, precio y estado manipulados;
+- anchos de 320 a 1440 px;
 - residuo QA en 0;
 - registros sin respuestas 5xx.
 
-Queda una sola acción humana: que la persona de `CAUCE_ADMIN_EMAIL` acepte la
-invitación (ya enviada) y elija su contraseña. Recién ahí `admin --aplicar`
-le otorga la administración, y un comercio real puede pedir su publicación y
-ser aprobado.
+Queda **una sola acción humana**: que la persona de `CAUCE_ADMIN_EMAIL`
+(invitada el 25/09, `m***@gmail.com`) entre a
+https://bitflowapp.github.io/cauce/#cuenta y use "¿Olvidaste tu contraseña?"
+con ese correo, porque el enlace de la invitación ya venció. Después se corre
+`admin --aplicar` (pedido de operación `paso: admin`, `aplicar: true`), que le
+otorga la administración. Recién ahí se puede aprobar un comercio real.
+
+Todo lo demás del primer comercio ya funciona: se registra, arma su borrador,
+catálogo, horarios y reparto, y pide la publicación (§4).
+
+### Core publicado (fase A, `main` 2695953)
 
 | # | Gate | Resultado en el proyecto real | Evidencia |
 | --- | --- | --- | --- |
@@ -30,6 +47,23 @@ ser aprobado.
 | B6 | Deploy de producción | **PASS.** Integrado #3 (`main` 2695953); Pages corrió las compuertas, exigió el esquema remoto, publicó el build conectado y lo verificó. | run 36102110690 |
 | P15 | Smoke sobre el sitio publicado | **PASS 7/7** en Chromium y WebKit. Cubre:<br>• compra sin cuenta con retiro y seguimiento;<br>• cliente con cuenta, envío y reparto a cargo del encargado;<br>• 320–1440 px;<br>• seguridad sobre la API publicada.<br>Limpió 5 pedidos, 2 comercios y 8 cuentas QA. | run 36102265827 |
 | P16 | Residuo QA y registros después del deploy | **PASS.** QA_USERS, QA_BUSINESSES, QA_ORDERS y QA_STORAGE en 0. Ningún 5xx en 24 h; los 4xx y errores son las pruebas de seguridad de los smokes, llamadas previas a la migración y la reconexión de Realtime de las 00:05, que se recuperó sola. | runs 36102522235 y 36102676129 |
+
+### Plataforma piloto (fases B a E)
+
+Sobre el core publicado (§Estado) se integraron, cada una con su rama, su PR y
+CI verde. Las que cambian la aplicación (B a D) pasaron además el smoke previo
+de su build contra el proyecto real y el smoke sobre el sitio publicado; las
+migraciones, backup con restauración, dry-run exacto y ensayo sobre una copia
+de los datos antes de aplicarse:
+
+| # | Entrega | Resultado en el proyecto real | Evidencia |
+| --- | --- | --- | --- |
+| B | Panel remoto del comercio (#4) | **PASS.** Integrado en `main` 10276df y publicado. Smoke previo 7/7 con el build de la rama; smoke publicado 7/7 en Chromium y WebKit; residuo QA en 0; registros sin 5xx. | runs 36102981993, 36103743387 (deploy), 36103961675, 36104432381 y 36104613689 |
+| C1 | Migración del reparto `20260925120000` | **PASS.** Backup cifrado con restauración y la migración ensayada sobre la copia restaurada (14/14); dry-run exacto (sólo esa migración); aplicada el 25/09 a las 07:31 UTC después de otro ensayo sobre una copia de los datos (21/21, 10/10 sincronizadas, smoke público). | runs 36106405329, 36106832164 y 36107763938 |
+| C2 | Reparto propio v1 (#5) | **PASS.** CI verde. Smoke previo del build de la rama contra el proyecto migrado: 7/7. Integrado en `main` 49da21c y publicado. Smoke publicado 7/7 en Chromium y WebKit, con **el mismo pedido de punta a punta**: cliente → encargado → persona de reparto desde su teléfono → código dictado por el cliente → entregado. Residuo QA en 0; registros sin 5xx en 24 h. | runs 36108156382, 36109115540 (deploy), 36109397909, 36109792860 y 36110105220 |
+| D1 | Migración de métricas del piloto `20260925150000` (sólo agrega funciones) | **PASS.** Backup cifrado con restauración y la migración aplicada sobre la copia restaurada (14/14); dry-run exacto (sólo esa migración); aplicada el 25/09 a las 08:08 UTC después de otro ensayo sobre una copia de los datos (21/21, 11/11 sincronizadas, smoke público). | runs 36109420436, 36110107933 y 36111033957 |
+| D2 | Administración: el día del piloto (#6) | **PASS.** CI verde. Smoke previo del build de la rama contra el proyecto migrado: 7/7. Integrado en `main` 7e328a6 y publicado. Smoke publicado 7/7 en Chromium y WebKit: el mismo pedido de punta a punta con reparto y la administración con "Hoy en CAUCE", el pedido del día, el comercio QA en la lista y "Necesitan atención". Residuo QA en 0; registros sin 5xx en 24 h. | runs 36111220093, 36112229997 (deploy), 36112454465, 36112502956 y 36112842130 |
+| E | Contrato de facturación ARCA, escaneo de secretos y smoke diario (#7) | **PASS.** CI verde, con el escaneo de secretos sobre todos los archivos versionados (0 hallazgos) y la lógica no fiscal de la facturación (10 pruebas). Facturación `CONTRACT_READY`: no se emite ni se simula ningún comprobante. No cambia la aplicación publicada ni la base; el smoke diario de sólo lectura ahora corre cuando Pages publica producción. | CI de #7 |
 
 Con `.github/deploy-target` en `production`, integrar a `main` publica el
 build conectado; Pages igual se niega a publicar si el esquema remoto no es
@@ -47,15 +81,16 @@ local efímero dentro del runner.
 | Lint | `npm run lint` | ESLint (flat config) sobre todo el repo | PASS |
 | Tipos | `npm run typecheck` | TypeScript `checkJs` sobre `js/` con JSDoc | PASS |
 | Compuertas estáticas | `npm run check` | sintaxis, imports, copy, orígenes permitidos, CSP | PASS |
-| Unitarias | `npm test` | dominio, horarios, telemetría, repositorio, service worker | 198/198 |
-| SQL embebido | `npm run test:db` | migraciones desde cero + actualización con datos legados, RLS por rol, techos del registro de errores | 52/52 |
-| Integración y seguridad | `npm run test:integration` | Postgres + GoTrue + PostgREST + Storage + Realtime + Mailpit reales | 45/45 |
-| E2E Chromium y WebKit | `npm run e2e:local` | recorridos en navegadores reales contra el build de producción (incluye invitación con correo real) | 31/31 |
+| Unitarias | `npm test` | dominio, horarios, telemetría, repositorio, service worker, panel, reparto, métricas del piloto y la lógica no fiscal de facturación | 252/252 |
+| SQL embebido | `npm run test:db` | migraciones desde cero + actualización con datos legados, RLS por rol, techos del registro de errores, reparto (transiciones, código de entrega, entre comercios) y métricas del piloto | 75/75 |
+| Integración y seguridad | `npm run test:integration` | Postgres + GoTrue + PostgREST + Storage + Realtime + Mailpit reales, con el repositorio de la aplicación | 61/61 |
+| E2E Chromium y WebKit | `npm run e2e:local` | recorridos en navegadores reales contra el build de producción: compra, panel, reparto a 390 px, administración, anchos de 320 a 1280 px (incluye invitación con correo real) | 57/57 |
 | Recorridos heredados y auditoría visual | `npm run e2e`, `e2e:demo`, `audit:visual`, `audit:visual:backend` | un Chrome por rol contra el backend de desarrollo y la demo; 32 pantallas sin desbordes ni errores | 37 · 12 · 32 · 32, seis vueltas seguidas sin fallos tras N-19 |
 | Builds | `npm run build`, `build:offline`, `build:production` | demo, demo sin red, producción con chequeo de bundle | PASS |
-| Smoke de producción | `npm run smoke:production` | sólo lectura contra el proyecto y el sitio reales | 4/5 al 25/09: sólo falta B6 (el sitio publica la demostración) |
+| Escaneo de secretos | `npm run scan:secrets` | todos los archivos versionados: claves de Supabase, tokens, claves privadas, contraseñas y SMTP; muestra archivo y regla, nunca el valor | PASS |
+| Smoke de producción | `npm run smoke:production` | sólo lectura contra el proyecto y el sitio reales; también todos los días a las 08:00 (`smoke.yml`) | 5/5 el 25/09 después de publicar `main` 7e328a6 (`js/app.CLP2K3QL.js`) |
 
-`npm run verify` agrupa lint, tipos, compuertas, unitarias, SQL y builds.
+`npm run verify` agrupa lint, tipos, compuertas, escaneo de secretos, unitarias, SQL y builds.
 
 Ensayos de la operación del proyecto real (no corren en CI: levantan stacks
 Supabase temporales y tardan varios minutos):
@@ -93,6 +128,14 @@ cuenta sin rol y administración.
 - Taxi apagado en la base, no sólo escondido en la interfaz.
 - Compra sin cuenta apagable desde la base sin afectar a quien tiene cuenta.
 - Realtime entrega a cada suscriptor sólo lo que RLS le deja leer.
+- Reparto: la persona vinculada sólo ve y avanza los envíos que su comercio
+  le asignó (`rider_orders`, `transition_order`); no lee la tabla de pedidos
+  ni recibe sus cambios por Realtime; no marca "entregado" sin el código del
+  cliente, que valida la base con 5 intentos por pedido; pausarla o
+  desvincularla le corta el acceso en el acto; otro comercio no la puede
+  vincular ni leer.
+- Métricas del piloto: sólo administración (`42501` para el resto, también
+  por la API); nunca incluyen nombre, teléfono, dirección ni nota del cliente.
 
 ### Auth verificado (stack local con SMTP real a Mailpit)
 
@@ -134,8 +177,9 @@ Supabase ygqbcvxdrewcnzedfcyo (sa-east-1)
   control de versión, motivo obligatorio al rechazar/cancelar y historial con
   estado anterior.
 - **Permisos.** owner: todo el comercio y el equipo · manager: operación,
-  catálogo y datos · staff: pedidos y disponibilidad · administración (tabla
-  `private.platform_admins`): revisión de altas, suspensión, errores.
+  catálogo y datos · staff: pedidos y disponibilidad · reparto (cuenta vinculada por el comercio):
+  sus envíos asignados · administración (tabla `private.platform_admins`):
+  revisión de altas, suspensión, métricas del piloto y errores.
 - **Service worker** versionado por build: después de un deploy, quien vuelve
   recibe la versión nueva; nunca cachea respuestas de Supabase ni URLs con
   parámetros (los enlaces de recuperación no quedan guardados).
@@ -148,9 +192,10 @@ GitHub → repositorio `bitflowapp/cauce` → **Settings → Secrets and variabl
 Actions → New repository secret**. Nunca se pegan en un chat, un issue ni un
 archivo del repositorio.
 
-Cargados el 24/09: `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD` y
-`CAUCE_BACKUP_PASSPHRASE`. **Faltan `CAUCE_SMTP_PASS` y `CAUCE_SMTP_SENDER`**
-(y conviene cargar `CAUCE_ADMIN_EMAIL` en el mismo momento).
+Cargados (cada run de operación verifica su presencia, nunca su valor; última
+vez el 25/09): `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD`,
+`CAUCE_SMTP_HOST`, `CAUCE_SMTP_PORT`, `CAUCE_SMTP_USER`, `CAUCE_SMTP_PASS`,
+`CAUCE_SMTP_SENDER`, `CAUCE_BACKUP_PASSPHRASE` y `CAUCE_ADMIN_EMAIL`.
 
 | Secreto | Dónde se obtiene | Para |
 | --- | --- | --- |
@@ -186,7 +231,10 @@ ningún paso escribe. La evidencia (sin secretos) queda como artefacto del run.
    Pages exige el esquema y publica el build conectado (B6).
 8. `admin` con `invitar` y `aplicar` (correo del secreto `CAUCE_ADMIN_EMAIL`)
    — la persona acepta la invitación en el sitio ya publicado y elige su
-   contraseña; después `admin` con `aplicar` otorga el privilegio (B4).
+   contraseña; después `admin` con `aplicar` otorga el privilegio (B4). Si el
+   enlace de la invitación venció, la persona usa "¿Olvidaste tu contraseña?"
+   en `#cuenta` con ese correo: el enlace de recuperación confirma la cuenta y
+   le deja elegir la contraseña.
 9. `smoke-publicado` con `aplicar` — smoke obligatorio sobre el sitio publicado.
 10. `limpiar-qa` con `aplicar` — confirma QA_USERS, QA_BUSINESSES, QA_ORDERS y
     QA_STORAGE en 0 (nunca toca otras cuentas).
@@ -289,12 +337,20 @@ final en pesos, foto si tiene, y si controla stock o sólo marca "agotado".
    devolver con observaciones. Al aprobar aparece en el listado público.
 7. **Equipo (opcional).** Panel → *Equipo*: sumar por correo a personas que ya
    tengan cuenta, como encargado (manager) o equipo (staff).
-8. **Prueba de punta a punta** con una persona real del comercio: un pedido
+8. **Reparto (si hace envíos).** Panel → *Reparto*: sumar a cada persona que
+   reparte (nombre y teléfono). Para que use la aplicación, la persona crea
+   su cuenta en el sitio y confirma el correo; después el titular o el
+   encargado toca *Vincular cuenta* con ese correo. Al ingresar, la persona
+   va directo a *Mis entregas* (`#entregas`). Sin cuenta vinculada, el
+   comercio marca cada paso del envío desde el panel, como siempre.
+9. **Prueba de punta a punta** con personas reales del comercio: un pedido
    de retiro desde otro teléfono, sin cuenta; el panel suena y marca el
    título; aceptar → preparar → listo → entregado; un segundo pedido
-   rechazado con motivo. El cliente ve cada cambio y el enlace de
-   seguimiento.
-9. **Operación diaria.** El panel abierto en un teléfono o computadora con
+   rechazado con motivo; un tercero con envío, asignado a la persona de
+   reparto, que desde su teléfono lo retira, sale, llega y lo entrega con el
+   código que le dicta el cliente. El cliente ve cada cambio y el enlace de
+   seguimiento; el panel suma la venta al día.
+10. **Operación diaria.** El panel abierto en un teléfono o computadora con
    sonido habilitado (tocar *Activar sonido de pedidos* una vez), sin modo
    ahorro de batería agresivo. Si Realtime se corta, el panel vuelve a
    consultar cada 30 segundos y lo indica. *Abrir atención* / *Cerrar
@@ -303,8 +359,16 @@ final en pesos, foto si tiene, y si controla stock o sólo marca "agotado".
 
 ## 5. Operación y monitoreo
 
-- **Pantalla de administración:** altas pendientes, suspender/rehabilitar con
-  motivo, totales y los últimos errores reportados por la app.
+- **Pantalla de administración** (`#admin`, detalle en
+  [docs/ADMINISTRACION-PILOTO.md](docs/ADMINISTRACION-PILOTO.md)):
+  - altas pendientes: aprobar o devolver con observaciones;
+  - **Hoy en CAUCE**: comercios activos y abiertos ahora, pedidos de hoy
+    (retiro · envío), completados, volumen bruto con el ticket promedio, en
+    curso y errores de 24 h;
+  - **Necesitan atención**: pedidos quietos demasiado tiempo, con "Llamar al
+    comercio" y sin datos del cliente;
+  - el día de cada comercio, con suspender y rehabilitar con motivo;
+  - los últimos errores reportados por la app.
 - **Errores de la app:** `private.client_events` guarda errores de interfaz,
   de Supabase, de sesión y pedidos fallidos, **sin** correos, teléfonos,
   tokens ni contraseñas (se limpian en el cliente y otra vez en la base).
@@ -319,8 +383,11 @@ final en pesos, foto si tiene, y si controla stock o sólo marca "agotado".
 - **Supabase dashboard:** logs de Auth, API y Postgres; Advisors de seguridad
   y rendimiento después de cada migración.
 - **Smoke diario:** `.github/workflows/smoke.yml` corre el smoke de sólo
-  lectura todos los días cuando `CAUCE_DEPLOY_TARGET=production`; un fallo
-  queda en rojo en Actions.
+  lectura todos los días a las 08:00 de Aluminé cuando Pages publica
+  producción (`.github/deploy-target` o la variable `CAUCE_DEPLOY_TARGET`);
+  un fallo queda en rojo en Actions.
+- **Después de cada publicación:** `smoke-publicado`, `limpiar-qa` y
+  `registros`, en ese orden (§3.2).
 
 ## 6. Backups y restauración
 
@@ -367,8 +434,19 @@ final en pesos, foto si tiene, y si controla stock o sólo marca "agotado".
 ## 8. Límites conocidos
 
 - **Sin pagos en línea:** efectivo al retirar o al recibir.
-- **Sin GPS ni mapas; sin notificaciones push.** El comercio necesita el panel
-  abierto para enterarse al instante (sonido, título y respaldo cada 30 s).
+- **Sin GPS ni mapa embebido; sin notificaciones push.** La dirección de un
+  envío abre Google Maps con un enlace. El comercio necesita el panel abierto
+  para enterarse al instante (sonido, título y respaldo cada 30 s).
+- **Reparto propio de cada comercio:** quien reparte ve sus envíos
+  consultando cada 15 s (no por Realtime); un pedido ya asignado no se
+  reasigna a otra persona; después de 5 códigos incorrectos, el comercio
+  cierra la entrega desde el panel; para un problema, la aplicación ofrece
+  "Llamar al comercio". No hay reparto centralizado.
+- **Administración:** los números son del día; no hay reportes históricos,
+  exportaciones ni gráficos.
+- **Facturación electrónica (ARCA): no implementada.** El contrato está listo
+  ([docs/CONTRATO-FACTURACION-ARCA.md](docs/CONTRATO-FACTURACION-ARCA.md)) y
+  la lógica no fiscal, probada; no se emite ni se simula ningún comprobante.
 - **Una sola localidad (Aluminé).** La zona de envío es texto, no un polígono.
 - **Taxi apagado** (esquema conservado, habilitable por feature flag).
 - **Sesiones:** un JWT emitido sigue valiendo hasta una hora aunque se

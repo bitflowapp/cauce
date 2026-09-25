@@ -1,11 +1,26 @@
 # Contrato de facturación electrónica con ARCA
 
-Para la rama `feat/cauce-facturacion-arca-v1` (PR #5).
+Para la rama `feat/cauce-facturacion-arca-v1`.
 
-**Qué es este documento.** Es la propuesta de contrato para facturar un pedido de CAUCE con ARCA.
+**Estado: contrato listo (CONTRACT_READY). No hay facturación en producción.**
 
-- **Nada de esto está implementado** en el panel del comercio (PR #4). En PR #4 no hay botón, tabla, función ni credencial fiscal.
-- La rama de facturación implementa este contrato aislada y con sus propias pruebas.
+- **Qué existe hoy**: este contrato y la lógica que **no es fiscal**, en
+  `js/core/invoicing.js`, con sus pruebas (`tests/invoicing.test.mjs`):
+  - CUIT (dígito verificador, formato, enmascarado);
+  - tipo de comprobante por condición frente al IVA;
+  - importes tomados del pedido (Factura C; A y B se rechazan hasta tener la alícuota por producto);
+  - detalle impreso;
+  - quién puede pedir la factura y cuándo;
+  - máquina de estados, estados vivos y reintentos escalonados;
+  - formato del número y textos de la tarjeta.
+
+  Nada de eso habla con ARCA, conoce secretos, arma números de comprobante o CAE, ni se muestra en la aplicación.
+- **Qué no existe**: botón, tablas, funciones de la base, servicio, certificados ni credenciales fiscales. Tampoco hay simulación de ARCA: un comprobante existe sólo si ARCA devolvió CAE.
+- **Para facturar de verdad** hacen falta, del comercio:
+  - su CUIT, condición frente al IVA y un punto de venta habilitado para web service;
+  - el certificado que ARCA emite a partir del CSR que genera el servidor.
+
+  Y en el proyecto, habilitar las funciones de borde (§2).
 - Los nombres de servicios, métodos y campos de ARCA se tienen que **verificar contra la documentación vigente de ARCA** (manuales de WSAA y WSFEv1) antes de escribir código. Donde este documento dice "verificar", el dato puede haber cambiado por normativa.
 
 ## 1. Reglas que no se negocian
@@ -223,6 +238,10 @@ La interfaz **nunca**:
 5. **Vencimiento del certificado.** Aviso al titular con anticipación y `estado = 'suspendida'` al vencer.
 
 ## 11. Pruebas mínimas de la rama
+
+Ya cubierto por `tests/invoicing.test.mjs`: dígito verificador del CUIT, tipo por defecto, importes de Factura C y el rechazo de A/B sin alícuotas, consistencia de importes, detalle, permisos por rol y estado, máquina de estados (incierta no se reenvía, autorizada no cambia), escalonado con tope, número de comprobante y que el módulo no hace red ni toca secretos.
+
+Falta, con la implementación:
 
 - **Unitarias**: montos por tipo de comprobante, dígito verificador del CUIT, máquina de estados, escalonado de reintentos y armado del QR.
 - **Integración** contra el stack local:

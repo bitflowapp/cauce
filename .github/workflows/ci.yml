@@ -36,6 +36,8 @@ jobs:
         run: npm run typecheck
       - name: Comprobaciones estáticas y compuertas
         run: npm run check
+      - name: Escaneo de secretos (archivos versionados, sin mostrar valores)
+        run: npm run scan:secrets
       - name: Pruebas unitarias
         run: npm test
       - name: Migraciones y RLS en PostgreSQL embebido
