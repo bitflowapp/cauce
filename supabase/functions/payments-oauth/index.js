@@ -14,7 +14,8 @@
 // final ni por un registro.
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { paymentsConfig, json } from '../_shared/payments/config.js';
-import { randomToken, pkcePair, authorizationUrl, tokenRequest, parseTokenResponse } from '../_shared/payments/oauth.js';
+import { randomToken, pkcePair, authorizationUrl, tokenRequest, parseTokenResponse, accountRequest, isTestAccount }
+  from '../_shared/payments/oauth.js';
 import { sealToken } from '../_shared/payments/vault.js';
 import { refreshAccount, ReconnectRequired } from '../_shared/payments/tokens.js';
 import { PROVIDER } from '../_shared/payments/mercadopago.js';
@@ -116,7 +117,7 @@ Deno.serve(async request => {
     }
     try {
       const exchange = tokenRequest({ clientId: config.clientId, clientSecret: config.clientSecret, code, redirectUri,
-        verifier: pending.data.code_verifier, testToken: pending.data.sandbox === true, apiBase: config.apiBase });
+        verifier: pending.data.code_verifier, apiBase: config.apiBase });
       const response = await fetch(exchange.url, { method: exchange.method, headers: exchange.headers,
         body: JSON.stringify(exchange.body), signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS) });
       if (!response.ok) {
@@ -124,14 +125,26 @@ Deno.serve(async request => {
         return panel(business, 'error');
       }
       const tokens = parseTokenResponse(await response.json());
-      // Un piloto de prueba nunca guarda una cuenta real: se frena acá.
-      if (pending.data.sandbox === true && tokens.liveMode !== false) {
+      // De prueba o real lo dice el proveedor sobre la cuenta, no el token.
+      // Un piloto en sandbox nunca guarda una cuenta real y un comercio real
+      // nunca guarda una de prueba: se frena acá y los tokens se descartan.
+      const who = accountRequest(tokens.accessToken, config.apiBase);
+      const me = await fetch(who.url, { method: who.method, headers: who.headers,
+        signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS) });
+      const account = me.ok ? await me.json().catch(() => null) : null;
+      if (!account || String(account.id ?? '') !== tokens.sellerId) {
         await discard();
         return panel(business, 'error');
       }
+      const testAccount = isTestAccount(account);
+      if (testAccount !== (pending.data.sandbox === true)) {
+        await discard();
+        return panel(business, testAccount ? 'cuenta_prueba' : 'cuenta_real');
+      }
       const { keys, current } = await config.tokenKeys();
+      // live_mode en CAUCE: la cuenta mueve dinero real (falso para una cuenta de prueba).
       const done = await service.rpc('payment_oauth_complete', { state, provider_user_id: tokens.sellerId,
-        scopes: tokens.scopes, live_mode: tokens.liveMode, token_expires_at: tokens.expiresAt,
+        scopes: tokens.scopes, live_mode: !testAccount, token_expires_at: tokens.expiresAt,
         access_ciphertext: await sealToken(tokens.accessToken, keys[current], current),
         refresh_ciphertext: tokens.refreshToken ? await sealToken(tokens.refreshToken, keys[current], current) : '',
         key_version: current });

@@ -19,6 +19,9 @@ export const AUTH_BASE = 'https://auth.mercadopago.com/authorization';
 // Las órdenes de prueba del proveedor llevan este prefijo (ORDTST…). Un piloto
 // en sandbox nunca redirige a una orden que no lo tenga.
 export const isTestOrderId = id => /^ORDTST[0-9A-Z]{6,}$/.test(String(id || ''));
+// En sandbox el proveedor exige un pagador @testuser.com (400
+// invalid_email_for_sandbox): es el de su propia documentación, no una persona.
+export const SANDBOX_PAYER_EMAIL = 'test@testuser.com';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -135,14 +138,20 @@ function returnUrls(context, siteUrl) {
 }
 const orderTitle = context => `Pedido ${context.order?.code || ''} · ${context.business?.name || 'CAUCE'}`.slice(0, 120);
 
-// Duración ISO 8601 hasta que vence el intento (PT30M): la orden del proveedor
-// vence con él y un enlace viejo no se puede pagar.
-export function expirationDuration(expiresAt, now = Date.now()) {
+// Duración ISO 8601 de la orden del proveedor (PT30M): la vida completa del
+// intento, medida con sus propias fechas y no con la hora actual. Así el mismo
+// intento manda siempre el mismo cuerpo: el proveedor rechaza (409) una clave
+// de idempotencia repetida con otro contenido, y un reintento tiene que ser
+// idéntico al primer envío. Un intento vencido no crea nada.
+export function expirationDuration({ expiresAt, createdAt, now = Date.now() }) {
   const until = Date.parse(String(expiresAt || ''));
   if (!Number.isFinite(until)) return null;
-  const minutes = Math.floor((until - now) / 60000);
-  if (minutes < 1) throw new Error('El intento ya venció.');
-  return `PT${Math.min(minutes, 24 * 60)}M`;
+  if (until - now < 60000) throw new Error('El intento ya venció.');
+  const since = Date.parse(String(createdAt || ''));
+  // Sin la fecha de creación, el plazo por defecto del proveedor (también fijo).
+  if (!Number.isFinite(since)) return null;
+  const minutes = Math.round((until - since) / 60000);
+  return `PT${Math.min(Math.max(minutes, 1), 24 * 60)}M`;
 }
 
 // Checkout Pro vía la API de Orders (el flujo activo): una orden `online` en
@@ -150,13 +159,14 @@ export function expirationDuration(expiresAt, now = Date.now()) {
 // línea con el total del pedido: el importe sale del intento, nunca se
 // recalcula sumando líneas ni viene del navegador. Sin comisión de
 // marketplace: CAUCE no cobra comisión. Las notificaciones llegan al webhook
-// configurado en la aplicación (tema "Order").
-export function buildCheckoutProOrderRequest(context, { siteUrl, expiresAt = null, now = Date.now(), apiBase = API_BASE },
+// configurado en la aplicación (tema "Order"). Todo sale del intento: el mismo
+// intento produce byte a byte el mismo pedido al proveedor.
+export function buildCheckoutProOrderRequest(context, { siteUrl, payerEmail = '', now = Date.now(), apiBase = API_BASE },
   accessToken) {
   checkContext(context);
   const back = returnUrls(context, siteUrl);
   const amount = amountText(context.amount);
-  const expiration = expiresAt ? expirationDuration(expiresAt, now) : null;
+  const expiration = expirationDuration({ expiresAt: context.expires_at, createdAt: context.created_at, now });
   return {
     url: `${apiBase}/v1/orders`,
     method: 'POST',
@@ -168,7 +178,9 @@ export function buildCheckoutProOrderRequest(context, { siteUrl, expiresAt = nul
       total_amount: amount,
       description: orderTitle(context),
       ...(expiration ? { expiration_time: expiration } : {}),
-      items: [{ external_code: String(context.order?.code || context.attempt_id).slice(0, 64), title: orderTitle(context),
+      ...(EMAIL.test(String(payerEmail || '')) ? { payer: { email: payerEmail } } : {}),
+      // El proveedor admite hasta 30 caracteres en el código del ítem.
+      items: [{ external_code: String(context.order?.code || context.attempt_id).slice(0, 30), title: orderTitle(context),
         quantity: 1, unit_price: amount }],
       config: { online: { success_url: back.success, pending_url: back.pending, failure_url: back.failure,
         auto_return: 'approved' } },
@@ -202,7 +214,11 @@ export function buildPreferenceRequest(context, { siteUrl, notificationUrl, expi
 // Lo que la base necesita de una orden (API de Orders).
 export function readOrder(order) {
   const payments = order?.transactions?.payments || [];
-  const refunds = payments.flatMap(payment => payment?.refunds || []);
+  // Las devoluciones van en transactions.refunds (y, en respuestas viejas,
+  // dentro de cada pago): se leen las dos, sin repetir.
+  const seen = new Set();
+  const refunds = [...(order?.transactions?.refunds || []), ...payments.flatMap(payment => payment?.refunds || [])]
+    .filter(refund => refund?.id != null && !seen.has(String(refund.id)) && seen.add(String(refund.id)));
   return {
     providerOrderId: String(order?.id || '') || null,
     attemptReference: UUID.test(String(order?.external_reference || '')) ? order.external_reference : null,

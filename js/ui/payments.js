@@ -81,6 +81,9 @@ const CONNECTION_NOTICES = Object.freeze({
   ok: ['success', 'Cuenta conectada. Ya se pueden cobrar pedidos online.'],
   cancelada: ['neutral', 'La conexión se canceló en el proveedor. No cambió nada.'],
   vencida: ['error', 'El enlace de conexión venció. Volvé a conectar la cuenta.'],
+  // El proveedor dice si la cuenta es de prueba: nunca se mezclan los modos.
+  cuenta_real: ['error', 'En modo de prueba sólo se conectan cuentas de prueba del proveedor. No se guardó nada.'],
+  cuenta_prueba: ['error', 'Esa es una cuenta de prueba: para cobrar de verdad conectá la cuenta real del comercio. No se guardó nada.'],
   error: ['error', 'No se pudo completar la conexión. Probá de nuevo en unos minutos.'],
 });
 

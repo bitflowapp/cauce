@@ -5,7 +5,12 @@
 --     (el de QA) sin tocar `payments_online`, que sigue apagado para todos. Lo
 --     enciende sólo la operación (rol de servicio o la base), nunca un cliente.
 --     Un piloto en sandbox no puede conectar ni usar una cuenta real
---     (live_mode): la base lo rechaza aunque el servidor se equivoque.
+--     (live_mode): la base lo rechaza aunque el servidor se equivoque. En
+--     CAUCE, live_mode es "la cuenta mueve dinero real": falso sólo para una
+--     cuenta que el proveedor marca como de prueba.
+--   · El contexto del intento incluye su creación: el pedido al proveedor se
+--     arma sólo con datos del intento y un reintento con la misma clave de
+--     idempotencia es idéntico al primer envío.
 --   · Renovación de los tokens del vendedor, del lado del servidor: el token
 --     cifrado y su vencimiento se rotan juntos; si la renovación falla, la
 --     cuenta pide reconectar.
@@ -299,6 +304,29 @@ language sql stable security definer set search_path = '' as $$
   where a.provider = payment_seller_credentials.provider and a.provider_user_id = seller_id
     and a.status = 'connected'
   limit 1;
+$$;
+
+-- Lo que la Edge Function necesita para pedirle la orden al proveedor. Con la
+-- creación del intento: la duración de la orden sale de sus propias fechas
+-- (no de la hora del envío), así el mismo intento arma siempre el mismo pedido.
+create or replace function private.payment_checkout_context(attempt_id uuid) returns jsonb
+language sql stable security definer set search_path = '' as $$
+  select jsonb_build_object('attempt_id', a.id, 'status', a.status, 'flow', a.flow, 'provider', a.provider,
+    'idempotency_key', a.idempotency_key, 'amount', a.amount_ars, 'currency', a.currency,
+    'provider_order_id', a.provider_order_id, 'checkout_url', a.checkout_url, 'expires_at', a.expires_at,
+    'created_at', a.created_at,
+    'order', jsonb_build_object('id', o.id, 'code', o.code, 'status', o.status, 'total', o.total_ars,
+      'tracking_token', o.tracking_token),
+    'business', jsonb_build_object('id', b.id, 'name', b.name),
+    'items', coalesce((select jsonb_agg(jsonb_build_object('name', case when i.variant_name <> ''
+        then i.product_name || ' · ' || i.variant_name else i.product_name end,
+        'quantity', i.quantity, 'unit_price', i.unit_price_ars) order by i.position)
+      from public.order_items i where i.order_id = o.id), '[]'::jsonb),
+    'delivery_fee', o.delivery_fee_ars)
+  from public.payment_attempts a
+  join public.orders o on o.id = a.order_id
+  join public.businesses b on b.id = a.business_id
+  where a.id = attempt_id;
 $$;
 
 -- Guarda el token renovado (ya cifrado) y su vencimiento, juntos. Sólo para

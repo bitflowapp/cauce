@@ -4,9 +4,10 @@
 // como lo harían el navegador y Mercado Pago, y mira la base.
 //
 // Cubre: OAuth con PKCE (state incorrecto, vencido, reutilizado, cancelado,
-// cuenta real en sandbox), checkout por la API de Orders (importe del pedido,
-// clave de idempotencia, doble toque, reintento tras un corte, 429, 500, sin
-// checkout_url, orden real frenada), webhook (firmado, falso, sin firma,
+// cuenta real en sandbox y cuenta de prueba en un comercio real), checkout por
+// la API de Orders (importe del pedido, pagador de prueba, clave de
+// idempotencia, doble toque, reintento tras un corte con el mismo cuerpo,
+// reenvío verificado, 429, 500, sin checkout_url, orden real frenada), webhook (firmado, falso, sin firma,
 // repetido, fuera de orden, vendedor ajeno, intento desconocido, importe
 // distinto, doble pago, rechazado, pendiente), reconexión, renovación de
 // tokens y efectivo como respaldo.
@@ -142,14 +143,17 @@ test('OAuth: PKCE S256, state impredecible y URL de retorno fija; el token no pa
   const other = await beginOAuth(people.ownerA, A.id);
   assert.notEqual(other.state, flow.state, 'cada intento tiene su state');
   assert.equal(other.redirectUri, flow.redirectUri, 'la URL de retorno no cambia entre intentos');
-  const exchangesBefore = (await fake.state()).exchanges;
+  const { exchanges: exchangesBefore, lookups: lookupsBefore } = await fake.state();
   const code = await fake.authorize({ seller: SELLER_A, challenge: flow.challenge, redirectUri: flow.redirectUri });
   const location = await returnFromProvider({ code, state: flow.state });
   assert.equal(location, `${SITE}/index.html#panel/${A.id}/pagos?conexion=ok`);
   assert.doesNotMatch(location, /APP_USR|TG-|token/i, 'ningún token en la URL final');
+  // Sin test_token (la API de Orders no acepta credenciales TEST-): la cuenta
+  // de prueba se reconoce preguntándole al proveedor quién es.
   const exchange = (await fake.state()).requests.filter(item => item.kind === 'exchange').at(-1);
-  assert.deepEqual({ test_token: exchange.test_token, verifier: exchange.has_verifier }, { test_token: true, verifier: true });
+  assert.deepEqual({ test_token: exchange.test_token, verifier: exchange.has_verifier }, { test_token: false, verifier: true });
   assert.equal((await fake.state()).exchanges, exchangesBefore + 1);
+  assert.equal((await fake.state()).lookups, lookupsBefore + 1, 'una consulta de la cuenta');
   assert.deepEqual({ ...(await accountOf(A.id)), token_expires_at: undefined },
     { status: 'connected', provider_user_id: SELLER_A, live_mode: false, token_expires_at: undefined });
   const stored = await credentialsOf(A.id);
@@ -182,12 +186,22 @@ test('OAuth: callback reutilizado, state incorrecto, vencido y cancelación del 
   assert.equal((await accountOf(A.id)).status, 'connected', 'la cuenta conectada sigue igual');
 });
 
-test('OAuth: una cuenta real en un piloto de prueba no se guarda; sólo el titular conecta', async () => {
+test('OAuth: una cuenta real en un piloto de prueba no se guarda (ni una de prueba en uno real); sólo el titular conecta', async () => {
   const flow = await beginOAuth(people.ownerB, B.id);
-  const code = await fake.authorize({ seller: SELLER_B, challenge: flow.challenge, redirectUri: flow.redirectUri, live: true });
-  assert.equal(await returnFromProvider({ code, state: flow.state }), `${SITE}/index.html#panel/${B.id}/pagos?conexion=error`);
+  const code = await fake.authorize({ seller: SELLER_B, challenge: flow.challenge, redirectUri: flow.redirectUri,
+    testUser: false });
+  assert.equal(await returnFromProvider({ code, state: flow.state }), `${SITE}/index.html#panel/${B.id}/pagos?conexion=cuenta_real`);
   assert.notEqual((await accountOf(B.id))?.status, 'connected');
   assert.equal(await credentialsOf(B.id), undefined, 'ni credenciales');
+  assert.match(await returnFromProvider({ code, state: flow.state }), /conexion=vencida$/, 'el state quedó quemado');
+  // Al revés: un comercio que cobra de verdad no guarda una cuenta de prueba.
+  await sql`update private.payment_pilot_businesses set sandbox = false where business_id = ${B.id}`;
+  const real = await beginOAuth(people.ownerB, B.id);
+  const testCode = await fake.authorize({ seller: SELLER_B, challenge: real.challenge, redirectUri: real.redirectUri });
+  assert.equal(await returnFromProvider({ code: testCode, state: real.state }),
+    `${SITE}/index.html#panel/${B.id}/pagos?conexion=cuenta_prueba`);
+  assert.equal(await credentialsOf(B.id), undefined);
+  await sql`update private.payment_pilot_businesses set sandbox = true where business_id = ${B.id}`;
   // Otro titular, un comprador anónimo o sin sesión: no.
   assert.equal((await jsonOf(await call('payments-oauth', { token: await tokenOf(people.ownerB), body: { business: A.id } }))).status, 403);
   const buyer = await guest('edge-oauth');
@@ -214,7 +228,9 @@ test('checkout: la orden del proveedor sale del pedido en la base, con la clave 
   const { body } = sent[0];
   assert.deepEqual({ type: body.type, mode: body.processing_mode, total: body.total_amount, reference: body.external_reference },
     { type: 'online', mode: 'manual', total: `${order.total_ars}.00`, reference: attempt.id });
-  assert.match(body.expiration_time, /^PT(29|30)M$/);
+  // La vida del intento (fija) y el pagador de prueba que exige el sandbox.
+  assert.equal(body.expiration_time, 'PT30M');
+  assert.deepEqual(body.payer, { email: 'test@testuser.com' });
   assert.equal(sent[0].seller, SELLER_A, 'con el token del vendedor del comercio');
   paidOrder = { id, buyer, providerOrderId: attempt.provider_order_id, total: Number(order.total_ars) };
   // El reintento devuelve el mismo checkout sin llamar al proveedor.
@@ -245,7 +261,28 @@ test('idempotencia: doble toque concurrente y reintento después de un corte dan
   assert.equal(retried.status, 200);
   const sameKey = (await fake.state()).requests.filter(item => item.kind === 'order' && item.key === pending.key);
   assert.equal(sameKey.length, 2, 'dos pedidos al proveedor, la misma clave');
+  // Idénticos: con otro cuerpo el proveedor respondería 409 y el pago quedaría trabado.
+  assert.equal(JSON.stringify(sameKey[1].body), JSON.stringify(sameKey[0].body));
   assert.equal((await fake.state()).orders.filter(order => order.external_reference === pending.id).length, 1);
+});
+
+test('reenvío verificado: sólo con la clave de servicio y en sandbox; la misma clave no crea otra orden', async () => {
+  const buyer = await guest('edge-reenvio');
+  const id = await onlineOrder(buyer, A.id);
+  assert.equal((await checkout(buyer, id)).status, 200);
+  const [attempt] = await attemptsOf(id);
+  const replay = body => call('payments-checkout', { token: process.env.EDGE_SERVICE_ROLE_KEY || '', body });
+  const denied = await jsonOf(await call('payments-checkout', { token: await tokenOf(buyer),
+    body: { action: 'replay_order', attempt_id: attempt.id } }));
+  assert.deepEqual({ status: denied.status, error: denied.body?.error }, { status: 401, error: 'service_only' });
+  const again = await jsonOf(await replay({ action: 'replay_order', attempt_id: attempt.id }));
+  assert.deepEqual(again, { status: 200, body: { http_status: 201, same_order: true, provider_code: null } });
+  const sent = (await fake.state()).requests.filter(item => item.kind === 'order' && item.key === attempt.key);
+  assert.equal(sent.length, 2);
+  assert.equal(JSON.stringify(sent[1].body), JSON.stringify(sent[0].body), 'el mismo cuerpo');
+  assert.equal((await fake.state()).orders.filter(order => order.external_reference === attempt.id).length, 1);
+  // Sin orden todavía, o un intento inventado: nada que reenviar.
+  assert.equal((await jsonOf(await replay({ action: 'replay_order', attempt_id: randomUUID() }))).status, 409);
 });
 
 test('fallas del proveedor: 429, 500, sin checkout_url y una orden real se frenan sin guardar nada', async () => {

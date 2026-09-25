@@ -6,12 +6,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   mapOrderStatus, mapPaymentStatus, toPesos, buildOrderRequest, buildPreferenceRequest, readOrder, readPayment,
-  resourceRequest, buildCheckoutProOrderRequest, expirationDuration, isTestOrderId,
+  resourceRequest, buildCheckoutProOrderRequest, expirationDuration, isTestOrderId, SANDBOX_PAYER_EMAIL,
 } from '../supabase/functions/_shared/payments/mercadopago.js';
 import { verifySignature, signForTest, signatureManifest } from '../supabase/functions/_shared/payments/signature.js';
 import { handleWebhook, eventKey } from '../supabase/functions/_shared/payments/webhook.js';
 import { importTokenKey, sealToken, openToken } from '../supabase/functions/_shared/payments/vault.js';
-import { pkcePair, authorizationUrl, tokenRequest, parseTokenResponse, randomToken } from '../supabase/functions/_shared/payments/oauth.js';
+import { pkcePair, authorizationUrl, tokenRequest, parseTokenResponse, randomToken, accountRequest, isTestAccount }
+  from '../supabase/functions/_shared/payments/oauth.js';
 import { paymentsConfig, REQUIRED_SECRETS, apiBaseFrom } from '../supabase/functions/_shared/payments/config.js';
 import { freshAccessToken, refreshDue, ReconnectRequired, REFRESH_WINDOW_DAYS } from '../supabase/functions/_shared/payments/tokens.js';
 import { PAYMENT_STATES } from '../js/core/payment.js';
@@ -112,15 +113,21 @@ test('la preferencia (Checkout Pro) vuelve a #/pago/* con la referencia del inte
 
 // ───────────────── del proveedor a CAUCE ─────────────────
 test('una orden leída del proveedor da el estado, la referencia, el importe y los movimientos', () => {
+  // Forma documentada de GET /v1/orders/{id}: las devoluciones van en transactions.refunds.
   const read = readOrder({ id: 'ORD01PRUEBA', external_reference: ATTEMPT, status: 'processed', status_detail: 'accredited',
     total_amount: '7500.00', total_paid_amount: '7500.00',
     transactions: { payments: [{ id: 'PAY01PRUEBA', amount: '7500.00', paid_amount: '7500.00', status: 'processed',
-      status_detail: 'accredited', payment_method: { id: 'master', type: 'credit_card' },
-      refunds: [{ id: 'REF01', amount: '500.00', status: 'processed' }] }] } });
+      status_detail: 'accredited', payment_method: { id: 'master', type: 'credit_card' } }],
+    refunds: [{ id: 'REF01', transaction_id: 'PAY01PRUEBA', amount: '500.00', status: 'processed' }] } });
   assert.deepEqual({ ...read, transactions: undefined }, { providerOrderId: 'ORD01PRUEBA', attemptReference: ATTEMPT,
     status: 'approved', statusDetail: 'accredited', paidAmount: 7500, transactions: undefined });
   assert.deepEqual(read.transactions.map(movement => [movement.kind, movement.id, movement.status, movement.amount]),
     [['payment', 'PAY01PRUEBA', 'approved', 7500], ['refund', 'REF01', 'refunded', 500]]);
+  // Respuestas viejas con la devolución dentro del pago: la misma, sin repetirse.
+  const nested = readOrder({ id: 'ORD01PRUEBA', external_reference: ATTEMPT, status: 'processed', total_paid_amount: '7500.00',
+    transactions: { payments: [{ id: 'PAY01PRUEBA', paid_amount: '7500.00', status: 'processed',
+      refunds: [{ id: 'REF01', amount: '500.00' }] }], refunds: [{ id: 'REF01', amount: '500.00' }] } });
+  assert.deepEqual(nested.transactions.map(movement => movement.id), ['PAY01PRUEBA', 'REF01']);
   // Una referencia que no es un intento de CAUCE no se usa.
   assert.equal(readOrder({ id: 'X', external_reference: 'otro-sistema' }).attemptReference, null);
 });
@@ -375,8 +382,8 @@ test('sin secretos las funciones no arrancan, y sólo se informan los nombres qu
 // ───────────────── sandbox: Checkout Pro vía la API de Orders ─────────────────
 test('Checkout Pro va por la API de Orders: orden online manual con el importe del intento y su clave', () => {
   const now = Date.parse('2026-09-26T12:00:00Z');
-  const call = buildCheckoutProOrderRequest(context(), { siteUrl: 'https://bitflowapp.github.io/cauce',
-    expiresAt: '2026-09-26T12:30:00Z', now }, 'token-de-prueba');
+  const call = buildCheckoutProOrderRequest(context({ created_at: '2026-09-26T11:59:40Z', expires_at: '2026-09-26T12:29:40Z' }),
+    { siteUrl: 'https://bitflowapp.github.io/cauce', payerEmail: SANDBOX_PAYER_EMAIL, now }, 'token-de-prueba');
   assert.equal(call.url, 'https://api.mercadopago.com/v1/orders');
   assert.equal(call.method, 'POST');
   assert.equal(call.headers['X-Idempotency-Key'], '0a1b2c3d-4e5f-4a6b-8c7d-8e9fa0b1c2d3');
@@ -400,19 +407,45 @@ test('Checkout Pro va por la API de Orders: orden online manual con el importe d
     `https://bitflowapp.github.io/cauce/index.html#/pago/exito?intento=${ATTEMPT}`);
   assert.match(body.config.online.pending_url, /#\/pago\/pendiente\?intento=/);
   assert.match(body.config.online.failure_url, /#\/pago\/error\?intento=/);
-  // Ningún dato de la persona ni del navegador viaja en la orden.
-  assert.equal('payer' in body, false);
+  // En sandbox el pagador es el de prueba que exige el proveedor (@testuser.com):
+  // ningún dato de la persona ni del navegador viaja en la orden.
+  assert.deepEqual(body.payer, { email: 'test@testuser.com' });
+  // Sin correo válido no se inventa un pagador: el proveedor lo pide en su página.
+  for (const payerEmail of ['', 'no-es-correo', undefined]) {
+    assert.equal('payer' in buildCheckoutProOrderRequest(context(), { siteUrl: 'https://bitflowapp.github.io/cauce',
+      payerEmail }, 't').body, false);
+  }
+  // El código del ítem admite hasta 30 caracteres.
+  const long = buildCheckoutProOrderRequest(context({ order: { code: 'X'.repeat(40) } }),
+    { siteUrl: 'https://bitflowapp.github.io/cauce' }, 't');
+  assert.equal(long.body.items[0].external_code.length, 30);
 });
 
-test('la orden vence con el intento; un intento vencido no se manda al proveedor', () => {
-  const now = Date.parse('2026-09-26T12:00:00Z');
-  assert.equal(expirationDuration('2026-09-26T12:30:00Z', now), 'PT30M');
+test('el mismo intento arma siempre el mismo pedido (reintento con la misma clave)', () => {
+  const attempt = context({ created_at: '2026-09-26T12:00:00Z', expires_at: '2026-09-26T12:30:00Z' });
+  const options = { siteUrl: 'https://bitflowapp.github.io/cauce', payerEmail: SANDBOX_PAYER_EMAIL };
+  const first = buildCheckoutProOrderRequest(attempt, { ...options, now: Date.parse('2026-09-26T12:00:02Z') }, 'a');
+  // Veinte minutos después, con el token renovado: el cuerpo y la clave, idénticos.
+  const retry = buildCheckoutProOrderRequest(attempt, { ...options, now: Date.parse('2026-09-26T12:20:00Z') }, 'b');
+  assert.equal(JSON.stringify(retry.body), JSON.stringify(first.body));
+  assert.equal(retry.headers['X-Idempotency-Key'], first.headers['X-Idempotency-Key']);
+  assert.equal(first.body.expiration_time, 'PT30M');
+});
+
+test('la orden vive lo que vive el intento; un intento vencido no se manda al proveedor', () => {
+  const now = Date.parse('2026-09-26T12:10:00Z');
+  const createdAt = '2026-09-26T12:00:00Z';
+  // La vida completa del intento, sin importar cuándo se envía.
+  assert.equal(expirationDuration({ expiresAt: '2026-09-26T12:30:00Z', createdAt, now }), 'PT30M');
+  assert.equal(expirationDuration({ expiresAt: '2026-09-26T12:30:00Z', createdAt, now: Date.parse('2026-09-26T12:25:00Z') }),
+    'PT30M');
   // Con menos de un minuto por delante ya no se crea una orden: el intento está vencido.
-  assert.throws(() => expirationDuration('2026-09-26T12:00:59Z', now), /venció/);
-  assert.equal(expirationDuration('2026-09-26T12:01:00Z', now), 'PT1M');
-  assert.throws(() => expirationDuration('2026-09-26T11:59:00Z', now), /venció/);
-  assert.equal(expirationDuration('2026-10-09T12:00:00Z', now), 'PT1440M', 'nunca más de un día');
-  assert.equal(expirationDuration(null, now), null);
+  assert.throws(() => expirationDuration({ expiresAt: '2026-09-26T12:10:59Z', createdAt, now }), /venció/);
+  assert.throws(() => expirationDuration({ expiresAt: '2026-09-26T12:09:00Z', createdAt, now }), /venció/);
+  assert.equal(expirationDuration({ expiresAt: '2026-10-09T12:00:00Z', createdAt, now }), 'PT1440M', 'nunca más de un día');
+  assert.equal(expirationDuration({ expiresAt: null, createdAt, now }), null);
+  // Sin la creación: el plazo por defecto del proveedor (tampoco depende de la hora).
+  assert.equal(expirationDuration({ expiresAt: '2026-09-26T12:30:00Z', createdAt: null, now }), null);
   assert.throws(() => buildCheckoutProOrderRequest(context({ status: 'approved' }),
     { siteUrl: 'https://bitflowapp.github.io/cauce' }, 't'), /abierto/);
   assert.throws(() => buildCheckoutProOrderRequest(context(), { siteUrl: 'http://sitio.example' }, 't'), /https/);
@@ -425,10 +458,23 @@ test('sólo una orden de prueba (ORDTST…) sirve para un piloto en sandbox', ()
   }
 });
 
-test('un piloto en sandbox canjea con test_token; el resto, nunca', () => {
+test('el canje nunca pide credenciales TEST- (la API de Orders las rechaza)', () => {
   const base = { clientId: '1', clientSecret: 's', code: 'c', redirectUri: 'https://x.example/cb', verifier: 'v'.repeat(64) };
-  assert.equal(tokenRequest({ ...base, testToken: true }).body.test_token, true);
   assert.equal('test_token' in tokenRequest(base).body, false);
+  assert.equal('test_token' in tokenRequest({ ...base, testToken: true }).body, false);
+});
+
+test('de prueba o real lo dice el proveedor sobre la cuenta', () => {
+  const who = accountRequest('token-de-la-cuenta');
+  assert.deepEqual({ url: who.url, method: who.method, auth: who.headers.Authorization },
+    { url: 'https://api.mercadopago.com/users/me', method: 'GET', auth: 'Bearer token-de-la-cuenta' });
+  assert.throws(() => accountRequest(''), /token/);
+  assert.equal(isTestAccount({ id: 1, tags: ['normal', 'test_user'] }), true);
+  assert.equal(isTestAccount({ id: 1, email: 'test_user_123@testuser.com' }), true);
+  for (const real of [{ id: 1, tags: ['normal'], email: 'comercio@example.com' }, {}, null, { tags: 'test_user' },
+    { email: 'alguien@testuser.com.ar' }]) {
+    assert.equal(isTestAccount(real), false, JSON.stringify(real));
+  }
 });
 
 test('la URL de retorno http sólo vale en el stack local', async () => {

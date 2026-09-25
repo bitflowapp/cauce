@@ -291,6 +291,12 @@ test('el circuito del piloto: pedido, intento, orden de prueba, aprobado leído 
     const id = await order('customer3', shops.A);
     const attempt = (await start('customer3', id)).attempt_id;
     assert.equal((await start('customer3', id)).attempt_id, attempt, 'doble toque: el mismo intento');
+    // El servidor arma el pedido al proveedor sólo con datos del intento, incluida su
+    // creación (la duración de la orden no depende de la hora del reintento).
+    const context = rows(await db.query('select private.payment_checkout_context($1) as c', [attempt]))[0].c;
+    const life = (Date.parse(context.expires_at) - Date.parse(context.created_at)) / 60000;
+    assert.equal(Math.round(life), 30, 'vida del intento: 30 minutos');
+    assert.equal(context.amount, (await orderRow(id)).total_ars);
     await setCheckout(attempt, 'ORDTST01CIRCUITO');
     await rejects(move('ownerA', id, 'accepted'), /U0007 Payment not approved/);
     const event = await record();

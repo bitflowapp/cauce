@@ -47,17 +47,32 @@ export function authorizationUrl({ clientId, redirectUri, state, challenge }) {
 }
 
 // Canje del código. Va del servidor al proveedor; nunca desde el navegador.
-// Un piloto en sandbox pide credenciales de prueba (test_token): nunca reales.
-export function tokenRequest({ clientId, clientSecret, code, redirectUri, verifier, testToken = false,
-  apiBase = API_BASE }) {
+// Sin `test_token`: esas credenciales (TEST-…) la API de Orders las rechaza
+// (401 invalid_credentials). El sandbox de Orders son cuentas de PRUEBA con
+// credenciales productivas; qué cuenta es se verifica después (accountRequest).
+export function tokenRequest({ clientId, clientSecret, code, redirectUri, verifier, apiBase = API_BASE }) {
   if (!clientId || !clientSecret || !code || !redirectUri || !verifier) throw new Error('Faltan datos para el canje.');
   return {
     url: `${apiBase}/oauth/token`,
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: { client_id: clientId, client_secret: clientSecret, grant_type: 'authorization_code', code,
-      redirect_uri: redirectUri, code_verifier: verifier, ...(testToken ? { test_token: true } : {}) },
+      redirect_uri: redirectUri, code_verifier: verifier },
   };
+}
+
+// Quién es la cuenta que acaba de autorizar, según el proveedor.
+export function accountRequest(accessToken, apiBase = API_BASE) {
+  if (!accessToken) throw new Error('Falta el token.');
+  return { url: `${apiBase}/users/me`, method: 'GET', headers: { Authorization: `Bearer ${accessToken}` } };
+}
+
+// Las cuentas de prueba las marca el proveedor: etiqueta `test_user` y correo
+// @testuser.com (su dominio). Un piloto en sandbox sólo guarda cuentas de
+// prueba y un comercio real sólo cuentas reales: nunca se mezclan.
+export function isTestAccount(user) {
+  const tags = Array.isArray(user?.tags) ? user.tags.map(String) : [];
+  return tags.includes('test_user') || /@testuser\.com$/i.test(String(user?.email || ''));
 }
 
 export function refreshRequest({ clientId, clientSecret, refreshToken, apiBase = API_BASE }) {

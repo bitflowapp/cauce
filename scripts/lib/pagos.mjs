@@ -73,11 +73,19 @@ export async function pagosEstado(t, list) {
   list.info('cuentas de proveedor', accounts.map(row => `${row.status}/${row.live}: ${row.n}`).join(' · ') || 'ninguna');
   list.check('ninguna cuenta real conectada', !accounts.some(row => row.status === 'connected' && row.live === 'true'),
     accounts.filter(row => row.live === 'true').map(row => `${row.status}: ${row.n}`).join(' · ') || 'ninguna');
+  // live_mode del aviso es lo que dice el proveedor (con credenciales productivas
+  // de una cuenta de prueba puede venir en true): se muestra tal cual. Lo que
+  // separa una orden de prueba de una real es su id (ORDTST…).
   const events = await t.sql(`select outcome, coalesce(live_mode::text, 'sin dato') as live, count(*)::int as n
     from private.payment_events where received_at > now() - interval '24 hours' group by 1, 2 order by 1, 2`);
-  list.info('notificaciones 24 h', events.map(row => `${row.outcome}/${row.live}: ${row.n}`).join(' · ') || 'ninguna');
-  list.check('ninguna notificación en modo real', !events.some(row => row.live === 'true'),
-    events.filter(row => row.live === 'true').map(row => `${row.outcome}: ${row.n}`).join(' · ') || 'ninguna');
+  list.info('notificaciones 24 h (resultado/live_mode del proveedor)',
+    events.map(row => `${row.outcome}/${row.live}: ${row.n}`).join(' · ') || 'ninguna');
+  const [real] = await t.sql(`select count(*)::int as n from private.payment_events
+    where resource_type = 'order' and resource_id !~ '^ORDTST'`);
+  list.check('ninguna orden real notificada (todas ORDTST…)', Number(real.n) === 0, String(real.n));
+  const [attempts] = await t.sql(`select count(*)::int as n from public.payment_attempts
+    where provider_order_id is not null and provider_order_id !~ '^ORDTST'`);
+  list.check('ningún intento con una orden real', Number(attempts.n) === 0, String(attempts.n));
 }
 
 // Sin credenciales en el código de las funciones (el escaneo del repositorio).
