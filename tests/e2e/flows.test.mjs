@@ -1,6 +1,7 @@
 // Recorridos completos en navegador real: cliente, comercio y seguridad.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import {
   account, makeAdmin, publishedBusiness, closeAll, ok, sql, run,
   startPreview, stopPreview, browsersToRun, launch, person, open, go, ready, signIn, shot,
@@ -172,8 +173,19 @@ for (const engine of browsersToRun) {
       assert.equal(await staff.page.locator('[data-action="toggle-open"]').count(), 0);
 
       const visitor = await person(browser, { label: 'visita' });
+      // Sin sesión no se abre ningún canal en vivo: la base lo rechazaría y
+      // quedaría como error en el registro de administración.
+      const joins = [];
+      visitor.page.on('websocket', socket => socket.on('framesent', frame => {
+        if (String(frame.payload).includes('postgres_changes')) joins.push(String(frame.payload));
+      }));
       await open(visitor.page, `#panel/${A.id}`);
       assert.ok(await visitor.page.getByText('Necesitás iniciar sesión.').isVisible());
+      // Un pedido abierto sin ninguna sesión (otro navegador) explica cómo verlo.
+      await go(visitor.page, `#pedido/${randomUUID()}`);
+      assert.ok(await visitor.page.getByText('Este pedido no está en esta sesión.').isVisible());
+      await visitor.page.waitForTimeout(2000);
+      assert.deepEqual(joins, [], 'una visita sin sesión no abre canales en vivo');
       assert.deepEqual([...owner.problems, ...staff.problems, ...visitor.problems], []);
     } finally { await browser.close(); }
   });

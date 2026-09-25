@@ -1019,6 +1019,14 @@ function cancellationNotice(order) {
 }
 
 async function viewOrder(orderId) {
+  // Sin ninguna sesión (otro navegador, datos borrados) la base no deja leer
+  // pedidos: se explica cómo verlo en vez de mostrar un error sin salida.
+  if (isConnected() && !actor()?.id) {
+    return `${backLink('#inicio', 'Inicio')}
+      <section class="page-header"><h1 class="page-title">Tu pedido</h1></section>
+      <div class="notice"><strong>Este pedido no está en esta sesión.</strong> Si compraste sin cuenta, abrilo con el enlace de seguimiento que guardaste; si lo hiciste con tu cuenta, ingresá.</div>
+      <a class="button full" href="#cuenta">Ingresar</a>`;
+  }
   const order = await app.repository.query('order', { orderId });
   const business = await loadPublicBusiness(order.businessId);
   const businessName = business?.name || 'Comercio';
@@ -1137,7 +1145,7 @@ async function viewActivity() {
       <h1 class="page-title">${taxi ? 'Mi actividad' : 'Mis pedidos'}</h1>
       ${isSignedIn()
         ? `<p class="quiet">Sesión de ${esc(actor().name)}.</p>`
-        : isConnected()
+        : isConnected() && actor()?.anonymous
           ? `<p class="quiet">Compraste sin cuenta: tus pedidos quedan guardados en este dispositivo. Desde cada pedido podés copiar su enlace de seguimiento.</p>`
           : `<p class="quiet">Estás navegando sin cuenta. Tus pedidos quedan asociados a este dispositivo.</p>`}
     </section>
@@ -3058,16 +3066,19 @@ function syncLive(page, param) {
   const me = actor();
   const connected = Boolean(app.repository?.capabilities?.realtime);
   const scopes = [];
+  // Sin sesión no hay nada que escuchar: la base rechazaría el canal.
+  const panel = page === 'panel' && param && isSignedIn();
+  const order = page === 'pedido' && param && me?.id;
   if (connected) {
-    if (page === 'panel' && param) scopes.push({ kind: 'businessOrders', businessId: param });
-    else if (page === 'pedido' && param) scopes.push({ kind: 'order', orderId: param });
+    if (panel) scopes.push({ kind: 'businessOrders', businessId: param });
+    else if (order) scopes.push({ kind: 'order', orderId: param });
     else if (['inicio', 'actividad'].includes(page) && me?.id) {
       scopes.push({ kind: 'myOrders', customerId: me.id });
       if (feature('taxi')) scopes.push({ kind: 'myTrips', passengerId: me.id });
     } else if (['taxi', 'viaje'].includes(page) && me?.id && feature('taxi')) scopes.push({ kind: 'myTrips', passengerId: me.id });
     else if (page === 'taxista' && me?.driverId && feature('taxi')) scopes.push({ kind: 'driverTrips', driverId: me.driverId });
   }
-  const pollEvery = connected && ((page === 'panel' && param) || (page === 'pedido' && param)
+  const pollEvery = connected && (panel || order
     || (page === 'seguimiento' && param) || (page === 'taxista' && me?.driverId)) ? POLL_MS[page] : 0;
   const key = `${page}:${param || ''}:${me?.id || ''}:${scopes.length}:${pollEvery}`;
   if (key === live.key) return;
