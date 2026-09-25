@@ -140,6 +140,12 @@ export async function loadData({ db, adminUrl, work }, { dataFile }, list) {
   return load.status === 0;
 }
 
+// Datos de referencia que una migración puede ampliar (transiciones de estado,
+// verticales): pueden crecer, nunca achicarse. Cualquier otra tabla tiene que
+// quedar con exactamente las mismas filas.
+export const REFERENCE_TABLES = Object.freeze(['private.order_transitions', 'private.platform_features',
+  'private.payment_status_transitions']);
+
 export function compareCounts(before, after, dumped, { allowGrowth = [] } = {}) {
   const compared = dumped.filter(name => name in before);
   const mismatches = compared.filter(name => allowGrowth.includes(name)
@@ -189,8 +195,7 @@ export async function rehearseMigration(t, list, { applied, pending }) {
         pushed.status === 0 ? pending.join(', ') : redact(`${pushed.stdout}${pushed.stderr}`).slice(-400));
       if (pushed.status !== 0) return false;
       const after = toCounts(await stack.db.unsafe(COUNT_SQL));
-      const { compared, mismatches } = compareCounts(source.counts, after, source.dumped,
-        { allowGrowth: ['private.order_transitions', 'private.platform_features'] });
+      const { compared, mismatches } = compareCounts(source.counts, after, source.dumped, { allowGrowth: REFERENCE_TABLES });
       list.check('la migración conserva todas las filas', mismatches.length === 0,
         mismatches.length ? mismatches.map(name => `${name}: ${source.counts[name]} → ${after[name]}`).join('; ') : `${compared.length} tablas`);
       await verifyDatabase(stack, list, { label: 'ensayo' });
