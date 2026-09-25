@@ -568,10 +568,13 @@ export function createSupabaseRepository({ client, redirectTo, storage, onError 
       } catch { return 0; }
       return total;
     },
+    // `preview`: el total de un comercio cerrado, sólo para mostrarlo. Confirmar
+    // sigue exigiendo que esté abierto, y el servidor recalcula todo.
     async quote(payload) {
       const owner = await cartOwner();
       const { business, products } = await businessAndProducts(payload?.businessId);
-      return quoteCart(readCart(owner, business.id), business, products, payload?.fulfillment || 'pickup');
+      return quoteCart(readCart(owner, business.id), payload?.preview ? { ...business, open: true } : business, products,
+        payload?.fulfillment || 'pickup');
     },
     // Formas de pago que ofrece este comercio ahora (efectivo según modalidad;
     // online sólo con el interruptor encendido y la cuenta conectada).

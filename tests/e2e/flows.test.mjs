@@ -35,6 +35,9 @@ async function addToCart(page, productName, times = 1) {
 async function checkout(page, { fulfillment = 'pickup', name = 'Vecina de Prueba', phone = '2942 401122', address = '' } = {}) {
   await page.locator('.sticky-cart-bar a.button').click();
   await ready(page);
+  // El carrito muestra el total y lleva a la confirmación.
+  await page.locator('a.button-continue').click();
+  await ready(page);
   if (fulfillment === 'delivery') {
     await page.locator('input[name="fulfillment"][value="delivery"]').check();
     await ready(page);

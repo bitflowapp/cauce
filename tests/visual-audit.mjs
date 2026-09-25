@@ -15,6 +15,7 @@ const ROUTES = [
   ['comercios', '#comercios'],
   ['comercio', '#comercio/orilla'],
   ['carrito', '#carrito/orilla'],
+  ['confirmar', '#carrito/orilla/confirmar'],
   ['taxi', '#taxi'],
   ['actividad', '#actividad'],
   ['cuenta', '#cuenta'],

@@ -77,6 +77,9 @@ async function checkout(page, { fulfillment = 'pickup', name = 'Vecina QA', addr
   assert.ok(box && box.top >= 0 && box.bottom <= box.nav, `"Ver carrito" a la vista: ${JSON.stringify(box)} en ${await page.evaluate(() => location.hash)}`);
   await bar.click();
   await ready(page);
+  // El carrito muestra el total y lleva a la confirmación.
+  await page.locator('a.button-continue').click();
+  await ready(page);
   if (fulfillment === 'delivery') {
     await page.locator('input[name="fulfillment"][value="delivery"]').check();
     await ready(page);
@@ -179,7 +182,7 @@ for (const engine of engines) {
       // El cliente ve que llegó y lee su código en su pedido; se lo dicta a quien reparte.
       await go(c, `#pedido/${order.id}`);
       await c.getByText('El reparto informó que llegó').waitFor({ timeout: 30000 });
-      const dictated = (await c.locator('p.microcopy', { hasText: 'Código de entrega' }).locator('strong').textContent()).trim();
+      const dictated = (await c.locator('[data-delivery-code]').textContent()).trim();
       await r.locator(`article[aria-label="Entrega ${order.code}"]`).locator('input[name="code"]').fill(dictated);
       await r.locator(`article[aria-label="Entrega ${order.code}"]`).getByRole('button', { name: 'Entregar' }).click();
       await ready(r);

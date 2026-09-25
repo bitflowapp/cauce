@@ -25,10 +25,13 @@ test('la cotización conserva la fotografía del producto para el historial del 
 
 test('el tracking se declara estimado y no afirma telemetría inexistente', async () => {
   const app = await readFile(resolve(root, 'js/app.js'), 'utf8');
+  // Taxi: el vehículo avanza según el estado informado, no por GPS.
   assert.match(app, /AVANCE ESTIMADO/);
-  assert.match(app, /no representa coordenadas en vivo/i);
   assert.match(app, /no representa distancia, ETA ni posición exactas/i);
-  assert.match(app, /Sin GPS en tiempo real/);
+  // Envíos: cada paso lo informa el reparto; no hay ubicación en vivo.
+  const order = await readFile(resolve(root, 'js/ui/order-status.js'), 'utf8');
+  assert.match(order, /no es una ubicación en vivo ni una posición GPS/);
+  assert.doesNotMatch(order, /en tiempo real|en vivo desde/i);
 });
 
 test('las animaciones de tracking son finitas y respetan movimiento reducido', async () => {

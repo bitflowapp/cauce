@@ -24,6 +24,7 @@ for (const engine of browsersToRun) {
       const password = `Alta${randomUUID().slice(0, 8)}4`;
       const since = Date.now() - 1000;
       await open(phone.page, '#cuenta');
+      await phone.page.getByRole('tab', { name: 'Crear cuenta' }).click();
       await phone.page.fill('#reg-name', 'Titular Nueva');
       await phone.page.fill('#reg-email', email);
       await phone.page.fill('#reg-phone', '2942 402233');
@@ -40,6 +41,7 @@ for (const engine of browsersToRun) {
       // "¿No te llegó?": se reenvía desde la misma pantalla y vale el enlace nuevo.
       await phone.page.waitForTimeout(1500); // tope de Auth: un correo por segundo por casilla
       const resentAt = Date.now();
+      await phone.page.locator('summary', { hasText: '¿No te llegó el correo de confirmación?' }).click();
       await phone.page.fill('#resend-email', email);
       await phone.page.locator('form[data-form="resend-confirmation"] button[type="submit"]').click();
       await phone.page.getByText('Si hay una cuenta sin confirmar con ese correo').waitFor({ timeout: 15000 });
@@ -78,6 +80,7 @@ for (const engine of browsersToRun) {
       const previous = user.password;
       const changed = `Cambio${randomUUID().slice(0, 8)}5`;
       await open(page, '#cuenta');
+      await page.locator('summary', { hasText: 'Cambiar contraseña' }).click();
       await page.fill('#current-password', 'NoEsLaActual9');
       await page.fill('#new-password', changed);
       await page.locator('form[data-form="password-update"] button[type="submit"]').click();
@@ -90,7 +93,7 @@ for (const engine of browsersToRun) {
 
       // Misma persona, segunda pestaña del mismo navegador.
       const second = await tab.context.newPage();
-      await second.goto(`${page.url().split('#')[0]}#actividad`);
+      await second.goto(`${page.url().split('#')[0]}#cuenta`);
       await ready(second);
       await second.getByRole('button', { name: /Cerrar sesión/ }).click();
       await ready(second);
@@ -117,6 +120,7 @@ for (const engine of browsersToRun) {
       const again = await person(browser, { label: 'reusa el enlace' });
       const since = Date.now() - 1000;
       await open(phone.page, '#cuenta');
+      await phone.page.locator('summary', { hasText: '¿Olvidaste tu contraseña?' }).click();
       await phone.page.fill('#reset-email', user.email);
       await phone.page.locator('form[data-form="password-reset"] button[type="submit"]').click();
       await phone.page.getByText('Si el correo corresponde a una cuenta').waitFor({ timeout: 15000 });

@@ -95,7 +95,7 @@ test('el aviso del pedido online deja pagar sólo a quien compró y mientras fal
 });
 
 test('ninguna pantalla nombra a un proveedor: lo nombra la base', async () => {
-  for (const file of ['js/ui/payments.js', 'js/ui/business-panel.js', 'js/ui/rider.js', 'js/app.js']) {
+  for (const file of ['js/ui/payments.js', 'js/ui/order-status.js', 'js/ui/business-panel.js', 'js/ui/rider.js', 'js/app.js']) {
     const source = await readFile(new URL(`../${file}`, import.meta.url), 'utf8');
     assert.doesNotMatch(source, /mercado ?pago/i, `${file} no debe nombrar al proveedor`);
   }

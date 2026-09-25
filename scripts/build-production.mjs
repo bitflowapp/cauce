@@ -123,6 +123,10 @@ const result = await build({
       if (contents === source) fail('No se pudo fijar el modo producción en js/config.js.');
       return { loader: 'js', contents };
     });
+    // Las ilustraciones de platos son de la demostración: en producción un
+    // producto sin foto lleva la marca neutra con sus iniciales.
+    builder.onLoad({ filter: /[\\/]js[\\/]data[\\/]food-assets\.js$/ }, () => ({ loader: 'js',
+      contents: "export function getProductSvg() { return ''; }" }));
     // La fábrica de producción no importa la demostración ni el backend de desarrollo.
     builder.onResolve({ filter: /repository-factory\.js$/ }, () => ({
       path: resolve(root, 'js/repositories/production-factory.js') }));
