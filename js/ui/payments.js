@@ -126,13 +126,16 @@ export function paymentsSection(overview, { businessId, isOwner, online = true, 
     <strong class="metric-value">${value}</strong>${hint ? `<span class="metric-hint">${esc(hint)}</span>` : ''}</div>`;
   return `<section class="panel-section pay-panel" aria-labelledby="pagos-title">
     <h2 class="checkout-section-title" id="pagos-title">Pagos online</h2>
+    ${overview?.sandbox ? `<div class="notice" role="status"><strong>Modo de prueba.</strong> Este comercio es el piloto
+      de pagos online: sólo acepta cuentas y pagos de prueba del proveedor. Nada se cobra de verdad.</div>` : ''}
     ${notice ? `<div class="notice ${notice[0] === 'error' ? 'error' : ''}" role="status">${esc(notice[1])}</div>` : ''}
     ${providers.length ? providers.map(provider => providerCard(provider,
       accounts.find(account => account.provider === provider.provider) || null, { businessId, isOwner, online })).join('')
       : '<p class="quiet">No hay proveedores de pago habilitados en CAUCE.</p>'}
     ${isOwner ? '' : '<p class="microcopy">Conectar o desconectar la cuenta lo hace la persona titular del comercio.</p>'}
     ${review ? `<div class="notice error" role="status"><strong>${review} ${review === 1 ? 'pago para revisar' : 'pagos para revisar'}.</strong>
-      El proveedor informó un importe distinto del pedido o un pago repetido. Revisalo en la cuenta del comercio y devolvé lo que corresponda.</div>` : ''}
+      El proveedor informó un importe distinto del pedido, un pago repetido o un pago que llegó después de cerrar el intento.
+      Revisalo en la cuenta del comercio y devolvé lo que corresponda: CAUCE nunca devuelve solo.</div>` : ''}
     <h3 class="checkout-section-title">Hoy</h3>
     ${connected || Number(today.approved) || Number(today.pending) ? `<div class="metrics-grid panel-metrics pay-metrics">
       ${tile('Pagos aprobados', String(Number(today.approved) || 0), money(Number(today.approved_ars) || 0))}
