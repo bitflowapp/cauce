@@ -4,5 +4,5 @@
   "confirmar": "",
   "email": "",
   "invitar": false,
-  "motivo": "Estado de la cuenta de administración (CAUCE_ADMIN_EMAIL): ¿aceptó la invitación? Sólo lectura: no otorga nada."
+  "motivo": "Fase C: el build de producción de feat/cauce-rider-v1 contra el proyecto real ya migrado, antes de integrar y publicar. Incluye el circuito completo de un envío con la persona de reparto QA. Crea y borra datos CAUCE QA."
 }

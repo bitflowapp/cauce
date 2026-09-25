@@ -80,8 +80,11 @@ for (const path of await walk(resolve(root, 'js'))) {
   if (CREDENTIAL_PATTERN.test(text)) failures.push(`Posible credencial embebida: ${name}`);
   if (NETWORK_ALLOWED.has(name)) continue;
   // Enlaces de navegación permitidos (abren otra app, no conectan datos):
-  // WhatsApp como canal de contacto de cada comercio con sus clientes.
-  const code = text.replace(/^\s*\/\/.*$/gm, '').replace(/https:\/\/wa\.me\//g, '');
+  // WhatsApp como canal de contacto de cada comercio con sus clientes, y la
+  // búsqueda de Google Maps que abre la dirección de entrega en el teléfono de
+  // quien reparte.
+  const code = text.replace(/^\s*\/\/.*$/gm, '').replace(/https:\/\/wa\.me\//g, '')
+    .replace(/https:\/\/www\.google\.com\/maps\/search\/\?api=1&query=/g, '');
   if (/https?:\/\//i.test(code)) failures.push(`URL de red en el runtime: ${name}`);
   if (NETWORK_PATTERN.test(text)) failures.push(`Operación de red inesperada: ${name}`);
 }
