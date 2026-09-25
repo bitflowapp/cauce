@@ -1,7 +1,9 @@
 // Panel remoto del comercio: piezas de interfaz. Sólo arman HTML escapado a
 // partir de datos ya leídos; qué se ofrece lo decide js/core/business-panel.js
 // y qué se permite, la base.
-import { esc, money, timeOnly, orderStatusLabel, orderStatusTone, paymentLabel } from './format.js';
+import { esc, money, timeOnly, orderStatusLabel, orderStatusTone } from './format.js';
+import { paymentBadge } from './payments.js';
+import { canPrepare } from '../core/payment.js';
 import { renderIcon } from './icons.js';
 import { whatsappNumber } from './merchant-tools.js';
 import { formatArgentinePhone } from '../core/validators.js';
@@ -23,7 +25,7 @@ const panelHref = (businessId, section = '') => `#panel/${esc(businessId)}${sect
 
 // ── navegación ──
 export function panelNav(businessId, sections, current, { newCount = 0 } = {}) {
-  return `<div class="tabs panel-nav" role="tablist" aria-label="Secciones del panel">
+  return `<div class="tabs panel-nav" role="tablist" aria-label="Secciones del panel" data-admin="${sections.filter(section => section.manage).length}">
     ${sections.map(section => `
       <button class="tab ${current === section.key ? 'active' : ''} ${section.manage ? 'is-admin' : ''}" type="button" role="tab"
         aria-selected="${current === section.key}" data-action="set-panel-tab" data-business="${esc(businessId)}"
@@ -121,6 +123,8 @@ export function orderCard(order, context) {
   const riderName = riders.find(rider => rider.id === order.riderId)?.name || '';
   const disabled = online ? '' : 'disabled';
   const lines = order.lines || [];
+  // Un pedido online se acepta recién con el pago aprobado (la base lo exige igual).
+  const waitingPayment = order.status === 'submitted' && !canPrepare(order);
   return `
     <article class="order-panel-card ${order.status === 'submitted' ? 'is-new' : ''} ${fresh.includes(order.id) ? 'is-fresh' : ''} ${open ? '' : 'is-closed'}"
       aria-label="Pedido ${esc(order.code)}" data-status="${esc(order.status)}">
@@ -133,7 +137,7 @@ export function orderCard(order, context) {
       </header>
       <p class="order-card-meta">
         <span class="mode-chip ${delivery ? 'is-delivery' : 'is-pickup'}">${renderIcon(delivery ? 'delivery' : 'store', 13)} ${delivery ? 'Envío' : 'Retiro'}</span>
-        <span>${esc(paymentLabel(order.paymentMethod))}</span>
+        ${paymentBadge(order, { compact: true })}
       </p>
       <ul class="order-panel-lines" aria-label="Productos">
         ${lines.map(line => `<li><span class="order-line-qty">${Number(line.quantity) || 0} ×</span>
@@ -151,9 +155,10 @@ export function orderCard(order, context) {
       <p class="order-panel-total"><span>Total</span> <strong>${money(order.total)}</strong>
         ${order.deliveryFee ? `<small>incluye envío ${money(order.deliveryFee)}</small>` : ''}</p>
       ${order.cancellation ? `<p class="microcopy order-card-reason">Motivo: ${esc(order.cancellation.reason || 'sin detalle')}</p>` : ''}
+      ${waitingPayment ? '<p class="notice order-card-payment" role="status"><strong>Esperando el pago online.</strong> Se puede aceptar cuando el pago esté aprobado.</p>' : ''}
       ${forward.filter(action => action !== 'assigned').length || cancel ? `<div class="order-panel-actions">
         ${forward.filter(action => action !== 'assigned').map(action => `<button class="button" type="button" data-action="order-transition"
-          data-order="${esc(order.id)}" data-version="${order.version}" data-next="${esc(action)}" ${disabled}>${esc(orderActionLabel(order, action))}</button>`).join('')}
+          data-order="${esc(order.id)}" data-version="${order.version}" data-next="${esc(action)}" ${disabled || (action === 'accepted' && waitingPayment ? 'disabled' : '')}>${esc(orderActionLabel(order, action))}</button>`).join('')}
         ${cancel ? `<button class="button button-outline-danger order-cancel" type="button"
           data-action="order-transition" data-order="${esc(order.id)}" data-version="${order.version}" data-next="canceled"
           data-reason="required" data-code="${esc(order.code)}" ${disabled}>${esc(orderActionLabel(order, 'canceled'))}</button>` : ''}

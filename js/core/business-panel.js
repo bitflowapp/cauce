@@ -20,14 +20,17 @@ export const PANEL_SECTIONS = Object.freeze([
   Object.freeze({ key: 'horarios', label: 'Horarios', manage: true, connected: true }),
   Object.freeze({ key: 'configuracion', label: 'Configuración', manage: true, connected: false }),
   Object.freeze({ key: 'equipo', label: 'Equipo', manage: true, connected: true }),
+  // Pagos online: sólo con el interruptor de la plataforma encendido.
+  Object.freeze({ key: 'pagos', label: 'Pagos', manage: true, connected: true, payments: true }),
 ]);
 const SECTION_ALIASES = Object.freeze({ datos: 'configuracion', resumen: 'inicio' });
 
 export const canManageBusiness = role => role === 'owner' || role === 'manager';
 
-export function panelSections(role, { connected = false } = {}) {
+export function panelSections(role, { connected = false, payments = false } = {}) {
   const manage = canManageBusiness(role);
-  return PANEL_SECTIONS.filter(section => (!section.manage || manage) && (!section.connected || connected));
+  return PANEL_SECTIONS.filter(section => (!section.manage || manage) && (!section.connected || connected)
+    && (!('payments' in section) || payments));
 }
 
 // Una sección pedida por URL que el rol no ve (o que no existe) cae en Inicio.

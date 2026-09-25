@@ -90,9 +90,9 @@ export function checkoutPaymentMethods(methods, fulfillment) {
   }
   const online = list.find(method => method?.kind === 'online' && method.id === 'online');
   if (online && typeof online.provider === 'string' && online.provider) {
-    result.push(Object.freeze({ id: 'online', kind: 'online', provider: online.provider,
-      label: String(online.label || 'Pago online'),
-      detail: 'Pagás ahora y el comercio recibe el pedido con el pago aprobado.' }));
+    const label = String(online.label || 'Pago online');
+    result.push(Object.freeze({ id: 'online', kind: 'online', provider: online.provider, label,
+      detail: `Pagás ahora, en la página de ${label}.` }));
   }
   return result;
 }
@@ -135,4 +135,23 @@ export function paymentReturnState(outcome, payment) {
   return Object.freeze({ tone: 'pending', final: false,
     title: outcome === 'error' ? 'Estamos revisando tu pago' : 'Estamos confirmando tu pago',
     message: 'Esperamos la confirmación del proveedor. Esta pantalla se actualiza sola; no hace falta pagar de nuevo.' });
+}
+
+// De dónde sale la referencia del pago al volver del proveedor: primero lo que
+// CAUCE puso en la dirección de vuelta (#pago/<resultado>?intento=<id>), y si
+// el proveedor movió los parámetros, su external_reference (que también es el
+// id del intento). Sólo un UUID: cualquier otra cosa no se consulta.
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export function paymentReturnReference(hash = '', search = '') {
+  const inHash = new URLSearchParams(String(hash).split('?')[1] || '');
+  const inSearch = new URLSearchParams(String(search).replace(/^\?/, ''));
+  const candidate = inHash.get('intento') || inHash.get('pedido') || inSearch.get('external_reference') || '';
+  return UUID.test(candidate) ? candidate : '';
+}
+
+// Resultado de conectar la cuenta del comercio (#panel/<id>/pagos?conexion=…).
+export const CONNECTION_RESULTS = Object.freeze(['ok', 'cancelada', 'vencida', 'error']);
+export function connectionResult(hash = '') {
+  const value = new URLSearchParams(String(hash).split('?')[1] || '').get('conexion') || '';
+  return CONNECTION_RESULTS.includes(value) ? value : '';
 }
