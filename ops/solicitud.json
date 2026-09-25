@@ -1,8 +1,8 @@
 {
-  "paso": "backup",
+  "paso": "migrar",
   "aplicar": false,
   "confirmar": "",
   "email": "",
   "invitar": false,
-  "motivo": "Sandbox de Mercado Pago: la migración 20260927120000 cambió (el contexto del intento incluye created_at para que el reintento sea idéntico). Copia cifrada del proyecto real, restauración en un stack nuevo y la migración actualizada aplicada sobre la copia. Sólo lectura sobre el proyecto."
+  "motivo": "Sandbox de Mercado Pago: dry-run exacto de la migración 20260927120000 (piloto de pagos por comercio) después del backup y la restauración de prueba en verde (run 36200528198). Sólo lectura."
 }
