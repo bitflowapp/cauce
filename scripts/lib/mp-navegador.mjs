@@ -17,7 +17,10 @@ export class Blocked extends Error {
   }
 }
 
-const CAPTCHA_TEXT = /captcha|no soy un robot|no sos un robot|verific(á|a) que (sos|eres) (una persona|humano)/i;
+// Un desafío que pide una persona. Un reCAPTCHA invisible (el sello
+// "protegido por reCAPTCHA" de muchas páginas de ingreso) no lo es.
+const CAPTCHA_TEXT = /no soy un robot|no sos un robot|verific(á|a) que (sos|eres) (una persona|humano)|resolv(é|e) el desaf[ií]o/i;
+const CAPTCHA_FRAME = /recaptcha|hcaptcha|captcha/i;
 const IP_BLOCK_TEXT = /Hubo un error accediendo a esta p[aá]gina|Access Denied|Request blocked/i;
 // Tarjeta de prueba pública de la documentación de Mercado Pago (Argentina).
 export const TEST_CARD = Object.freeze({ number: '5031755734530604', cvv: '123', expiry: '11/30', month: '11', year: '30',
@@ -26,12 +29,36 @@ export const TEST_CARD = Object.freeze({ number: '5031755734530604', cvv: '123',
 export const HOLDER = Object.freeze({ approved: 'APRO', rejected: 'OTHE', pending: 'CONT' });
 export const SANDBOX_EMAIL = 'test@testuser.com';
 
+// Texto visible de la página y sus iframes, sin los del captcha (su sello
+// dice "reCAPTCHA" aunque no haya ningún desafío).
 async function bodyText(page) {
   const parts = [];
   for (const frame of page.frames()) {
+    if (CAPTCHA_FRAME.test(frame.url())) continue;
     parts.push(await frame.evaluate(() => document.body?.innerText || '').catch(() => ''));
   }
   return parts.join('\n');
+}
+
+// ¿Hay un desafío de captcha a la vista? El sello invisible no cuenta; el
+// cuadro "No soy un robot" o la ventana del desafío, sí.
+async function visibleCaptcha(page) {
+  for (const frame of page.frames()) {
+    const url = frame.url();
+    if (!CAPTCHA_FRAME.test(url) || /size=invisible/.test(url)) continue;
+    const element = await frame.frameElement().catch(() => null);
+    if (!element) continue;
+    const shown = await element.evaluate(node => {
+      const box = node.getBoundingClientRect();
+      const inView = box.width > 30 && box.height > 30 && box.bottom > 0 && box.right > 0
+        && box.top < innerHeight && box.left < innerWidth;
+      const style = getComputedStyle(node);
+      return inView && style.visibility !== 'hidden' && style.display !== 'none'
+        && (typeof node.checkVisibility !== 'function' || node.checkVisibility({ visibilityProperty: true, opacityProperty: true }));
+    }).catch(() => false);
+    if (shown) return true;
+  }
+  return false;
 }
 
 // Primer elemento visible y habilitado que cumpla `selector` en cualquier frame.
@@ -118,8 +145,7 @@ export async function safeShot(page, path, { hideText = [] } = {}) {
 async function checkBlocked(page) {
   const text = await bodyText(page);
   if (IP_BLOCK_TEXT.test(text)) throw new Blocked('la página del proveedor respondió "acceso bloqueado" (IP del servidor de pruebas)');
-  const captcha = page.frames().some(frame => /recaptcha|hcaptcha|captcha/i.test(frame.url()));
-  if (captcha || CAPTCHA_TEXT.test(text)) throw new Blocked('pidió un captcha');
+  if (CAPTCHA_TEXT.test(text) || await visibleCaptcha(page)) throw new Blocked('pidió resolver un captcha');
   return text;
 }
 
