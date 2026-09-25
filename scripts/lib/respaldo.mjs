@@ -20,12 +20,16 @@ import { fileURLToPath } from 'node:url';
 import postgres from 'postgres';
 import { REQUIRED_SCHEMA } from '../../js/core/contract.js';
 import { ROOT, log, migrationFiles, redact, supabaseCli } from './proyecto.mjs';
+import { adaptDump, parseDump, quoted } from './volcado.mjs';
 
 const root = fileURLToPath(ROOT);
 const npx = process.platform === 'win32' ? 'npx.cmd' : 'npx';
 
 // Estado transitorio de Auth y Storage: no hace falta para volver a operar y
-// es lo más sensible (sesiones y tokens vigentes).
+// es lo más sensible (sesiones y tokens vigentes). También las tablas de
+// MFA, SSO, OAuth, SCIM y WebAuthn, que CAUCE no usa (si algún día se habilita
+// MFA, sus factores tienen que volver al respaldo), y el registro de
+// migraciones propio de cada servicio, que en otro proyecto ya existe.
 export const DATA_EXCLUDE = [
   'auth.sessions', 'auth.refresh_tokens', 'auth.one_time_tokens', 'auth.flow_state', 'auth.audit_log_entries',
   'auth.mfa_challenges', 'auth.mfa_amr_claims', 'auth.mfa_factors', 'auth.mfa_recovery_code_sets',
@@ -111,47 +115,33 @@ export async function withTempStack({ migrations, offset = 1000, projectId = 'ca
   }
 }
 
-// Carga el dump de datos sobre las tablas vacías del stack temporal.
-export async function loadData({ db, adminUrl }, { dumped, dataFile }, list) {
-  const existingRows = await db.unsafe(`select table_schema || '.' || table_name as name from information_schema.tables where table_type = 'BASE TABLE'`);
-  const existingSet = new Set(existingRows.map(r => r.name));
-  const targetTables = dumped.filter(name => existingSet.has(name));
-  if (targetTables.length) {
-    await db.unsafe(`truncate ${targetTables.map(name => name.split('.').map(part => `"${part}"`).join('.')).join(', ')} cascade`);
+// Carga el dump de datos sobre las tablas del stack temporal, adaptado a lo
+// que ese stack tiene (ver volcado.mjs).
+export async function loadData({ db, adminUrl, work }, { dataFile }, list) {
+  const target = { columns: new Map(), sequences: new Set() };
+  for (const row of await db.unsafe(`select table_schema || '.' || table_name as name, column_name as column
+      from information_schema.columns where table_schema not in ('pg_catalog', 'information_schema')`)) {
+    if (!target.columns.has(row.name)) target.columns.set(row.name, new Set());
+    target.columns.get(row.name).add(row.column);
   }
-  const colRows = await db.unsafe(`select table_schema || '.' || table_name as tbl, column_name as col from information_schema.columns where table_schema in ('auth', 'storage', 'public', 'private')`);
-  const colsByTable = new Map();
-  for (const { tbl, col } of colRows) {
-    if (!colsByTable.has(tbl)) colsByTable.set(tbl, new Set());
-    colsByTable.get(tbl).add(col);
+  for (const row of await db.unsafe(`select schemaname || '.' || sequencename as name from pg_sequences`)) {
+    target.sequences.add(row.name);
   }
-  const rawSql = await readFile(dataFile, 'utf8');
-  const filteredSql = rawSql.replace(
-    /^COPY "([a-z_]+)"\."([a-z_0-9]+)" \(([^)]+)\) FROM stdin;\r?\n([\s\S]*?)^\\\.\r?$/gm,
-    (full, schema, table, colList, body) => {
-      const tbl = `${schema}.${table}`;
-      const allowed = colsByTable.get(tbl);
-      if (!allowed) return '';
-      const cols = colList.split(',').map(c => c.trim().replace(/^"|"$/g, ''));
-      const keepIdx = cols.map((c, i) => allowed.has(c) ? i : -1).filter(i => i >= 0);
-      if (keepIdx.length === cols.length) return full;
-      const newCols = keepIdx.map(i => `"${cols[i]}"`).join(', ');
-      const newBody = body
-        .split(/\r?\n/)
-        .map(line => {
-          if (!line) return '';
-          const parts = line.split('\t');
-          return keepIdx.map(i => parts[i]).join('\t');
-        })
-        .join('\n');
-      return `COPY "${schema}"."${table}" (${newCols}) FROM stdin;\n${newBody}\\.`;
-    },
-  );
-  const adaptedFile = `${dataFile}.adapted.sql`;
-  await writeFile(adaptedFile, filteredSql);
-  const load = spawnSync('psql', [adminUrl, '-v', 'ON_ERROR_STOP=1', '-q', '-f', adaptedFile],
+  const adapted = adaptDump(parseDump(await readFile(dataFile, 'utf8')), target);
+  if (adapted.omitted.length) {
+    list.info('Auth/Storage del origen más nuevos que el stack de prueba', `omitido: ${adapted.omitted.join('; ')}`);
+  }
+  if (adapted.problems.length) {
+    list.fail('los datos se restauran sin errores', adapted.problems.join('; '));
+    return false;
+  }
+  const file = join(work, 'datos-adaptados.sql');
+  await writeFile(file, adapted.sql);
+  if (adapted.tables.length) await db.unsafe(`truncate ${adapted.tables.map(quoted).join(', ')} cascade`);
+  const load = spawnSync('psql', [adminUrl, '-v', 'ON_ERROR_STOP=1', '-q', '-f', file],
     { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
-  list.check('los datos se restauran sin errores', load.status === 0, redact(load.stderr || '').trim().slice(0, 300) || 'ok');
+  list.check('los datos se restauran sin errores', load.status === 0,
+    redact(load.stderr || '').trim().slice(0, 300) || `${adapted.tables.length} tablas`);
   return load.status === 0;
 }
 
@@ -162,19 +152,25 @@ export function compareCounts(before, after, dumped, { allowGrowth = [] } = {}) 
   return { compared, mismatches };
 }
 
-// Lo que tiene que valer en cualquier base restaurada o migrada.
-export async function verifyDatabase({ db, status }, list, { label = 'restaurada' } = {}) {
-  const [contract] = await db.unsafe(`select (public.app_status() ->> 'schema')::bigint as schema`);
-  list.check(`el contrato de esquema responde (${label})`, Number(contract.schema) >= REQUIRED_SCHEMA, String(contract.schema));
+// Lo que tiene que valer en cualquier base restaurada o migrada. Sin
+// `contract`, la base es anterior a la migración que publica app_status (un
+// backup tomado antes de migrar): se verifica todo lo demás.
+export async function verifyDatabase({ db, status }, list, { label = 'restaurada', contract = true } = {}) {
+  const headers = { apikey: status.PUBLISHABLE_KEY, 'Content-Type': 'application/json' };
+  if (contract) {
+    const [row] = await db.unsafe(`select (public.app_status() ->> 'schema')::bigint as schema`);
+    list.check(`el contrato de esquema responde (${label})`, Number(row.schema) >= REQUIRED_SCHEMA, String(row.schema));
+    const api = await (await fetch(`${status.API_URL}/rest/v1/rpc/app_status`, { method: 'POST', headers, body: '{}' })).json().catch(() => null);
+    list.check(`la API publica el contrato nuevo (${label})`, Number(api?.schema) >= REQUIRED_SCHEMA, String(api?.schema ?? api?.message ?? 'sin respuesta'));
+  } else {
+    list.info(`contrato de esquema (${label})`, 'el origen todavía no tiene app_status: migración pendiente');
+  }
   const [rls] = await db.unsafe(`select count(*)::int as n from pg_class c join pg_namespace n on n.oid = c.relnamespace
     where n.nspname in ('public', 'private') and c.relkind = 'r' and not c.relrowsecurity`);
   list.check(`RLS activo en todas las tablas (${label})`, rls.n === 0, `${rls.n} sin RLS`);
   const [policies] = await db.unsafe(`select count(*)::int as n from pg_policies where schemaname = 'storage' and tablename = 'objects'`);
   list.check(`políticas de Storage presentes (${label})`, policies.n > 0, `${policies.n} políticas`);
-  // Una visita contra la API: ve el contrato nuevo y el catálogo, no los pedidos.
-  const headers = { apikey: status.PUBLISHABLE_KEY, 'Content-Type': 'application/json' };
-  const api = await (await fetch(`${status.API_URL}/rest/v1/rpc/app_status`, { method: 'POST', headers, body: '{}' })).json().catch(() => null);
-  list.check(`la API publica el contrato nuevo (${label})`, Number(api?.schema) >= REQUIRED_SCHEMA, String(api?.schema ?? api?.message ?? 'sin respuesta'));
+  // Una visita contra la API: ve el catálogo, no los pedidos.
   const businesses = await (await fetch(`${status.API_URL}/rest/v1/businesses?select=id&status=eq.active`, { headers })).json();
   const [{ active }] = await db.unsafe(`select count(*)::int as active from public.businesses where status = 'active'`);
   list.check(`la API sirve el catálogo publicado (${label})`, Array.isArray(businesses) && businesses.length === active,
@@ -210,6 +206,21 @@ export async function rehearseMigration(t, list, { applied, pending }) {
   }
 }
 
+// Copia externa cifrada; lo que no se cifra no sale de la máquina.
+async function encryptCopy(t, out, stamp, list) {
+  const passphrase = process.env.CAUCE_BACKUP_PASSPHRASE;
+  if (!passphrase || passphrase.length < 16) {
+    list.info('copia externa', 'sin CAUCE_BACKUP_PASSPHRASE (16+ caracteres) no se guarda la copia: sólo la prueba de restauración');
+    return;
+  }
+  const archive = join(root, 'backup', `cauce-${t.ref}-${stamp}.tar.gz`);
+  execFileSync('tar', ['-czf', archive, '-C', out, 'schema.sql', 'data.sql', 'conteos.json']);
+  const encrypted = spawnSync('gpg', ['--batch', '--yes', '--symmetric', '--cipher-algo', 'AES256',
+    '--passphrase-fd', '0', '-o', `${archive}.gpg`, archive], { input: passphrase, encoding: 'utf8' });
+  await rm(archive, { force: true });
+  list.check('copia cifrada (AES-256) lista para guardar fuera de Supabase', encrypted.status === 0, `${archive.split('/').pop()}.gpg`);
+}
+
 export async function backup(t, list) {
   const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
   const out = join(root, 'backup', stamp);
@@ -229,58 +240,65 @@ export async function backup(t, list) {
     list.info('BACKUP_RETENTION', `${info.pitr_enabled ? 'PITR habilitado · ' : ''}plan ${org?.plan || 'desconocido'}: ${PLAN_RETENTION[org?.plan] || 'ver dashboard'}`);
   }
 
-  // 2. Dump y 3. restauración en un stack nuevo con las migraciones aplicadas en el origen.
-  const allFiles = await migrationFiles();
-  const remoteRows = await t.sql('select version from supabase_migrations.schema_migrations order by version');
-  const remoteSet = new Set(remoteRows.map(r => String(r.version)));
-  const applied = allFiles.filter(f => remoteSet.has(f.split('_')[0]));
-  const pending = allFiles.filter(f => !remoteSet.has(f.split('_')[0]));
-
+  // 2. Dump y 3. copia cifrada: existe aunque después falle la prueba.
   const source = await dumpDatabase(t, out, list);
-  await withTempStack({ migrations: applied.length ? applied : allFiles }, async stack => {
-    if (!await loadData(stack, source, list)) return;
-    const restored = toCounts(await stack.db.unsafe(COUNT_SQL));
-    const { compared, mismatches } = compareCounts(source.counts, restored, source.dumped);
-    list.check('las filas restauradas coinciden con el origen', compared.length > 0 && mismatches.length === 0,
-      mismatches.length ? mismatches.map(name => `${name}: ${source.counts[name]} → ${restored[name]}`).join('; ')
-        : `${compared.length} tablas comparadas`);
-    // Desvío de esquema: lo restaurado (migraciones aplicadas en el origen) contra el origen.
-    const restoredSchema = join(out, 'schema-restaurado.sql');
-    const dumpRestored = stack.cli(['db', 'dump', '--local', '-f', restoredSchema]);
-    if (dumpRestored.status !== 0) list.fail('dump del esquema restaurado', redact(dumpRestored.stderr).slice(-300));
-    else {
-      const a = normalizeSchema(await readFile(source.schemaFile, 'utf8')).split('\n');
-      const b = normalizeSchema(await readFile(restoredSchema, 'utf8')).split('\n');
-      const setA = new Set(a);
-      const setB = new Set(b);
-      const onlySource = a.filter(line => !setB.has(line));
-      const onlyRestored = b.filter(line => !setA.has(line));
-      list.check('el esquema de origen coincide con las migraciones', onlySource.length === 0 && onlyRestored.length === 0,
-        onlySource.length || onlyRestored.length
-          ? `sólo en el origen: ${onlySource.slice(0, 3).join(' | ') || '—'} · sólo en migraciones: ${onlyRestored.slice(0, 3).join(' | ') || '—'}`
-          : 'idéntico');
-    }
-    if (pending.length) {
-      for (const file of pending) await cp(join(root, 'supabase', 'migrations', file), join(stack.work, 'supabase', 'migrations', file));
-      const pushed = stack.cli(['db', 'push', '--local', '--yes']);
-      list.check('las migraciones pendientes se aplican sobre la base restaurada', pushed.status === 0,
-        pushed.status === 0 ? pending.join(', ') : redact(`${pushed.stdout}${pushed.stderr}`).slice(-300));
-    }
-    await verifyDatabase(stack, list);
-    if (list.failed === 0) list.pass('RESTORE_TEST', 'dump → stack nuevo con migraciones → datos → verificación');
-  });
+  try {
+    await encryptCopy(t, out, stamp, list);
 
-  // 4. Copia externa cifrada; lo que no se cifra no sale de la máquina.
-  const passphrase = process.env.CAUCE_BACKUP_PASSPHRASE;
-  if (passphrase && passphrase.length >= 16) {
-    const archive = join(root, 'backup', `cauce-${t.ref}-${stamp}.tar.gz`);
-    execFileSync('tar', ['-czf', archive, '-C', out, 'schema.sql', 'data.sql', 'conteos.json']);
-    const encrypted = spawnSync('gpg', ['--batch', '--yes', '--symmetric', '--cipher-algo', 'AES256',
-      '--passphrase-fd', '0', '-o', `${archive}.gpg`, archive], { input: passphrase, encoding: 'utf8' });
-    await rm(archive, { force: true });
-    list.check('copia cifrada (AES-256) lista para guardar fuera de Supabase', encrypted.status === 0, `${archive.split('/').pop()}.gpg`);
-  } else {
-    list.info('copia externa', 'sin CAUCE_BACKUP_PASSPHRASE (16+ caracteres) no se guarda la copia: sólo la prueba de restauración');
+    // 4. Restauración en un stack nuevo con las migraciones que tiene el
+    // origen (un backup previo a migrar se restaura en su versión).
+    const files = await migrationFiles();
+    const versions = (await t.sql('select version from supabase_migrations.schema_migrations order by version'))
+      .map(row => String(row.version));
+    const unknown = versions.filter(version => !files.some(file => file.startsWith(`${version}_`)));
+    if (unknown.length) {
+      list.fail('el historial del origen está en el repo', `migraciones desconocidas: ${unknown.join(', ')}`);
+      return;
+    }
+    const migrations = files.filter(file => versions.includes(file.split('_')[0]));
+    const pending = files.filter(file => !migrations.includes(file));
+    if (pending.length) {
+      list.info('restauración en la versión del origen', `${migrations.length} de ${files.length} migraciones · pendientes: ${pending.join(', ')}`);
+    }
+    const [{ contract }] = await t.sql(`select to_regprocedure('public.app_status()') is not null as contract`);
+    await withTempStack({ migrations }, async stack => {
+      if (!await loadData(stack, source, list)) return;
+      const restored = toCounts(await stack.db.unsafe(COUNT_SQL));
+      const { compared, mismatches } = compareCounts(source.counts, restored, source.dumped);
+      list.check('las filas restauradas coinciden con el origen', compared.length > 0 && mismatches.length === 0,
+        mismatches.length ? mismatches.map(name => `${name}: ${source.counts[name]} → ${restored[name]}`).join('; ')
+          : `${compared.length} tablas comparadas`);
+      // Desvío de esquema: lo restaurado (migraciones del origen) contra el origen.
+      const restoredSchema = join(out, 'schema-restaurado.sql');
+      const dumpRestored = stack.cli(['db', 'dump', '--local', '-f', restoredSchema]);
+      if (dumpRestored.status !== 0) list.fail('dump del esquema restaurado', redact(dumpRestored.stderr).slice(-300));
+      else {
+        const a = normalizeSchema(await readFile(source.schemaFile, 'utf8')).split('\n');
+        const b = normalizeSchema(await readFile(restoredSchema, 'utf8')).split('\n');
+        const setA = new Set(a);
+        const setB = new Set(b);
+        const onlySource = a.filter(line => !setB.has(line));
+        const onlyRestored = b.filter(line => !setA.has(line));
+        list.check('el esquema de origen coincide con las migraciones', onlySource.length === 0 && onlyRestored.length === 0,
+          onlySource.length || onlyRestored.length
+            ? `sólo en el origen (${onlySource.length}): ${onlySource.slice(0, 8).join(' | ') || '—'} · sólo en migraciones (${onlyRestored.length}): ${onlyRestored.slice(0, 8).join(' | ') || '—'}`
+            : 'idéntico');
+      }
+      // Y lo pendiente sobre la copia restaurada: lo mismo que después aplica
+      // `migrar` en el proyecto, ensayado con sus propios datos.
+      let ready = Boolean(contract);
+      if (pending.length) {
+        for (const file of pending) await cp(join(root, 'supabase', 'migrations', file), join(stack.work, 'supabase', 'migrations', file));
+        const pushed = stack.cli(['db', 'push', '--local', '--yes']);
+        list.check('las migraciones pendientes se aplican sobre la base restaurada', pushed.status === 0,
+          pushed.status === 0 ? pending.join(', ') : redact(`${pushed.stdout}${pushed.stderr}`).slice(-300));
+        ready = ready || pushed.status === 0;
+      }
+      await verifyDatabase(stack, list, { contract: ready });
+      if (list.failed === 0) list.pass('RESTORE_TEST', 'dump → stack nuevo con las migraciones del origen → datos → verificación');
+    });
+  } finally {
+    // Del proyecto real sólo queda la copia cifrada.
+    if (!t.local) await rm(out, { recursive: true, force: true });
   }
-  if (!t.local) await rm(out, { recursive: true, force: true });
 }

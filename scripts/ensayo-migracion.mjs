@@ -1,9 +1,14 @@
 // Ensayo de B1 de punta a punta, sin tocar el proyecto real: un Supabase
 // temporal con SÓLO las migraciones que hoy tiene producción, datos cargados
 // con las funciones de esa versión (comercio publicado y pedidos en todos los
-// estados) y, sobre él, exactamente el comando que se va a correr en
-// producción: `operacion.mjs migrar` (que a su vez ensaya en otro stack antes
-// de aplicar). Al final comprueba los datos migrados.
+// estados) y, sobre él, exactamente los comandos que se corren en producción:
+// `operacion.mjs backup` antes y después de migrar, y `operacion.mjs migrar`
+// (que a su vez ensaya en otro stack antes de aplicar). Al final comprueba los
+// datos migrados.
+//
+// El origen imita además lo que se vio en el proyecto real: Auth de Supabase en
+// la nube va por delante de la CLI (tablas, columnas y secuencias que el stack
+// local no tiene, como auth.mfa_recovery_code_sets).
 //
 //   node scripts/ensayo-migracion.mjs
 import assert from 'node:assert/strict';
@@ -19,7 +24,10 @@ assert.equal(applied.length, files.length - 1, 'la migración pendiente es la ú
 
 const ids = Object.fromEntries(['merchant', 'customer', 'admin'].map(name => [name, randomUUID()]));
 const operacion = (args) => spawnSync(process.execPath, ['scripts/operacion.mjs', ...args],
-  { cwd: new URL('../', import.meta.url), encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+  { cwd: new URL('../', import.meta.url), encoding: 'utf8', maxBuffer: 64 * 1024 * 1024,
+    // Frase de prueba: ejercita la copia cifrada sin tocar la real.
+    env: { ...process.env, CAUCE_BACKUP_PASSPHRASE: 'frase-de-ensayo-local-cauce' } });
+const results = run => redact(`${run.stdout}`).split('\n').filter(line => /^(PASS|FAIL|INFO)/.test(line)).join('\n');
 
 await withTempStack({ migrations: applied, offset: 2000, projectId: 'cauce-origen', realtime: true }, async ({ db, status }) => {
   const as = (user, query, params = []) => db.begin(async tx => {
@@ -67,16 +75,37 @@ await withTempStack({ migrations: applied, offset: 2000, projectId: 'cauce-orige
   const [{ n: ordersBefore }] = await db.unsafe('select count(*)::int as n from public.orders');
   console.log(`Origen con ${applied.length} migraciones: 1 comercio publicado, ${ordersBefore} pedidos en curso y cerrados.`);
 
-  // ── el comando de producción, contra este origen ──
+  // ── Auth y Storage de la nube más nuevos que los de la CLI (lo visto en el
+  // proyecto real: auth.mfa_recovery_code_sets, storage.buckets.lifecycle_configuration) ──
+  await db.unsafe(`create table auth.mfa_recovery_code_sets (id uuid primary key default gen_random_uuid(),
+    user_id uuid, created_at timestamptz not null default now())`);
+  await db.unsafe("create table auth.future_table (id int primary key); insert into auth.future_table values (1)");
+  await db.unsafe('alter table auth.users add column hosted_only_flag boolean not null default false');
+  await db.unsafe('alter table storage.buckets add column lifecycle_configuration jsonb');
+  await db.unsafe("create sequence auth.hosted_only_seq; select setval('auth.hosted_only_seq', 5)");
+
+  // ── los comandos de producción, contra este origen ──
   const target = ['--db-url', status.DB_URL, '--api-url', status.API_URL, '--publishable', status.PUBLISHABLE_KEY,
     '--service', status.SECRET_KEY];
+  const backupBefore = operacion(['backup', ...target]);
+  console.log(`\nBackup antes de migrar:\n${results(backupBefore)}`);
+  assert.equal(backupBefore.status, 0, `backup antes de migrar pasa: ${redact(backupBefore.stderr).slice(-300)}`);
+  assert.match(backupBefore.stdout, /^PASS · RESTORE_TEST/m);
+  assert.match(backupBefore.stdout, /^PASS · copia cifrada/m);
+  assert.match(backupBefore.stdout, /omitido: .*auth\.future_table \(1 filas\)/);
+  assert.match(backupBefore.stdout, /auth\.users: hosted_only_flag \(con valores/);
+  assert.match(backupBefore.stdout, /storage\.buckets: lifecycle_configuration(;|$)/m);
+  assert.match(backupBefore.stdout, /^PASS · las migraciones pendientes se aplican sobre la base restaurada/m);
   const dry = operacion(['migrar', ...target]);
-  console.log(redact(dry.status === 0 ? dry.stdout.split('\n').filter(line => /^(PASS|FAIL|INFO)/.test(line)).join('\n')
-    : `${dry.stdout}${dry.stderr}`));
+  console.log(`\nMigración, dry-run:\n${dry.status === 0 ? results(dry) : redact(`${dry.stdout}${dry.stderr}`)}`);
   assert.equal(dry.status, 0, 'el dry-run pasa');
   const real = operacion(['migrar', ...target, '--aplicar']);
-  console.log(redact(real.stdout).split('\n').filter(line => /^(PASS|FAIL|INFO)/.test(line)).join('\n'));
+  console.log(`\nMigración aplicada:\n${results(real)}`);
   assert.equal(real.status, 0, `migrar --aplicar pasa: ${redact(real.stderr).slice(-300)}`);
+  const backupAfter = operacion(['backup', ...target]);
+  console.log(`\nBackup después de migrar:\n${results(backupAfter)}`);
+  assert.equal(backupAfter.status, 0, `backup después de migrar pasa: ${redact(backupAfter.stderr).slice(-300)}`);
+  assert.match(backupAfter.stdout, /^PASS · el contrato de esquema responde/m);
 
   // ── lo migrado conserva todo y sigue funcionando ──
   const [state] = await db.unsafe(`select
@@ -88,5 +117,5 @@ await withTempStack({ migrations: applied, offset: 2000, projectId: 'cauce-orige
       (select stock from public.products where id = $3) as stock`, [pending, road, product]);
   assert.deepEqual(state, { orders: ordersBefore, pending: 'submitted', road: 'picked_up', orphans: 0, tracked: true, stock: 14 });
   assert.equal((await move(road, 6, 'canceled', null, 'No se pudo entregar'))[0].status, 'canceled');
-  console.log('\nENSAYO B1 PASS · migración aplicada con el mismo comando que en producción, datos intactos y operables.');
+  console.log('\nENSAYO B1 PASS · backup y restauración antes y después, migración aplicada con el mismo comando que en producción, datos intactos y operables.');
 });
