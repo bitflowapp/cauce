@@ -52,7 +52,7 @@ const toCounts = rows => Object.fromEntries(rows.map(row => [row.name, Number(ro
 
 const normalizeSchema = text => String(text).split('\n')
   .map(line => line.trimEnd())
-  .filter(line => line && !line.startsWith('--') && !/^SET |^SELECT pg_catalog\.set_config|^RESET ALL/.test(line))
+  .filter(line => line && !line.startsWith('--') && !/^SET |^SELECT pg_catalog\.set_config|^RESET ALL|^GRANT .* TO "service_role";$/.test(line))
   .join('\n');
 
 function tempConfig(source, offset, projectId) {
