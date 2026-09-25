@@ -481,8 +481,9 @@ test('a visitor without session executes only the explicit public contract', asy
     from pg_proc p join pg_namespace n on n.oid=p.pronamespace
     where n.nspname in ('public','private') and has_function_privilege('anon', p.oid, 'EXECUTE') order by 1`);
   assert.deepEqual(result.rows.map(row => row.name), [
-    'private.app_status', 'private.business_open_now', 'private.report_client_event', 'private.track_order',
-    'public.app_status', 'public.open_now', 'public.report_client_event', 'public.track_order',
+    'private.app_status', 'private.business_open_now', 'private.payment_methods', 'private.report_client_event',
+    'private.track_order', 'public.app_status', 'public.open_now', 'public.payment_methods',
+    'public.report_client_event', 'public.track_order',
   ]);
 });
 test('every CAUCE function pins its search_path and stays out of public if privileged', async () => {

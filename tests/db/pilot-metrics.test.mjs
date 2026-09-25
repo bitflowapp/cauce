@@ -6,6 +6,7 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { PGlite } from '@electric-sql/pglite';
 import { applyMigrations } from './fixture.mjs';
+import { REQUIRED_SCHEMA } from '../../js/core/contract.js';
 
 const db = new PGlite();
 const NAMES = ['ownerA', 'ownerB', 'ownerC', 'admin', 'c1', 'c2', 'c3', 'c4'];
@@ -154,7 +155,7 @@ test('con más de 20 pedidos quietos se listan los 20 que más esperan y el tota
 });
 
 test('la migración sólo agrega funciones y declara el contrato nuevo', async () => {
-  assert.equal(Number((await one('anon', 'select public.app_status() as s')).s.schema), 20260925150000);
+  assert.equal(Number((await one('anon', 'select public.app_status() as s')).s.schema), REQUIRED_SCHEMA);
   const definer = rows(await db.query(`select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'public' and p.prosecdef`));
   assert.deepEqual(definer, [], 'ninguna función con privilegios en public');
