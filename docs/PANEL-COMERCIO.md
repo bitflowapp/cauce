@@ -29,7 +29,7 @@ viejo `#panel/<id>/datos` sigue llevando a Configuración.
 | Inicio | ✓ | ✓ | ✓ | Vendido hoy en vivo (lo entregado hoy, hora de Aluminé, y lo que está en curso), pedidos nuevos, activos, completados hoy, ticket promedio, retiro · envío y productos sin disponibilidad. Con pedidos esperando, primero se atienden (Aceptar/Rechazar); después los números. Más vendidos hoy y últimas ventas. |
 | Pedidos | ✓ | ✓ | ✓ | Tablero por estado con filtros y contadores. |
 | Catálogo | ✓ | ✓ | disponibilidad y stock | Precio y stock al toque en cada producto; crear y editar (descripción, categoría, foto, variantes, stock opcional), desactivar y reactivar; categorías (crear, renombrar, ordenar, activar). |
-| Reparto | ✓ | ✓ | ✓ (sin cargar personas) | Envíos por etapa, quién lleva qué, personas de reparto. |
+| Reparto | ✓ | ✓ | ✓ (sin cargar personas) | Envíos por etapa, quién lleva qué, personas de reparto y su cuenta vinculada (titular y encargado/a vinculan y desvinculan). |
 | Horarios | ✓ | ✓ | — | Por día: cerrado o hasta 3 turnos (también después de medianoche); ABIERTO/CERRADO ahora. |
 | Configuración | ✓ | ✓ | — | Arriba, envío, pedido mínimo y tiempos estimados, con su propio botón (en un comercio que ya opera). Después nombre, rubro, descripción, teléfonos, WhatsApp y dirección; logo, portada y publicación. |
 | Equipo | ✓ (edita) | ✓ (ve) | — | Integrantes y roles. Sólo el titular suma, cambia o quita. |
@@ -142,8 +142,11 @@ Rechazar y cancelar piden motivo (la base también lo exige).
 
 ## Fuera de alcance en v1
 
-Cobros en línea, liquidaciones, comisiones, reembolsos, gráficos o reportes, y
-la aplicación propia de reparto. Para esta última, ver
+Cobros en línea, liquidaciones, comisiones, reembolsos, gráficos o reportes.
+
+La aplicación de reparto (Rider v1) llegó después, en `#entregas`: el comercio
+vincula la cuenta de cada persona desde Reparto y ella opera desde su teléfono
+sólo los envíos que le asignan, con el código del cliente para entregar. Ver
 [CONTRATO-RIDER.md](CONTRATO-RIDER.md).
 
 La facturación electrónica tampoco está en v1: en el panel no hay botón,
