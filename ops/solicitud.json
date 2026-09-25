@@ -1,8 +1,8 @@
 {
-  "paso": "smoke-previo",
-  "aplicar": true,
-  "confirmar": "ygqbcvxdrewcnzedfcyo",
+  "paso": "backup",
+  "aplicar": false,
+  "confirmar": "",
   "email": "",
   "invitar": false,
-  "motivo": "Fase C: el build de producción de feat/cauce-rider-v1 contra el proyecto real ya migrado, antes de integrar y publicar. Incluye el circuito completo de un envío con la persona de reparto QA. Crea y borra datos CAUCE QA."
+  "motivo": "Fase D, antes de migrar: copia cifrada del proyecto real, restauración en un stack nuevo y la migración pendiente de métricas del piloto (20260925150000) aplicada sobre la copia restaurada. Sólo lectura sobre el proyecto."
 }
