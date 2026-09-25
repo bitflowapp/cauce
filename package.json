@@ -18,6 +18,7 @@
     "lint": "eslint .",
     "typecheck": "tsc -p jsconfig.json",
     "check": "node scripts/check.mjs",
+    "scan:secrets": "node scripts/secretos.mjs",
     "test": "node --test tests/*.test.mjs",
     "test:db": "node --test tests/db/*.test.mjs",
     "db:start": "supabase start -x imgproxy,studio,edge-runtime,logflare,vector,supavisor,postgres-meta",
@@ -33,7 +34,7 @@
     "e2e:demo": "node tests/e2e-demo.mjs",
     "audit:visual": "node tests/visual-audit.mjs",
     "audit:visual:backend": "node tests/visual-audit.mjs --backend",
-    "verify": "npm run lint && npm run typecheck && npm run check && npm test && npm run test:db && npm run build && npm run build:offline && npm run build:production",
+    "verify": "npm run lint && npm run typecheck && npm run check && npm run scan:secrets && npm test && npm run test:db && npm run build && npm run build:offline && npm run build:production",
     "verify:full": "npm run verify && npm run e2e && npm run e2e:demo && npm run audit:visual && npm run audit:visual:backend",
     "smoke:publicado": "node --test --test-concurrency=1 --test-timeout=900000 tests/produccion/*.test.mjs"
   },
