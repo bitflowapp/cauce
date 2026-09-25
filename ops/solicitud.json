@@ -1,8 +1,8 @@
 {
-  "paso": "registros",
+  "paso": "estado",
   "aplicar": false,
   "confirmar": "",
   "email": "",
   "invitar": false,
-  "motivo": "P14 después del smoke previo sobre el código final: sin 5xx, y el canal en vivo sin sesión (N-23) no debe volver a aparecer después de las 01:21 UTC. Sólo lectura."
+  "motivo": "Fase A: qué hay hoy en el proyecto real y qué secretos están cargados (sólo nombres). Sólo lectura."
 }
