@@ -1,8 +1,8 @@
 {
-  "paso": "limpiar-qa",
-  "aplicar": true,
-  "confirmar": "ygqbcvxdrewcnzedfcyo",
+  "paso": "registros",
+  "aplicar": false,
+  "confirmar": "",
   "email": "",
   "invitar": false,
-  "motivo": "Fase D: residuo QA en cero después del smoke publicado con la administración del piloto (run 36112454465)."
+  "motivo": "Fase D: registros después de publicar la administración del piloto (main 7e328a6), del smoke publicado y de la limpieza QA. 5xx y errores de cada servicio. Sólo lectura."
 }
