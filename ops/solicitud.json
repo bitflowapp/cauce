@@ -1,8 +1,8 @@
 {
   "paso": "migrar",
-  "aplicar": false,
-  "confirmar": "",
+  "aplicar": true,
+  "confirmar": "ygqbcvxdrewcnzedfcyo",
   "email": "",
   "invitar": false,
-  "motivo": "Fase C: dry-run exacto de la migración del reparto (20260925120000) contra el proyecto real, después del backup con restauración (run 36106405329). Sólo muestra qué aplicaría."
+  "motivo": "Fase C: aplicar la migración del reparto (20260925120000) en el proyecto real. Antes: backup con restauración y la migración ensayada sobre la copia (run 36106405329), dry-run exacto (run 36106832164) y CI verde de la rama. El paso ensaya otra vez sobre una copia de los datos antes de aplicar."
 }
