@@ -26,18 +26,33 @@ viejo `#panel/<id>/datos` sigue llevando a Configuración.
 
 | Sección | Titular | Encargado/a | Equipo (staff) | Qué hay |
 | --- | :-: | :-: | :-: | --- |
-| Inicio | ✓ | ✓ | ✓ | Pedidos nuevos, en curso, completados hoy, vendido hoy (lo entregado hoy, hora de Aluminé), retiro · envío, productos no disponibles. Los pedidos que esperan respuesta, con Aceptar/Rechazar. |
+| Inicio | ✓ | ✓ | ✓ | Vendido hoy en vivo (lo entregado hoy, hora de Aluminé, y lo que está en curso), pedidos nuevos, activos, completados hoy, ticket promedio, retiro · envío y productos sin disponibilidad. Con pedidos esperando, primero se atienden (Aceptar/Rechazar); después los números. Más vendidos hoy y últimas ventas. |
 | Pedidos | ✓ | ✓ | ✓ | Tablero por estado con filtros y contadores. |
-| Catálogo | ✓ | ✓ | disponibilidad y stock | Crear y editar productos (precio, descripción, categoría, foto, variantes, stock opcional), desactivar y reactivar; categorías (crear, renombrar, ordenar, activar). |
-| Horarios | ✓ | ✓ | — | Por día: cerrado o hasta 3 turnos (también después de medianoche); ABIERTO/CERRADO ahora. |
-| Configuración | ✓ | ✓ | — | Nombre, rubro, descripción, logo, portada, teléfonos, WhatsApp, dirección, retiro, envío, costo de envío, pedido mínimo, tiempos estimados, publicación. |
+| Catálogo | ✓ | ✓ | disponibilidad y stock | Precio y stock al toque en cada producto; crear y editar (descripción, categoría, foto, variantes, stock opcional), desactivar y reactivar; categorías (crear, renombrar, ordenar, activar). |
 | Reparto | ✓ | ✓ | ✓ (sin cargar personas) | Envíos por etapa, quién lleva qué, personas de reparto. |
+| Horarios | ✓ | ✓ | — | Por día: cerrado o hasta 3 turnos (también después de medianoche); ABIERTO/CERRADO ahora. |
+| Configuración | ✓ | ✓ | — | Arriba, envío, pedido mínimo y tiempos estimados, con su propio botón (en un comercio que ya opera). Después nombre, rubro, descripción, teléfonos, WhatsApp y dirección; logo, portada y publicación. |
 | Equipo | ✓ (edita) | ✓ (ve) | — | Integrantes y roles. Sólo el titular suma, cambia o quita. |
 
 Esto decide **qué se muestra**, nunca qué se permite. La autoridad es la base:
 si una pantalla ofreciera algo de más, la escritura igual se rechaza. Staff no
 tiene `UPDATE` sobre `products` (sólo `set_product_availability`) ni escritura
 sobre `business_riders`, `product_categories`, horarios ni equipo.
+
+## En el teléfono: el control remoto del comercio
+
+A 390 px el panel está pensado para operar con una mano:
+
+- las secciones van en dos filas: arriba lo de todos los días (Inicio, Pedidos, Catálogo, Reparto); abajo la administración (Horarios, Configuración, Equipo);
+- el cartel ABIERTO/CERRADO está siempre arriba, con "Cerrar atención" / "Abrir atención" y "Pausar el comercio" / "Reactivar el comercio";
+  - pausar saca el comercio de CAUCE y se confirma antes;
+  - al reactivarlo, la atención queda cerrada hasta abrirla;
+- las acciones de cada pedido ocupan todo el ancho, al pie de la tarjeta;
+- el precio y el stock se cambian en la fila del producto, sin abrir el formulario completo.
+
+Las acciones son las que la base ya permitía: `set_business_presence` (abrir, cerrar, pausar y reactivar; titular y encargado/a), `products` (precio y stock; titular y encargado/a), `set_product_availability` (también el equipo) y `transition_order`.
+
+Administrar el equipo (sumar, cambiar rol, quitar) sigue siendo sólo del titular, como lo decide la base (`add_business_member` y siguientes). El panel no lo habilita a nadie más.
 
 ## Pedidos
 
@@ -112,8 +127,9 @@ Rechazar y cancelar piden motivo (la base también lo exige).
 
 ## Límites conocidos
 
-- Los números del día (completados, vendido, retiro y envío) se calculan con
-  los pedidos que el panel tiene cargados: los abiertos y los cerrados en las
+- Los números del día (vendido, en curso, completados, ticket promedio,
+  retiro y envío, más vendidos y últimas ventas) se calculan con los pedidos
+  que el panel tiene cargados: los abiertos y los cerrados en las
   últimas 36 horas, hasta 150. Alcanza de sobra para el piloto; con más volumen
   convendría un resumen calculado en la base.
 - El navegador exige un toque en la página antes de permitir sonido: hasta
@@ -129,6 +145,11 @@ Rechazar y cancelar piden motivo (la base también lo exige).
 Cobros en línea, liquidaciones, comisiones, reembolsos, gráficos o reportes, y
 la aplicación propia de reparto. Para esta última, ver
 [CONTRATO-RIDER.md](CONTRATO-RIDER.md).
+
+La facturación electrónica tampoco está en v1: en el panel no hay botón,
+datos ni credenciales fiscales. El contrato para la rama que la implementa
+(emitir factura desde un pedido, todo del lado del servidor) está en
+[CONTRATO-FACTURACION-ARCA.md](CONTRATO-FACTURACION-ARCA.md).
 
 ## Cambios en piezas compartidas
 
