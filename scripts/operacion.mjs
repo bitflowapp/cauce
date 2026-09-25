@@ -83,14 +83,21 @@ export function authChecks(config, siteUrl = SITE_URL) {
   ];
 }
 
-async function publicSmoke(t, list) {
+// Con `authPending` (dentro de migrar), la compra sin cuenta todavía apagada
+// es lo esperado: se habilita en el paso auth, recién con la migración que
+// limita a las sesiones anónimas ya aplicada.
+async function publicSmoke(t, list, { authPending = false } = {}) {
   const headers = { apikey: t.publishableKey, 'Content-Type': 'application/json' };
   const status = await (await fetch(`${t.url}/rest/v1/rpc/app_status`, { method: 'POST', headers, body: '{}' })).json().catch(() => null);
   list.check('app_status responde con el esquema requerido', Number(status?.schema) >= REQUIRED_SCHEMA,
     status ? `esquema ${status.schema} · verticales ${JSON.stringify(status.features)}` : 'sin respuesta');
   const settings = await (await fetch(`${t.url}/auth/v1/settings`, { headers })).json();
   list.check('Auth público: confirmación obligatoria', settings.mailer_autoconfirm === false);
-  list.check('Auth público: compra sin cuenta habilitada', settings.external?.anonymous_users === true);
+  if (authPending && settings.external?.anonymous_users !== true) {
+    list.info('Auth público: compra sin cuenta', 'todavía deshabilitada: la habilita el paso auth, después de migrar');
+  } else {
+    list.check('Auth público: compra sin cuenta habilitada', settings.external?.anonymous_users === true);
+  }
   const closed = [];
   for (const table of ['orders', 'order_items', 'order_events', 'profiles', 'business_contacts', 'business_memberships',
     'business_riders', 'drivers', 'trips']) {
@@ -158,7 +165,7 @@ async function migrar(t, list) {
   }
   if (!before.pending.length) {
     list.pass('migraciones al día', `${before.remote.length} aplicadas`);
-    await publicSmoke(t, list);
+    await publicSmoke(t, list, { authPending: true });
     return;
   }
   const pendingVersions = before.pending.map(file => file.split('_')[0]);
@@ -188,7 +195,7 @@ async function migrar(t, list) {
   list.check('local y remoto sincronizados', after.pending.length === 0 && after.unknown.length === 0,
     `${after.remote.length} aplicadas`);
   supabaseCli(['migration', 'list', ...t.cliTarget], { allowFail: true });
-  await publicSmoke(t, list);
+  await publicSmoke(t, list, { authPending: true });
 }
 
 async function auth(t, list) {
