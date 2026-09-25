@@ -1,8 +1,8 @@
 {
-  "paso": "auth",
-  "aplicar": true,
-  "confirmar": "ygqbcvxdrewcnzedfcyo",
+  "paso": "estado",
+  "aplicar": false,
+  "confirmar": "",
   "email": "",
   "invitar": false,
-  "motivo": "B2 sin SMTP (todavía no cargado): site_url y URLs de retorno del sitio real (sin localhost), compra sin cuenta (la migración 20260924120000 ya limita las sesiones anónimas: run 36078756560), confirmación obligatoria, contraseña de 10+ con letras y números, rotación de tokens y enlaces de 1 h. SMTP y plantillas quedan pendientes: se esperan en rojo."
+  "motivo": "Estado real después de B5 (backup 14/14), B1 (migración aplicada, 20/20) y B2 sin SMTP (11/13): proyecto, plan, migraciones, Auth, backups y smoke público. Sólo lectura."
 }
