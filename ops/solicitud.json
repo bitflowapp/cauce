@@ -1,8 +1,8 @@
 {
-  "paso": "limpiar-qa",
-  "aplicar": true,
-  "confirmar": "ygqbcvxdrewcnzedfcyo",
+  "paso": "registros",
+  "aplicar": false,
+  "confirmar": "",
   "email": "",
   "invitar": false,
-  "motivo": "Fase C: residuo QA en cero después del smoke publicado con el reparto integrado (run 36109397909)."
+  "motivo": "Fase C: registros después de publicar el reparto (main 49da21c), del smoke publicado y de la limpieza QA. 5xx y errores de cada servicio. Sólo lectura."
 }
