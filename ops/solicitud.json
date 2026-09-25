@@ -1,8 +1,8 @@
 {
-  "paso": "registros",
-  "aplicar": false,
-  "confirmar": "",
+  "paso": "smoke-previo",
+  "aplicar": true,
+  "confirmar": "ygqbcvxdrewcnzedfcyo",
   "email": "",
   "invitar": false,
-  "motivo": "P14: registros de las últimas 24 h con la última vez que se vio cada 4xx y error, y el cliente que llamó, para separar lo anterior a la migración, las pruebas de seguridad de los smokes y el tráfico ajeno. Sólo lectura."
+  "motivo": "P5 sobre el código final (bc42018: sin canal en vivo sin sesión y vista estable con acciones pendientes): el build de producción contra el proyecto real, con comercios y cuentas CAUCE QA que se borran al terminar."
 }
