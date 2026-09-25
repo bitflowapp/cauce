@@ -1,8 +1,8 @@
 {
-  "paso": "migrar",
+  "paso": "auth",
   "aplicar": true,
   "confirmar": "ygqbcvxdrewcnzedfcyo",
   "email": "",
   "invitar": false,
-  "motivo": "B1, aplicar 20260924120000. Dry-run previo (run 36078604627): historial 8/8 igual al repo y el dry-run lista únicamente 20260924120000. El paso vuelve a verificar ambas cosas, ensaya la migración sobre una copia de los datos reales y recién ahí aplica; después comprueba la sincronización y corre el smoke público. Backup verificado: run 36078082544."
+  "motivo": "B2 sin SMTP (todavía no cargado): site_url y URLs de retorno del sitio real (sin localhost), compra sin cuenta (la migración 20260924120000 ya limita las sesiones anónimas: run 36078756560), confirmación obligatoria, contraseña de 10+ con letras y números, rotación de tokens y enlaces de 1 h. SMTP y plantillas quedan pendientes: se esperan en rojo."
 }
