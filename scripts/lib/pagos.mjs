@@ -100,9 +100,9 @@ async function probe(url, init) {
   try {
     const response = await fetch(url, { redirect: 'manual', ...init });
     const text = await response.text();
-    return { status: response.status, body: text.slice(0, 120) };
+    return { status: response.status, body: text.slice(0, 120), allowOrigin: response.headers.get('access-control-allow-origin') };
   } catch (error) {
-    return { status: 0, body: String(error.message).slice(0, 120) };
+    return { status: 0, body: String(error.message).slice(0, 120), allowOrigin: null };
   }
 }
 
@@ -146,6 +146,14 @@ export async function pagosFunciones(t, list, { apply }) {
   list.check('checkout sin sesión: 401', checkout.status === 401, `${checkout.status}`);
   const oauth = await probe(`${base}/payments-oauth`, { method: 'POST', body: '{}', headers: { 'Content-Type': 'application/json' } });
   list.check('OAuth sin sesión: cerrado (503 o 401)', [401, 503].includes(oauth.status), `${oauth.status} ${oauth.body}`);
+  // El sitio las llama desde el navegador (functions.invoke): el preflight
+  // tiene que pasar el gateway real, también con verify_jwt en checkout.
+  for (const name of ['payments-checkout', 'payments-oauth']) {
+    const preflight = await probe(`${base}/${name}`, { method: 'OPTIONS', headers: { Origin: new URL(t.siteUrl).origin,
+      'Access-Control-Request-Method': 'POST', 'Access-Control-Request-Headers': 'authorization, x-client-info, apikey, content-type' } });
+    list.check(`${name}: el navegador puede llamarla (preflight CORS)`, [200, 204].includes(preflight.status)
+      && preflight.allowOrigin === '*', `${preflight.status} · allow-origin ${preflight.allowOrigin ?? 'ninguno'}`);
+  }
   const after = await appStatus(t);
   list.check('pagos globales siguen apagados', after.features?.payments_online === false, String(after.features?.payments_online));
 }

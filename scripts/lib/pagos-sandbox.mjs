@@ -473,8 +473,10 @@ export async function pagosSandbox(t, list, { apply, mode = 'mixto' }) {
             await card.getByRole('button', { name: 'Aceptar', exact: true }).click();
             await ready(page);
             await go(page, `#panel/${shops.A.id}/pagos`);
-            const text = await page.locator('.pay-panel').innerText();
-            record('panel A: muestra el cobro aprobado del día', /aprobad/i.test(text), 'sección Pagos');
+            // El número sale de la base (business_payment_overview): nunca uno de ejemplo.
+            const tile = page.locator('.pay-panel .metric', { hasText: 'Pagos aprobados' }).locator('.metric-value');
+            const approvedToday = Number((await tile.innerText()).replace(/\D/g, ''));
+            record('panel A: el cobro aprobado figura entre los pagos del día', approvedToday >= 1, `${approvedToday} aprobado(s)`);
             await safeShot(page, shot('panel-A-cobro-aprobado'));
           } finally { await context.close(); }
         } else {
