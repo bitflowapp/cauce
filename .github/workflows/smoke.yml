@@ -4,7 +4,8 @@ name: Smoke de producción
 # publicados: esquema compatible, datos privados cerrados, confirmación de
 # correo obligatoria, compra sin cuenta habilitada y sitio con el build
 # conectado. Usa la publishable key pública; no necesita ningún secreto.
-# Sólo corre cuando el deploy apunta a producción.
+# Programado, sólo corre cuando Pages publica producción: el mismo destino que
+# decide pages.yml (la variable del repositorio o .github/deploy-target).
 on:
   schedule:
     - cron: '0 11 * * *' # 08:00 en Aluminé
@@ -16,20 +17,33 @@ permissions:
 jobs:
   smoke:
     name: Smoke de sólo lectura
-    if: ${{ vars.CAUCE_DEPLOY_TARGET == 'production' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
       CAUCE_SITE_URL: ${{ vars.CAUCE_SITE_URL || 'https://bitflowapp.github.io/cauce' }}
     steps:
       - uses: actions/checkout@v4
+      - name: Destino publicado
+        env:
+          VAR_TARGET: ${{ vars.CAUCE_DEPLOY_TARGET }}
+        run: |
+          target="${VAR_TARGET:-$(tr -d '[:space:]' < .github/deploy-target 2>/dev/null)}"
+          case "$target" in demo|production) ;; *) target=demo ;; esac
+          skip=0
+          if [ "$target" != "production" ] && [ "$GITHUB_EVENT_NAME" != "workflow_dispatch" ]; then
+            echo "::notice::Pages publica la demostración: el smoke de producción no corre."; skip=1
+          fi
+          echo "SKIP=$skip" >> "$GITHUB_ENV"
+          echo "Destino: $target"
       - uses: actions/setup-node@v4
+        if: env.SKIP != '1'
         with:
           node-version: 22
       - name: Proyecto y sitio publicados
+        if: env.SKIP != '1'
         run: node tests/production-smoke.mjs
       - name: Guardar el resultado
-        if: always()
+        if: always() && env.SKIP != '1'
         uses: actions/upload-artifact@v4
         with:
           name: smoke-produccion-${{ github.run_id }}

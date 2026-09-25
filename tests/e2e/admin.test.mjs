@@ -5,7 +5,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  account, guest, makeAdmin, publishedBusiness, closeAll, order, ok, sql, env,
+  account, guest, makeAdmin, publishedBusiness, closeAll, order, ok, sql, env, run,
   startPreview, stopPreview, browsersToRun, launch, person, go, ready, signIn, shot, layoutIssues, expectToast,
 } from './harness.mjs';
 
@@ -34,6 +34,9 @@ before(async () => {
 after(async () => { await stopPreview(); await closeAll(Object.values(people)); });
 
 const codeOf = async id => (await sql`select code from public.orders where id = ${id}`)[0].code;
+// Cada corrida crea sus comercios con su propio sufijo (`run`): buscarlos por el
+// nombre completo evita confundirlos con los de corridas anteriores en el stack.
+const businessLine = (page, name) => page.locator('.admin-business-list li', { hasText: `${name} ${run}` });
 
 for (const engine of browsersToRun) {
   test(`${engine}: administración ve el día del piloto, lo que necesita atención y el estado de cada comercio`, async () => {
@@ -58,21 +61,21 @@ for (const engine of browsersToRun) {
       assert.equal(await item.getByRole('link', { name: 'Llamar al comercio' }).getAttribute('href'), 'tel:2942555000');
       assert.doesNotMatch(await incidents.textContent(), /Vecina de Prueba|2942 401122|Pehuenes/);
       // Cada comercio publicado con su día.
-      const line = p.locator('.admin-business-list li', { hasText: 'Admin Vista' });
+      const line = businessLine(p, 'Admin Vista');
       assert.match(await line.locator('.admin-business-today').textContent(), /Abierto · \d+ pedidos?\s+hoy · \d+ completados? · \$/);
       assert.deepEqual(await layoutIssues(p), [], 'a 390 px entra sin desbordes');
       await shot(p, `${engine}-admin-hoy-390`);
 
       // Suspender (con motivo) saca al comercio de CAUCE; rehabilitarlo lo devuelve.
       const dialog = p.locator('dialog.cauce-dialog');
-      await p.locator('.admin-business-list li', { hasText: 'Admin Otro' }).getByRole('button', { name: 'Suspender' }).click();
+      await businessLine(p, 'Admin Otro').getByRole('button', { name: 'Suspender' }).click();
       await dialog.waitFor();
       await dialog.locator('textarea').fill('Prueba de administración');
       await dialog.getByRole('button', { name: 'Suspender', exact: true }).click();
       await expectToast(p, 'Comercio suspendido.');
       await ready(p);
       assert.equal((await sql`select status from public.businesses where id = ${B.id}`)[0].status, 'suspended');
-      await p.locator('.admin-business-list li', { hasText: 'Admin Otro' }).getByRole('button', { name: 'Rehabilitar' }).click();
+      await businessLine(p, 'Admin Otro').getByRole('button', { name: 'Rehabilitar' }).click();
       await dialog.waitFor();
       await dialog.getByRole('button', { name: 'Rehabilitar', exact: true }).click();
       await expectToast(p, 'Comercio rehabilitado.');
