@@ -90,19 +90,16 @@ for (const engine of browsersToRun) {
           [visitor, '#inicio'], [visitor, '#comercios'], [visitor, `#comercio/${R.id}`], [visitor, '#cuenta'],
           [visitor, '#institucional'], [visitor, `#seguimiento/${token}`],
           [buyer, `#pedido/${orderId}`], [buyer, '#actividad'],
-          [merchant, `#panel/${R.id}`, 'pedidos'], [merchant, `#panel/${R.id}`, 'catalogo'], [merchant, `#panel/${R.id}`, 'datos'],
-          [merchant, `#panel/${R.id}`, 'horarios'], [merchant, `#panel/${R.id}`, 'equipo'],
+          [merchant, `#panel/${R.id}`], [merchant, `#panel/${R.id}/pedidos`], [merchant, `#panel/${R.id}/catalogo`],
+          [merchant, `#panel/${R.id}/configuracion`], [merchant, `#panel/${R.id}/horarios`], [merchant, `#panel/${R.id}/reparto`],
+          [merchant, `#panel/${R.id}/equipo`],
         ];
-        for (const [who, hash, tab] of screens) {
-          if (who.page.url().includes(hash)) await who.page.reload(); else await open(who.page, hash);
+        for (const [who, hash] of screens) {
+          if (who.page.url().endsWith(hash)) await who.page.reload(); else await open(who.page, hash);
           await ready(who.page);
-          if (tab) {
-            await who.page.getByRole('tab', { name: new RegExp(tab === 'catalogo' ? 'Catálogo' : tab, 'i') }).first().click();
-            await ready(who.page);
-          }
           const issues = await layoutIssues(who.page);
           const contrast = width === 390 ? await contrastIssues(who.page) : [];
-          const name = `${hash}${tab ? `:${tab}` : ''}`;
+          const name = hash;
           report.screens.push({ engine, width, screen: name, issues });
           if (contrast.length) report.contrast.push({ engine, screen: name, contrast });
           for (const issue of [...issues, ...contrast.map(item => `contraste ${item}`)]) failures.push(`${engine} ${width}px ${name}: ${issue}`);

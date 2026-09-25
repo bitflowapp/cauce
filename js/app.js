@@ -18,6 +18,11 @@ import { announceNewOrders, clearOrderAlert, unlockSound, soundReady, setBaseTit
 import {
   contactButtons, timesLine, hoursSummary, hoursEditor, readHoursForm, teamTab, ROLE_NAMES,
 } from './ui/merchant-tools.js';
+import {
+  panelSections, resolveSection, canManageBusiness, groupOrders, freshOrderIds, panelSummary, openState,
+  isUnavailableProduct, ORDER_FILTERS,
+} from './core/business-panel.js';
+import { panelNav, openBar, syncBar, newOrdersBanner, ordersBoard, dashboard } from './ui/business-panel.js';
 import { renderIcon, renderSticker } from './ui/icons.js';
 import { renderCharacter } from './ui/brand-characters.js';
 import {
@@ -63,7 +68,10 @@ const app = {
   online: typeof navigator === 'undefined' ? true : navigator.onLine !== false,
   search: { query: '', category: 'Todos', onlyOpen: false },
   activityTab: 'pedidos',
-  panelTab: 'pedidos',
+  // Panel del comercio: filtro de pedidos por estado (la sección va en la URL)
+  // y los desplegables abiertos, que un redibujo no tiene que cerrar.
+  orderFilter: 'activos',
+  openDetails: new Set(),
   formDrafts: new Map(),
   toastTimer: null,
   // Entorno conectado: verticales habilitadas y contrato con la base.
@@ -1443,22 +1451,10 @@ async function viewBusinessSignup() {
     </form>`;
 }
 
-const PANEL_TABS = Object.freeze([
-  ['pedidos', 'Pedidos', 'all'], ['catalogo', 'Catálogo', 'all'], ['datos', 'Datos', 'manage'],
-  ['horarios', 'Horarios', 'connected-manage'], ['reparto', 'Reparto', 'manage'], ['equipo', 'Equipo', 'connected-manage'],
-]);
-
-function agoText(value) {
-  const minutes = Math.max(0, Math.round((Date.now() - new Date(value).getTime()) / 60000));
-  if (!Number.isFinite(minutes)) return '';
-  if (minutes < 1) return 'recién';
-  if (minutes < 60) return `hace ${minutes} min`;
-  const hours = Math.floor(minutes / 60);
-  return hours < 24 ? `hace ${hours} h` : shortDate(value);
-}
-
 async function viewMerchantPanel(businessId) {
   if (!isSignedIn()) {
+    // Sesión vencida o cerrada: después de ingresar vuelve a esta misma sección.
+    if (businessId) app.returnTo = location.hash;
     return `${backLink('#inicio', 'Inicio')}
       <section class="page-header"><h1 class="page-title">Panel de comercio</h1></section>
       <div class="notice"><strong>Necesitás iniciar sesión.</strong> El panel muestra únicamente los datos de los comercios de tu cuenta.</div>
@@ -1504,40 +1500,64 @@ async function viewMerchantPanel(businessId) {
       <a class="button secondary" href="#panel">Volver a mis comercios</a></section>`;
   }
   const role = business.membershipRole || 'owner';
-  const canManage = role !== 'staff';
-  const tabs = PANEL_TABS.filter(([, , scope]) => scope === 'all' || (scope === 'manage' && canManage)
-    || (scope === 'connected-manage' && canManage && isConnected()));
-  const tab = tabs.some(([key]) => key === app.panelTab) ? app.panelTab : 'pedidos';
+  const canManage = canManageBusiness(role);
+  const connected = isConnected();
+  const sections = panelSections(role, { connected });
+  const section = resolveSection(route().extra, sections);
 
-  const [orders, products, riders, categories, team, serverRequirements] = await Promise.all([
+  const [orders, products, riders, categories, team, serverRequirements, productCategories] = await Promise.all([
     app.repository.query('businessOrders', { businessId }),
     app.repository.query('products', { businessId }),
-    canManage || tab === 'pedidos' ? app.repository.query('riders', { businessId }) : [],
-    canManage && tab === 'datos' && app.repository.capabilities.media ? app.repository.query('businessCategories') : [],
-    tab === 'equipo' ? app.repository.query('team', { businessId }) : [],
+    ['inicio', 'pedidos', 'reparto'].includes(section) ? app.repository.query('riders', { businessId }) : [],
+    canManage && section === 'configuracion' && app.repository.capabilities.media ? app.repository.query('businessCategories') : [],
+    section === 'equipo' ? app.repository.query('team', { businessId }) : [],
     // En el entorno conectado los requisitos de publicación los decide el servidor.
-    isConnected() && canManage && tab === 'datos' ? app.repository.query('businessRequirements', { businessId }) : null,
+    connected && canManage && section === 'configuracion' ? app.repository.query('businessRequirements', { businessId }) : null,
+    connected && section === 'catalogo' ? app.repository.query('productCategories', { businessId }) : [],
   ]);
   const requirements = serverRequirements || missingPublicationRequirements(business, products);
 
   // Pedidos nuevos desde la última vez que el panel los vio: aviso sonoro y
   // visual. La primera carga sólo registra lo que ya estaba.
-  const pendingIds = orders.filter(order => order.status === 'submitted').map(order => order.id);
   const seen = app.seenOrders.get(businessId);
-  const fresh = seen ? pendingIds.filter(id => !seen.has(id)) : [];
-  app.seenOrders.set(businessId, new Set([...(seen || []), ...pendingIds]));
+  const { pending, fresh } = freshOrderIds(orders, seen);
+  app.seenOrders.set(businessId, new Set([...(seen || []), ...pending]));
   if (fresh.length) announceNewOrders(fresh.length);
-  else if (!pendingIds.length) clearOrderAlert();
+  else if (!pending.length) clearOrderAlert();
+  hideFloatingOrderAlert();
   app.panelSyncedAt = new Date();
-  const newCount = pendingIds.length;
+
+  const context = { businessId: business.id, localityId: business.localityId, connected, riders, fresh,
+    canManage, online: app.online };
+  const state = openState(business);
+  const operational = ['inicio', 'pedidos'].includes(section);
+  if (!ORDER_FILTERS.includes(app.orderFilter)) app.orderFilter = 'activos';
+
+  let content = '';
+  if (section === 'inicio') {
+    content = dashboard(business, panelSummary(orders, products), {
+      newOrders: groupOrders(orders).nuevos, unavailable: products.filter(isUnavailableProduct), context, canManage });
+  } else if (section === 'pedidos') {
+    content = ordersBoard(orders, context, { filter: app.orderFilter, businessActive: business.status === 'active' });
+  } else if (section === 'catalogo') {
+    content = merchantCatalogTab(business, products, { canManage, categories: productCategories });
+  } else if (section === 'configuracion') {
+    content = merchantDataTab(business, requirements, categories);
+  } else if (section === 'horarios') {
+    content = hoursEditor(business, { editable: business.status !== 'suspended', state });
+  } else if (section === 'reparto') {
+    content = merchantRidersTab(business, riders);
+  } else if (section === 'equipo') {
+    content = teamTab(business, team, { isOwner: role === 'owner' });
+  }
 
   return `
     ${offlineBanner()}
     ${backLink('#panel', 'Mis comercios')}
-    <section class="page-header">
+    <section class="page-header panel-header">
       <span class="eyebrow">${esc(businessStatusLabel(business.status).toUpperCase())} · ${esc((ROLE_NAMES[role] || '').toUpperCase())}</span>
       <h1 class="page-title">${esc(business.name)}</h1>
-      <p class="quiet">${esc(BUSINESS_STATUS_HINTS[business.status] || '')}</p>
+      ${business.status === 'active' ? '' : `<p class="quiet">${esc(BUSINESS_STATUS_HINTS[business.status] || '')}</p>`}
     </section>
 
     ${['returned', 'suspended'].includes(business.status) && business.reviewNote ? `
@@ -1545,137 +1565,41 @@ async function viewMerchantPanel(businessId) {
         <strong>${business.status === 'suspended' ? 'Administración suspendió el comercio.' : 'Administración devolvió la solicitud.'}</strong> ${esc(business.reviewNote)}
       </div>` : ''}
 
-    ${business.status === 'active' ? `
-      <div class="panel-openbar ${business.acceptingOrders ? 'is-open' : ''}">
-        <span><strong>${business.acceptingOrders ? (business.open ? 'Recibiendo pedidos' : 'Abierto, fuera de horario') : 'Cerrado: no recibe pedidos'}</strong>
-          ${business.acceptingOrders && !business.open && isConnected() ? `<small>${esc(nextOpening(business.hours, new Date(), business.timezone)?.label || 'Revisá los horarios cargados.')}</small>` : ''}</span>
-        ${canManage ? `<button class="button ${business.acceptingOrders ? 'danger' : ''}" type="button" data-action="toggle-open"
-          data-business="${esc(business.id)}" data-open="${business.acceptingOrders ? 'false' : 'true'}">
-          ${business.acceptingOrders ? 'Cerrar atención' : 'Abrir atención'}
-        </button>` : ''}
-      </div>` : ''}
-
-    ${isConnected() ? `<div class="panel-sync" role="status" aria-live="polite">
-      <span class="panel-sync-dot ${app.liveHealthy ? 'ok' : 'warn'}" aria-hidden="true"></span>
-      <span>${app.liveHealthy ? 'En vivo' : 'Reconectando: revisamos cada 30 segundos'} · actualizado ${esc(timeOnly(app.panelSyncedAt))}</span>
-      <button class="link-button" type="button" data-action="refresh-panel">${renderIcon('refresh', 14)} Actualizar</button>
-      ${soundReady() ? '' : '<button class="link-button" type="button" data-action="enable-sound">Activar sonido de pedidos</button>'}
-    </div>` : ''}
-
-    <div class="tabs" role="tablist" aria-label="Secciones del panel">
-      ${tabs.map(([key, label]) => `
-        <button class="tab ${tab === key ? 'active' : ''}" type="button" role="tab" aria-selected="${tab === key}"
-          data-action="set-panel-tab" data-tab="${key}">${label}${key === 'pedidos' && newCount ? ` <span class="tab-badge">${newCount}</span>` : ''}</button>`).join('')}
-    </div>
-
-    ${tab === 'pedidos' ? merchantOrdersTab(business, orders, riders, fresh) : ''}
-    ${tab === 'catalogo' ? merchantCatalogTab(business, products, { canManage }) : ''}
-    ${tab === 'datos' ? merchantDataTab(business, requirements, categories) : ''}
-    ${tab === 'horarios' ? hoursEditor(business, { editable: business.status !== 'suspended' }) : ''}
-    ${tab === 'reparto' ? merchantRidersTab(business, riders) : ''}
-    ${tab === 'equipo' ? teamTab(business, team, { isOwner: role === 'owner' }) : ''}`;
+    ${operational ? '' : newOrdersBanner(business.id, pending.length)}
+    ${panelNav(business.id, sections, section, { newCount: pending.length })}
+    ${operational || section === 'horarios' ? openBar(business, state, { canManage, online: app.online }) : ''}
+    ${operational && connected ? syncBar({ liveHealthy: app.liveHealthy, syncedAt: app.panelSyncedAt, soundOn: soundReady() }) : ''}
+    ${content}`;
 }
 
-function merchantOrdersTab(business, orders, riders, fresh = []) {
-  const incoming = orders.filter(order => order.status === 'submitted');
-  const running = orders.filter(order => !['submitted', 'delivered', 'canceled'].includes(order.status));
-  const closed = orders.filter(order => ['delivered', 'canceled'].includes(order.status));
-  const merchantActor = { kind: 'merchant', businessId: business.id, localityId: business.localityId };
+// Mientras se edita un formulario del panel la vista no se redibuja (se
+// perdería lo escrito), pero un pedido nuevo igual tiene que sonar y verse:
+// se consulta aparte y se avisa con un cartel fijo, fuera del formulario.
+async function peekNewOrders(businessId) {
+  try {
+    const orders = await app.repository.query('businessOrders', { businessId });
+    const seen = app.seenOrders.get(businessId);
+    const { pending, fresh } = freshOrderIds(orders, seen);
+    app.seenOrders.set(businessId, new Set([...(seen || []), ...pending]));
+    if (!fresh.length) return;
+    announceNewOrders(fresh.length);
+    let alert = /** @type {HTMLAnchorElement|null} */ (document.querySelector('#panel-order-alert'));
+    if (!alert) {
+      alert = document.createElement('a');
+      alert.id = 'panel-order-alert';
+      alert.className = 'new-orders-banner is-floating';
+      alert.setAttribute('role', 'status');
+      document.body.append(alert);
+    }
+    alert.href = `#panel/${businessId}/pedidos`;
+    alert.innerHTML = `${renderIcon('bell', 16)} <span><strong>${pending.length === 1 ? '1 pedido nuevo' : `${pending.length} pedidos nuevos`}</strong> ${pending.length === 1 ? 'espera' : 'esperan'} respuesta</span> <span class="new-orders-banner-cta">Ver pedidos</span>`;
+    alert.hidden = false;
+  } catch { /* sin red: el próximo sondeo vuelve a intentar */ }
+}
 
-  const actionLabel = (order, action) => {
-    if (action === 'canceled') return order.status === 'submitted' ? 'Rechazar' : 'Cancelar';
-    if (action === 'accepted') return 'Aceptar';
-    if (action === 'preparing') return 'Informar preparación';
-    if (action === 'ready') return order.fulfillment === 'pickup' ? 'Listo para retirar' : 'Listo para enviar';
-    if (action === 'assigned') return 'Asignar reparto';
-    if (action === 'picked_up') return 'Retirado por el reparto';
-    if (action === 'on_the_way') return 'Marcar salida';
-    if (action === 'arrived') return 'Llegó a destino';
-    if (action === 'delivered') return order.fulfillment === 'pickup' ? 'Marcar retirado' : 'Marcar entregado';
-    return action;
-  };
-
-  const orderRow = order => {
-    const merchantOptions = allowedActions(order, merchantActor).filter(Boolean);
-    const riderActor = order.riderId
-      ? { kind: 'rider', id: order.riderId, businessId: business.id, localityId: business.localityId }
-      : null;
-    const riderOptions = riderActor ? allowedActions(order, riderActor).filter(Boolean) : [];
-    // Un envío que falla después de salir también se puede cerrar, con motivo.
-    const lateCancel = isConnected() && order.fulfillment === 'delivery'
-      && ['picked_up', 'on_the_way', 'arrived'].includes(order.status) ? ['canceled'] : [];
-    // Quien reparte suele entregar sin avisar antes que llegó: la base permite
-    // pasar de "en camino" a "entregado" y el panel lo ofrece.
-    const directDelivery = isConnected() && order.fulfillment === 'delivery' && order.status === 'on_the_way' ? ['delivered'] : [];
-    const options = [...new Set([...merchantOptions, ...riderOptions, ...directDelivery, ...lateCancel])];
-    const forward = options.filter(action => action !== 'canceled');
-    const riderName = riders.find(rider => rider.id === order.riderId)?.name;
-    const phone = String(order.customer.phone || '').replace(/[^\d+]/g, '');
-
-    return `
-      <article class="order-panel-card ${order.status === 'submitted' ? 'is-new' : ''} ${fresh.includes(order.id) ? 'is-fresh' : ''}"
-        aria-label="Pedido ${esc(order.code)}">
-        <header class="order-panel-head">
-          <div>
-            <strong>${esc(order.code)}</strong>
-            <span class="quiet"> · ${esc(fulfillmentLabel(order.fulfillment))} · ${esc(timeOnly(order.createdAt))} (${esc(agoText(order.createdAt))})</span>
-          </div>
-          <span class="status-chip ${orderStatusTone(order.status)}">${esc(orderStatusLabel(order))}</span>
-        </header>
-        <ul class="order-panel-lines">
-          ${order.lines.map(line => `<li><strong>${line.quantity} ×</strong> ${esc(line.name)}</li>`).join('')}
-        </ul>
-        <p class="order-panel-customer">
-          <span>${renderIcon('user', 14)} ${esc(order.customer.name)}</span>
-          ${phone ? `<a href="tel:${esc(phone)}">${renderIcon('phone', 14)} ${esc(formatArgentinePhone(order.customer.phone))}</a>` : ''}
-        </p>
-        ${order.customer.address ? `<p class="microcopy">${renderIcon('pin', 13)} ${esc(order.customer.address)}</p>` : ''}
-        ${order.customer.notes ? `<p class="order-panel-notes">Notas: ${esc(order.customer.notes)}</p>` : ''}
-        <p class="order-panel-total">${money(order.total)} · ${esc(paymentLabel(order.paymentMethod))}${order.deliveryFee ? ` · envío ${money(order.deliveryFee)}` : ''}</p>
-        ${order.deliveryCode && !['delivered', 'canceled'].includes(order.status) ? `<p class="microcopy">Código de entrega: <strong>${esc(formatDeliveryCode(order.deliveryCode.code))}</strong> · pedíselo a la persona al entregar.</p>` : ''}
-        ${riderName ? `<p class="microcopy">Reparto: ${esc(riderName)}</p>` : ''}
-        ${order.cancellation ? `<p class="microcopy">Motivo: ${esc(order.cancellation.reason || 'sin detalle')}</p>` : ''}
-        ${options.length ? `<div class="order-panel-actions">
-          ${forward.map(action => {
-            if (action === 'assigned') {
-              const active = riders.filter(rider => rider.active !== false);
-              if (!active.length) {
-                return `<button class="button secondary" type="button" data-action="set-panel-tab" data-tab="reparto">Cargar quién reparte</button>`;
-              }
-              return `<form class="inline-form" data-form="assign-rider" data-order="${esc(order.id)}" data-version="${order.version}">
-                <label class="visually-hidden" for="rider-${esc(order.id)}">Quién reparte ${esc(order.code)}</label>
-                <select id="rider-${esc(order.id)}" name="riderId" required>
-                  ${active.map(rider => `<option value="${esc(rider.id)}">${esc(rider.name)}</option>`).join('')}
-                </select>
-                <button class="button" type="submit">Asignar reparto</button>
-              </form>`;
-            }
-            return `<button class="button" type="button" data-action="order-transition"
-              data-order="${esc(order.id)}" data-version="${order.version}" data-next="${esc(action)}">${esc(actionLabel(order, action))}</button>`;
-          }).join('')}
-          ${options.includes('canceled') ? `<button class="button ${order.status === 'submitted' ? 'danger' : 'link-button danger'}" type="button"
-            data-action="order-transition" data-order="${esc(order.id)}" data-version="${order.version}" data-next="canceled"
-            data-reason="required" data-code="${esc(order.code)}">${esc(actionLabel(order, 'canceled'))}</button>` : ''}
-        </div>` : ''}
-      </article>`;
-  };
-
-  return `
-    <section class="panel-section">
-      <h2 class="checkout-section-title">Requieren atención (${incoming.length})</h2>
-      ${incoming.length ? `<div class="stack">${incoming.map(orderRow).join('')}</div>`
-        : `<p class="quiet">${business.status === 'active' ? 'Sin pedidos nuevos. Cuando entre uno, aparece acá y suena un aviso.' : 'El comercio todavía no está publicado.'}</p>`}
-    </section>
-    <section class="panel-section">
-      <h2 class="checkout-section-title">En curso (${running.length})</h2>
-      ${running.length ? `<div class="stack">${running.map(orderRow).join('')}</div>`
-        : '<p class="quiet">No hay pedidos en preparación ni en camino.</p>'}
-    </section>
-    ${closed.length ? `
-      <section class="panel-section">
-        <h2 class="checkout-section-title">Cerrados recientes (${closed.length})</h2>
-        <div class="stack">${closed.slice(0, 15).map(orderRow).join('')}</div>
-      </section>` : ''}`;
+function hideFloatingOrderAlert() {
+  const alert = /** @type {HTMLElement|null} */ (document.querySelector('#panel-order-alert'));
+  if (alert) alert.hidden = true;
 }
 
 function mediaField(id, label, current, hint) {
@@ -1688,6 +1612,7 @@ function mediaField(id, label, current, hint) {
     </div>`;
 }
 
+/** @param {any} business @param {any[]} products @param {{ canManage?: boolean, categories?: any[] }} [options] */
 function merchantCatalogTab(business, products, { canManage = true } = {}) {
   const media = Boolean(app.repository.capabilities.media);
   const connected = isConnected();
@@ -2566,8 +2491,14 @@ const ACTIONS = {
     app.activityTab = element.dataset.tab;
     return render();
   },
+  // Cada sección del panel tiene su dirección: recargar, volver atrás o
+  // compartir el enlace deja a la persona en el mismo lugar.
   'set-panel-tab'(element) {
-    app.panelTab = element.dataset.tab;
+    const businessId = element.dataset.business || route().param;
+    go(`#panel/${businessId}/${element.dataset.tab}`);
+  },
+  'order-filter'(element) {
+    app.orderFilter = element.dataset.filter || 'activos';
     return render();
   },
   async 'use-identity'(element) {
@@ -2836,9 +2767,8 @@ const FORMS = {
     const data = Object.fromEntries(new FormData(form));
     const business = await runCommand('business.create', { name: data.name, category: data.category });
     app.session = await app.repository.session();
-    app.panelTab = 'datos';
     toast('Comercio creado como borrador.');
-    go(`#panel/${business.id}`);
+    go(`#panel/${business.id}/configuracion`);
     await render({ focus: true });
   },
 
@@ -3133,7 +3063,13 @@ function syncLive(page, param) {
   const refresh = () => {
     clearTimeout(live.timer);
     live.timer = setTimeout(function run() {
-      if (route().page !== page || isEditing()) return;
+      if (route().page !== page) return;
+      if (isEditing()) {
+        // Con un formulario a medio escribir no se redibuja, pero un pedido
+        // nuevo igual se avisa.
+        if (page === 'panel' && param) peekNewOrders(param);
+        return;
+      }
       if (Date.now() - app.pointerAt < 600) { live.timer = setTimeout(run, 300); return; }
       render();
     }, 250);

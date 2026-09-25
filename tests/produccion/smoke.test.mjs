@@ -120,8 +120,8 @@ for (const engine of engines) {
       assert.ok(tracking.startsWith(SITE), 'el enlace de seguimiento es del sitio publicado');
 
       await signIn(owner.page, people.owner);
-      await go(owner.page, `#panel/${A.id}`);
-      for (const label of ['Aceptar', 'Informar preparación', 'Listo para retirar']) await panelAction(owner.page, order.code, label);
+      await go(owner.page, `#panel/${A.id}/pedidos`);
+      for (const label of ['Aceptar', 'Empezar a preparar', 'Listo para retirar']) await panelAction(owner.page, order.code, label);
       await v.locator('.timeline-step.current', { hasText: 'Listo para retirar' }).waitFor({ timeout: 30000 });
       await tracker.page.goto(tracking);
       await ready(tracker.page);
@@ -150,14 +150,14 @@ for (const engine of engines) {
         { total: 5900, fee: 900, customer: people.cliente.id });
 
       await signIn(manager.page, people.manager);
-      await go(manager.page, `#panel/${A.id}`);
+      await go(manager.page, `#panel/${A.id}/pedidos`);
       const m = manager.page;
-      for (const label of ['Aceptar', 'Informar preparación', 'Listo para enviar']) await panelAction(m, order.code, label);
+      for (const label of ['Aceptar', 'Empezar a preparar', 'Listo para enviar']) await panelAction(m, order.code, label);
       const card = m.locator(`article[aria-label="Pedido ${order.code}"]`);
       await card.locator('select[name="riderId"]').selectOption({ label: A.rider.name });
       await card.getByRole('button', { name: 'Asignar reparto' }).click();
       await ready(m);
-      for (const label of ['Retirado por el reparto', 'Marcar salida', 'Marcar entregado']) await panelAction(m, order.code, label);
+      for (const label of ['Retirado por el reparto', 'Salió a entregar', 'Marcar entregado']) await panelAction(m, order.code, label);
       await c.locator('.timeline-step.current', { hasText: 'Entregado' }).waitFor({ timeout: 30000 });
       await go(c, '#actividad');
       assert.ok(await c.getByText(order.code).first().isVisible(), 'el pedido figura en su actividad');
@@ -184,8 +184,10 @@ for (const engine of engines) {
           for (const issue of await layoutIssues(visitor.page)) issues.push(`${width}px ${hash}: ${issue}`);
         }
         await owner.page.setViewportSize(size);
-        await go(owner.page, `#panel/${A.id}`);
-        for (const issue of await layoutIssues(owner.page)) issues.push(`${width}px panel: ${issue}`);
+        for (const section of ['inicio', 'pedidos', 'catalogo']) {
+          await go(owner.page, `#panel/${A.id}/${section}`);
+          for (const issue of await layoutIssues(owner.page)) issues.push(`${width}px panel ${section}: ${issue}`);
+        }
         if (width === 320 || width === 1440) {
           await shot(visitor.page, `${engine}-publicado-comercio-${width}`);
           await shot(owner.page, `${engine}-publicado-panel-${width}`);
@@ -217,7 +219,7 @@ test('seguridad sobre el sitio y la API publicados', async () => {
     const staff = await person(browser, { width: 1280, height: 900, label: 'equipo' });
     await signIn(staff.page, people.staff);
     await go(staff.page, `#panel/${A.id}`);
-    assert.equal(await staff.page.locator('[data-action="set-panel-tab"][data-tab="datos"]').count(), 0);
+    assert.equal(await staff.page.locator('[data-action="set-panel-tab"][data-tab="configuracion"]').count(), 0);
     // Administración temporal de QA sí entra.
     const admin = await person(browser, { width: 1280, height: 900, label: 'administración' });
     await signIn(admin.page, people.admin);

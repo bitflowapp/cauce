@@ -51,6 +51,7 @@ export function hoursSummary(business) {
 
 // Editor de la semana: dos turnos por día, que es como atiende un comercio de
 // barrio (mañana y tarde). Un turno vacío no se guarda.
+/** @param {any} business @param {{ editable?: boolean, state?: any }} [options] */
 export function hoursEditor(business, { editable = true } = {}) {
   const hours = normalizeHours(business?.hours);
   const rows = [1, 2, 3, 4, 5, 6, 0].map(day => {

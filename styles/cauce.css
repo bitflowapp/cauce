@@ -6749,3 +6749,142 @@ main {
   .hours-range { display: grid; grid-template-columns: 1fr; gap: 4px; }
   .hours-range > span { display: none; }
 }
+
+/* ==========================================================================
+   Panel remoto del comercio
+   Mismo lenguaje que el resto de CAUCE: tarjetas blancas, bordes suaves y
+   color sólo donde hay algo que hacer (pedido nuevo, algo agotado).
+   ========================================================================== */
+.panel-openbar-state { display: grid; gap: 2px; }
+.panel-openbar .open-flag { font-size: 15px; letter-spacing: 0.06em; }
+.panel-openbar.is-open .open-flag { color: var(--forest); }
+.panel-openbar.is-closed { border-color: var(--clay-soft); background: var(--sand-soft); }
+.panel-openbar.is-closed .open-flag { color: var(--clay); }
+.panel-sound.is-on { display: inline-flex; align-items: center; gap: 4px; color: var(--forest); font-weight: 700; }
+
+.new-orders-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  background: var(--clay);
+  color: var(--white);
+  font-size: 14px;
+  text-decoration: none;
+}
+.new-orders-banner:hover, .new-orders-banner:focus-visible { background: var(--clay-hover); color: var(--white); }
+.new-orders-banner-cta { margin-left: auto; font-weight: 800; text-decoration: underline; white-space: nowrap; }
+.new-orders-banner.is-floating {
+  position: fixed;
+  z-index: 250;
+  left: 50%;
+  top: calc(10px + env(safe-area-inset-top, 0px));
+  transform: translateX(-50%);
+  width: min(520px, calc(100% - 32px));
+  box-shadow: var(--shadow-lg);
+}
+.new-orders-banner[hidden] { display: none; }
+
+.order-filters { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 14px; }
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 42px;
+  padding: 4px 11px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--white);
+  color: var(--ink-light);
+  font-size: 12px;
+  font-weight: 700;
+}
+.filter-chip.is-active { background: var(--forest); border-color: var(--forest); color: var(--white); }
+.filter-chip.is-alert:not(.is-active) { border-color: var(--clay); color: var(--clay); }
+.filter-chip-count { font-variant-numeric: tabular-nums; }
+
+.orders-board { display: grid; gap: 18px; }
+.orders-group-title { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; font-size: 15px; color: var(--forest-deep); }
+.orders-group-count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 7px;
+  border-radius: var(--radius-pill);
+  background: var(--soft);
+  color: var(--mountain-blue);
+  font-size: 12px;
+}
+.orders-group-list { display: grid; gap: 10px; }
+.orders-empty { margin: 0; }
+
+.order-card-id { display: grid; gap: 2px; }
+.order-card-id strong { font-size: 17px; }
+.order-card-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0 0 10px; font-size: 13px; color: var(--muted); }
+.mode-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: var(--radius-pill); font-size: 12px; font-weight: 800; }
+.mode-chip.is-delivery { background: var(--mountain-blue-soft); color: var(--mountain-blue); }
+.mode-chip.is-pickup { background: var(--forest-tint); color: var(--forest); }
+.order-panel-lines li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; align-items: baseline; }
+.order-line-qty { font-weight: 800; color: var(--forest-deep); }
+.order-line-name { overflow-wrap: anywhere; }
+.order-line-total { color: var(--muted); font-variant-numeric: tabular-nums; }
+.order-card-customer { display: flex; flex-wrap: wrap; gap: 0 14px; margin: 10px 0 4px; font-size: 14px; }
+.order-card-customer a, .order-card-person { display: inline-flex; align-items: center; gap: 4px; min-height: 40px; font-weight: 700; }
+.order-card-person { color: var(--ink); }
+.order-card-delivery {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0;
+  padding: 10px 12px;
+  border: 1px dashed var(--mountain-blue-border);
+  border-radius: var(--radius-sm);
+  background: var(--mountain-blue-soft);
+}
+.order-card-address { display: flex; align-items: flex-start; gap: 6px; margin: 0; font-weight: 700; overflow-wrap: anywhere; }
+.order-card-stage { margin: 0; font-size: 13px; color: var(--mountain-blue); }
+.order-card-delivery .microcopy { margin: 0; }
+.order-panel-total { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
+.order-panel-total span { font-size: 13px; font-weight: 700; color: var(--muted); }
+.order-panel-total small { font-size: 12px; font-weight: 600; color: var(--muted); }
+.order-card-reason { overflow-wrap: anywhere; }
+.order-panel-card.is-closed { background: var(--sand-soft); }
+/* La acción que sigue ocupa todo el ancho: se toca con el pulgar. */
+.order-panel-actions > .button:not(.order-cancel):first-child { flex: 1 1 100%; min-height: 50px; font-size: 16px; }
+
+.panel-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 8px 0 0; }
+.panel-metrics .metric { display: grid; align-content: start; gap: 2px; min-height: 84px; color: inherit; text-decoration: none; text-align: left; }
+.panel-metrics .metric-label { font-size: 12px; font-weight: 700; color: var(--muted); letter-spacing: 0; text-transform: none; }
+.panel-metrics .metric-value { margin: 0; font-size: 24px; font-weight: 800; color: var(--forest-deep); font-variant-numeric: tabular-nums; }
+.panel-metrics .metric-hint { font-size: 11px; color: var(--muted); }
+.panel-metrics a.metric:hover, .panel-metrics a.metric:focus-visible { border-color: var(--forest); }
+.panel-metrics .metric.is-alert { border-color: var(--clay); background: var(--clay-soft); }
+.panel-metrics .metric.is-alert .metric-value { color: var(--clay); }
+.panel-metrics .metric.is-warn { border-color: var(--amber); background: var(--amber-soft); }
+
+.unavailable-list li { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 44px; border-bottom: 1px solid var(--line); }
+
+/* Cancelar o rechazar abre un diálogo con motivo: se ve, pero no compite con
+   la acción que sigue. (`.link-button.danger` sobre `.button.danger` dejaba
+   el texto del mismo color que el fondo.) */
+.button.button-outline-danger { background: var(--white); color: var(--clay); border-color: var(--clay); }
+.button.button-outline-danger:hover, .button.button-outline-danger:focus-visible {
+  background: var(--clay-soft); color: var(--clay-hover); border-color: var(--clay-hover);
+}
+.order-panel-actions .order-cancel { flex: 1 1 auto; }
+
+/* Desde tableta, un tablero: una columna por estado, con sus tarjetas
+   apiladas. Un filtro de un solo estado reparte las tarjetas a lo ancho. */
+@media (min-width: 720px) {
+  .orders-board { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); align-items: start; }
+  .orders-board.is-single { grid-template-columns: 1fr; }
+  .orders-board.is-single .orders-group-list,
+  #panel-atender ~ .orders-group-list { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); align-items: start; }
+  .panel-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (min-width: 1100px) {
+  .panel-metrics { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+}
