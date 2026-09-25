@@ -110,6 +110,20 @@ Rechazar y cancelar piden motivo (la base también lo exige).
   impiden mover un producto o un pedido de comercio. Las pruebas de integración
   (`tests/integration/business-panel.test.mjs`) lo verifican contra la base.
 
+## Límites conocidos
+
+- Los números del día (completados, vendido, retiro y envío) se calculan con
+  los pedidos que el panel tiene cargados: los abiertos y los cerrados en las
+  últimas 36 horas, hasta 150. Alcanza de sobra para el piloto; con más volumen
+  convendría un resumen calculado en la base.
+- El navegador exige un toque en la página antes de permitir sonido: hasta
+  entonces el aviso es visual (y en el título de la pestaña).
+- "Cerrar atención" se aplica al instante, sin confirmación; el cartel queda
+  en rojo y se vuelve a abrir con un toque.
+- El texto libre "Horarios (texto que ve el cliente)" de Configuración convive
+  con los horarios de la pestaña Horarios, que son los que deciden si se toman
+  pedidos.
+
 ## Fuera de alcance en v1
 
 Cobros en línea, liquidaciones, comisiones, reembolsos, gráficos o reportes, y
