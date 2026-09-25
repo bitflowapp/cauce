@@ -59,7 +59,8 @@ export const QUERIES = {
   quote(state, context, payload) {
     const found = business(state, payload?.businessId);
     const cart = state.carts[cartKey(context.ownerId, found)] || { ...scopeOf(found), version: 1, lines: [] };
-    return quoteCart(cart, found, state.products, payload?.fulfillment || 'pickup');
+    // `preview`: el total de un comercio cerrado, sólo para mostrarlo.
+    return quoteCart(cart, payload?.preview ? { ...found, open: true } : found, state.products, payload?.fulfillment || 'pickup');
   },
 
   // ── pedidos ──

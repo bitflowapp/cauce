@@ -91,6 +91,7 @@ async function main() {
   const signUp = async (page, { name, email, phone }) => {
     await visit(page, '#cuenta');
     await page.waitForFunction(`!!document.querySelector('[data-form="register"]')`);
+    await page.click('#tab-crear');
     await page.fill('#reg-name', name);
     await page.fill('#reg-email', email);
     await page.fill('#reg-phone', phone);
@@ -270,7 +271,7 @@ async function main() {
     if (!cartVisible) throw new Error('El carrito no apareció en la barra inferior');
     step('El carrito aparece en la barra inferior al tener contenido');
 
-    await customer.evaluate(`(() => { location.hash = '#carrito/almacen-el-pehuen'; return true; })()`);
+    await customer.evaluate(`(() => { location.hash = '#carrito/almacen-el-pehuen/confirmar'; return true; })()`);
     await customer.waitForFunction('document.querySelector("#main")?.getAttribute("aria-busy") === "false"');
     await customer.waitForFunction(`!!document.querySelector('[data-form="checkout"]')`);
     await customer.evaluate(`(() => { document.querySelector('[name="fulfillment"][value="delivery"]').click(); return true; })()`);
@@ -280,7 +281,7 @@ async function main() {
     await customer.fill('#checkout-address', 'Cristian Joubert 410');
     await customer.evaluate(`(() => { document.querySelector('[name="zoneAcknowledged"]').click(); return true; })()`);
     const total = await customer.text('.totals-final');
-    const detalle = await customer.text('.cart-lines-list');
+    const detalle = await customer.text('.review-lines');
     if (!/Grande/.test(detalle)) throw new Error('La confirmación no identifica la variante elegida');
     step('La confirmación muestra el total antes de confirmar', total.replace(/\n/g, ' '));
     await shot(customer, '07-confirmacion');
@@ -331,9 +332,10 @@ async function main() {
       await clickByLabel(merchant, '.order-panel-actions button', label);
     }
     await visit(customer, orderHash);
-    await customer.waitForFunction(`/avance estimado/i.test(document.querySelector('#main').innerText)`);
+    // El estado lo informa el reparto: la pantalla lo dice y no finge una ubicación en vivo.
+    await customer.waitForFunction(`/no es una ubicación en vivo/i.test(document.querySelector('#main').innerText)`);
     await customer.waitForFunction(`document.querySelector('#main').innerText.includes('Reparto propio')`);
-    await showcase(customer, 'showcase-05-pedido-en-camino-390', '.route-card');
+    await showcase(customer, 'showcase-05-pedido-en-camino-390', '.order-hero');
     for (const label of ['Llegó a destino', 'Marcar entregado']) {
       await clickByLabel(merchant, '.order-panel-actions button', label);
     }
@@ -345,8 +347,8 @@ async function main() {
     step('La clienta ve el pedido entregado en su propia sesión');
     await showcase(customer, 'showcase-11-mi-actividad-390');
     await visit(customer, orderHash);
-    await showcase(customer, 'showcase-07-pedido-entregado-390', '.route-card');
-    await showcase(customer, 'showcase-09-historial-detalle-imagenes-390', '.route-card');
+    await showcase(customer, 'showcase-07-pedido-entregado-390', '.order-hero');
+    await showcase(customer, 'showcase-09-historial-detalle-imagenes-390', '.order-details');
 
     // ───────── recorrido 3: taxi ─────────
     console.log('\nRecorrido 3 · solicitud y aceptación de taxi');
@@ -430,7 +432,7 @@ async function main() {
     await customer.waitForFunction('document.querySelector("#main")?.getAttribute("aria-busy") === "false"');
     await customer.waitForFunction(`document.body.innerText.includes('Pan casero')`);
     await customer.click('[data-action="set-quantity"][data-quantity="1"]');
-    await customer.evaluate(`(() => { location.hash = '#carrito/almacen-el-pehuen'; return true; })()`);
+    await customer.evaluate(`(() => { location.hash = '#carrito/almacen-el-pehuen/confirmar'; return true; })()`);
     await customer.waitForFunction('document.querySelector("#main")?.getAttribute("aria-busy") === "false"');
     await customer.waitForFunction(`!!document.querySelector('[data-form="checkout"]')`);
     await customer.setOffline(true);

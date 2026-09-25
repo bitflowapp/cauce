@@ -11,7 +11,7 @@ import { isNetworkError } from './core/network.js';
 import { CauceError } from './core/errors.js';
 import { REQUIRED_SCHEMA } from './core/contract.js';
 import { createTelemetry, classify } from './core/telemetry.js';
-import { nextOpening, MAX_RANGES_PER_DAY } from './core/business-hours.js';
+import { MAX_RANGES_PER_DAY } from './core/business-hours.js';
 import { ROLE_LABELS } from './core/accounts.js';
 import { askReason as askReasonDialog, askConfirm as askConfirmDialog } from './ui/dialog.js';
 import {
@@ -28,23 +28,31 @@ import {
   panelNav, openBar, syncBar, newOrdersBanner, ordersBoard, dashboard, deliveryBoard,
 } from './ui/business-panel.js';
 import { riderHome, riderUnlinked } from './ui/rider.js';
+import {
+  productThumb, merchantAvatar, availabilityText as storeAvailability, businessCard as storeCard, storeHeader, productCard,
+  catalogJump, cartBar, cartSubtotal, cartLines, fulfillmentSwitch, totalsList,
+} from './ui/storefront.js';
+import { orderStatusHero, deliveryCodeCard, orderTimeline, cancellationNotice, orderDetails } from './ui/order-status.js';
+import {
+  DEMO_PAYMENT_METHODS, paymentMethodSelector, paymentBadge, paymentReturnView, paymentsSection, orderPaymentNotice,
+} from './ui/payments.js';
+import {
+  checkoutPaymentMethods, cashOnlyMethods, RETURN_OUTCOMES, isWaitingPayment, paymentReturnReference, connectionResult,
+} from './core/payment.js';
 import { pilotToday, pilotIncidents, businessTodayLine } from './ui/admin-metrics.js';
 import { deliveryCodeFeedback } from './core/rider-app.js';
-import { renderIcon, renderSticker } from './ui/icons.js';
+import { renderIcon } from './ui/icons.js';
 import { renderCharacter } from './ui/brand-characters.js';
 import {
   esc, money, shortDate, timeOnly, relativeMinutes, orderStatusLabel, orderStatusTone,
-  stepsFor, stepIndex, fulfillmentLabel, paymentLabel, businessStatusLabel, tripStatusLabel,
-  pluralize, initialsOf,
+  fulfillmentLabel, businessStatusLabel, tripStatusLabel, pluralize, initialsOf,
 } from './ui/format.js';
-import { getProductSvg } from './data/food-assets.js';
 import { BUSINESS_STATUS_HINTS, missingPublicationRequirements } from './core/merchant-status.js';
 import { PRODUCT_CATEGORIES_SUGGESTED } from './core/catalog-rules.js';
 import { DISPATCH_POLICY, DRIVER_STATUS_LABELS } from './core/taxi-dispatch.js';
 import { isTaxiActive, isTaxiCancelable, getDriverNextAction } from './core/taxi-workflow.js';
 import { allowedActions } from './core/workflow-policy.js';
-import { formatDeliveryCode } from './core/delivery-code.js';
-import { confirmedPrice, isCommerciallyPurchasable, knownStock } from './core/commercial.js';
+import { isCommerciallyPurchasable } from './core/commercial.js';
 import { formatArgentinePhone } from './core/validators.js';
 
 const main = /** @type {HTMLElement} */ (document.querySelector('#main'));
@@ -73,7 +81,8 @@ const app = {
   repository: null,
   session: null,
   online: typeof navigator === 'undefined' ? true : navigator.onLine !== false,
-  search: { query: '', category: 'Todos', onlyOpen: false },
+  search: { query: '', category: 'Todos', onlyOpen: false, mode: '' },
+  accountTab: 'ingresar',
   activityTab: 'pedidos',
   // Panel del comercio: filtro de pedidos por estado (la sección va en la URL)
   // y los desplegables abiertos, que un redibujo no tiene que cerrar.
@@ -105,6 +114,9 @@ const hasRole = role => Boolean(actor()?.roles?.includes(role));
 // Verticales: en la demostración todo sigue encendido; en el entorno conectado
 // decide la base (app_status), para habilitar o apagar sin tocar código.
 const feature = name => !isConnected() || app.features?.[name] === true;
+// Pagos online: sólo con la base conectada y su interruptor encendido. La
+// demostración nunca ofrece un pago online.
+const paymentsOnline = () => isConnected() && app.features?.payments_online === true;
 
 // Lo que ve la persona: el mensaje de CAUCE, nunca el texto técnico de una
 // excepción. El detalle queda en el registro de errores.
@@ -112,86 +124,6 @@ function userMessage(error) {
   if (error instanceof CauceError || error?.name === 'CauceError') return error.message;
   app.telemetry?.error(error, { where: 'ui' });
   return 'Ocurrió un problema inesperado. Reintentá en unos segundos; si sigue pasando, avisanos.';
-}
-
-function productThumb(item, name = '', className = '') {
-  const label = name || item?.name || 'Producto';
-  const fallback = `<span class="product-thumb-fallback" aria-hidden="true">${esc(initialsOf(label))}</span>`;
-  return `<span class="product-thumb ${className}" aria-hidden="true">
-    ${fallback}${item?.image ? `<img src="${esc(item.image)}" alt="" loading="lazy" width="96" height="96">` : ''}
-  </span>`;
-}
-
-function merchantAvatar(business, className = '') {
-  const initials = business.initials || initialsOf(business.name);
-  return `<span class="merchant-avatar ${className}" aria-hidden="true">
-    ${business.logoImage
-      ? `<img src="${esc(business.logoImage)}" alt="" loading="lazy" width="72" height="72">`
-      : `<span>${esc(initials)}</span>`}
-  </span>`;
-}
-
-const DELIVERY_TRACK_PROGRESS = Object.freeze({
-  assigned: 12,
-  picked_up: 32,
-  on_the_way: 68,
-  arrived: 94,
-  delivered: 100,
-});
-
-function renderOrderMoment(order) {
-  const moment = {
-    received: ['merchant', 'Pedido recibido', 'El comercio ya puede revisarlo y confirmar si lo toma.'],
-    submitted: ['merchant', 'Pedido enviado', 'El comercio lo recibió y en breve confirma si lo toma.'],
-    accepted: ['merchant', 'Pedido aceptado', 'El comercio confirmó que puede prepararlo.'],
-    preparing: ['merchant', 'Preparando tu pedido', 'El comercio está trabajando en los productos del pedido.'],
-    ready: ['shopper', 'Pedido listo', order.fulfillment === 'delivery' ? 'Está listo para asignar el reparto.' : 'Ya podés retirarlo por el comercio.'],
-  }[order.status];
-  if (!moment) return '';
-  return `<section class="brand-status-card" aria-labelledby="order-moment-title">
-    <div class="brand-status-copy"><span class="route-kicker">ESTADO ACTUAL</span><h2 id="order-moment-title">${esc(moment[1])}</h2><p>${esc(moment[2])}</p></div>
-    <div class="brand-status-character" aria-hidden="true">${renderCharacter(moment[0], 112)}</div>
-  </section>`;
-}
-
-function renderDeliveryTracking(order, business) {
-  const progress = DELIVERY_TRACK_PROGRESS[order.status];
-  if (order.fulfillment !== 'delivery' || progress == null) return '';
-  const active = order.status === 'on_the_way';
-  const operationalEta = {
-    assigned: 'Salida pendiente',
-    picked_up: 'Pedido retirado del comercio',
-    on_the_way: 'Entrega próxima · sin ETA telemétrica',
-    arrived: 'El reparto informó que llegó',
-    delivered: 'Entrega completada',
-  }[order.status];
-  const riderLabel = order.riderName || `Reparto de ${business.name}`;
-  const character = order.status === 'delivered' ? 'celebrate' : 'courier';
-  return `
-    <section class="route-card route-card-delivery" aria-labelledby="delivery-tracking-title">
-      <div class="route-card-heading">
-        <div>
-          <span class="route-kicker">AVANCE ESTIMADO</span>
-          <h2 id="delivery-tracking-title">${esc(orderStatusLabel(order))}</h2>
-        </div>
-        <span class="estimate-chip">Sin GPS en tiempo real</span>
-      </div>
-      <div class="route-visual progress-${progress} ${active ? 'is-moving' : ''}" aria-hidden="true">
-        <span class="route-line"><span class="route-line-complete"></span></span>
-        <span class="route-node route-node-start">${renderIcon('store', 15)}</span>
-        <span class="route-vehicle route-character-vehicle">${renderCharacter(character, 82)}</span>
-        <span class="route-node route-node-end">${renderIcon('pin', 15)}</span>
-      </div>
-      <div class="route-places">
-        <span><small>Origen</small><strong>${esc(business.name)}</strong></span>
-        <span><small>Destino</small><strong>${esc(order.customer?.address || 'Dirección confirmada')}</strong></span>
-      </div>
-      <div class="route-summary">
-        <span>${renderIcon('delivery', 18)} <strong>${esc(riderLabel)}</strong></span>
-        <span>${renderIcon('clock', 18)} ${esc(operationalEta)}</span>
-      </div>
-      <p class="route-disclaimer">La posición ilustra el estado operativo informado por el comercio o el reparto; no representa coordenadas en vivo.</p>
-    </section>`;
 }
 
 const TAXI_TRACK_PROGRESS = Object.freeze({
@@ -277,11 +209,15 @@ const ROUTE_ALIASES = Object.freeze({
   rider: 'entregas',
 });
 
+// La ruta es lo que está antes de `?` en el hash; lo de después son
+// parámetros (la vuelta del proveedor de pagos o de la conexión de la cuenta).
 function route() {
-  const parts = location.hash.slice(1).split('/').filter(Boolean).map(decodeURIComponent);
+  const path = location.hash.slice(1).split('?')[0];
+  const parts = path.split('/').filter(Boolean).map(part => { try { return decodeURIComponent(part); } catch { return part; } });
   const page = ROUTE_ALIASES[parts[0]] || parts[0] || 'inicio';
   return { page, param: parts[1] || null, extra: parts[2] || null };
 }
+
 
 // El dibujo empieza con el evento hashchange, que llega después: la vista ya
 // está ocupada desde ahora.
@@ -342,10 +278,12 @@ const sectionHeading = (eyebrow, title, extra = '') => `
   </div>`;
 
 // Aviso obligatorio antes de confirmar: ninguna operación llega a un comercio real.
-const confirmNotice = () => `
+const confirmNotice = ({ online = false } = {}) => `
   <p class="confirm-notice">${renderIcon('shield-check', 15)}
     <span>${app.repository?.capabilities?.orders
-      ? 'El comercio recibe este pedido y lo prepara. El pago se coordina con el comercio: CAUCE no cobra nada.'
+      ? online
+        ? 'El comercio recibe este pedido y lo prepara. En efectivo le pagás al comercio; el pago online va a la cuenta del comercio. CAUCE no cobra nada.'
+        : 'El comercio recibe este pedido y lo prepara. El pago se coordina con el comercio: CAUCE no cobra nada.'
       : `Esta confirmación no genera un servicio ni un cobro real. Queda registrada sólo en ${
         isShared() ? 'el entorno de pruebas' : 'este navegador'}.`}</span>
   </p>`;
@@ -457,53 +395,41 @@ function updateShell() {
   }
 
   document.body.classList.toggle('is-offline', !app.online);
+  // Cada área tiene su propia navegación: la barra inferior y el pie de quien
+  // compra no tapan el panel, el reparto ni la administración.
+  document.body.dataset.area = AREAS[page] || 'cliente';
 }
+
+const AREAS = Object.freeze({ panel: 'comercio', entregas: 'reparto', admin: 'admin', taxista: 'reparto' });
 
 // ───────────────────────── vistas públicas ─────────────────────────
 
-// Abierto o cerrado, y por qué: el horario manda aunque el comercio se olvide
-// de cerrar, y el interruptor manda aunque esté dentro de horario.
-function availabilityText(business) {
-  if (business.open) return 'Abierto';
-  if (isConnected() && business.acceptingOrders) {
-    const next = nextOpening(business.hours, new Date(), business.timezone);
-    return next ? `Cerrado · ${next.label.replace('Abre ', 'abre ')}` : 'Cerrado';
-  }
-  return 'Cerrado';
-}
-
-function businessCard(business) {
-  const modes = [
-    business.pickupEnabled ? 'Retiro' : null,
-    business.deliveryEnabled ? (business.deliveryFee > 0 ? `Envío ${money(business.deliveryFee)}` : 'Envío sin costo') : null,
-  ].filter(Boolean).join(' · ');
-  const cover = business.coverImage
-    ? `<img class="merchant-cover" src="${esc(business.coverImage)}" alt="" loading="lazy" width="640" height="360">`
-    : `<div class="merchant-cover merchant-cover-fallback" aria-hidden="true"><span>${esc(business.initials || initialsOf(business.name))}</span></div>`;
-  return `
-    <a class="catalog-merchant-card" href="#comercio/${esc(business.id)}" data-theme="${esc(business.theme || 'sage')}">
-      <div class="merchant-cover-wrap">${cover}${merchantAvatar(business, 'merchant-avatar-card')}</div>
-      <div class="catalog-merchant-content">
-        <div class="catalog-merchant-text">
-          <h3>${esc(business.name)}</h3>
-          <p class="quiet">${esc(business.category || 'Comercio local')}${business.subtitle ? ` · ${esc(business.subtitle)}` : ''}</p>
-        </div>
-        <span class="availability ${business.open ? '' : 'closed'}">${esc(availabilityText(business))}</span>
-      </div>
-      <p class="merchant-modes">${renderIcon('bag', 14)} ${esc(modes || 'Modalidades a confirmar')}</p>
-    </a>`;
-}
+const availabilityText = business => storeAvailability(business, { connected: isConnected() });
+const businessCard = business => storeCard(business, { connected: isConnected() });
 
 function filterBusinesses(businesses, catalogs = {}) {
   const query = app.search.query.trim().toLowerCase();
   return businesses.filter(business => {
     if (app.search.onlyOpen && !business.open) return false;
+    if (app.search.mode === 'delivery' && !business.deliveryEnabled) return false;
+    if (app.search.mode === 'pickup' && !business.pickupEnabled) return false;
     if (app.search.category !== 'Todos' && business.category !== app.search.category) return false;
     if (!query) return true;
     return [business.name, business.category, business.subtitle, business.description, catalogs[business.id]]
       .filter(Boolean).some(field => field.toLowerCase().includes(query));
   });
 }
+
+// Filtros rápidos: se combinan con la búsqueda y el rubro.
+const QUICK_FILTERS = Object.freeze([
+  Object.freeze({ key: 'open', label: 'Abiertos ahora' }),
+  Object.freeze({ key: 'delivery', label: 'Con envío' }),
+  Object.freeze({ key: 'pickup', label: 'Retiro en el local' }),
+]);
+const quickFilterActive = key => (key === 'open' ? app.search.onlyOpen : app.search.mode === key);
+const quickFilters = () => QUICK_FILTERS.map(filter => `<button class="chip ${quickFilterActive(filter.key) ? 'is-active' : ''}"
+  type="button" data-action="quick-filter" data-filter="${filter.key}" aria-pressed="${quickFilterActive(filter.key)}">${esc(filter.label)}</button>`).join('');
+const filtersActive = () => Boolean(app.search.query.trim() || app.search.onlyOpen || app.search.mode || app.search.category !== 'Todos');
 
 async function viewHome() {
   const taxi = feature('taxi');
@@ -516,6 +442,8 @@ async function viewHome() {
   const activeOrders = orders.filter(order => !['delivered', 'canceled'].includes(order.status));
   const activeTrip = trips.find(trip => isTaxiActive(trip.status));
   const open = businesses.filter(business => business.open);
+  // Abiertos primero; los cerrados después, con cuándo abren.
+  const ordered = [...open, ...businesses.filter(business => !business.open)];
 
   const operation = (activeOrders.length || activeTrip) ? `
     <section class="home-block">
@@ -525,8 +453,8 @@ async function viewHome() {
           <a class="op-card" href="#pedido/${esc(order.id)}">
             <span class="op-card-icon">${renderIcon('receipt', 18)}</span>
             <span class="op-card-body">
-              <strong>${esc(order.code)} · ${esc(businesses.find(b => b.id === order.businessId)?.name || 'Comercio')}</strong>
-              <span class="quiet">${esc(fulfillmentLabel(order.fulfillment))} · ${money(order.total)}</span>
+              <strong>${esc(businesses.find(b => b.id === order.businessId)?.name || 'Comercio')}</strong>
+              <span class="quiet">${esc(order.code)} · ${esc(fulfillmentLabel(order.fulfillment))} · ${money(order.total)}</span>
             </span>
             <span class="status-chip ${orderStatusTone(order.status)}">${esc(orderStatusLabel(order))}</span>
           </a>`).join('')}
@@ -543,7 +471,7 @@ async function viewHome() {
     </section>` : '';
 
   const businessesBlock = businesses.length
-    ? `<div class="merchant-grid">${(open.length ? open : businesses).slice(0, 4).map(businessCard).join('')}</div>`
+    ? `<div class="merchant-grid">${ordered.slice(0, 6).map(businessCard).join('')}</div>`
     : isConnected()
       ? `<div class="notice"><strong>Estamos sumando los primeros comercios de Aluminé.</strong>
           Muy pronto vas a poder pedir desde acá. ¿Tenés un comercio? Sumalo en pocos pasos.</div>`
@@ -557,23 +485,35 @@ async function viewHome() {
       </div>
       <div class="home-hero-body">
         <p class="eyebrow">CAUCE · ALUMINÉ</p>
-        <h1>${taxi ? 'Comprá local.<br>Movete por Aluminé.' : 'Comprá en los comercios<br>de Aluminé.'}</h1>
-        ${taxi ? '' : '<p class="home-hero-lead">Retirá en el local o recibilo con el reparto del propio comercio. Sin crear una cuenta.</p>'}
-        <div class="home-actions">
-          <a class="button button-hero" href="#comercios">${renderIcon('store', 18)} Ver comercios</a>
-          ${taxi
-            ? `<a class="button button-hero-outline" href="#taxi">${renderIcon('taxi', 18)} Pedir un taxi</a>`
-            : `<a class="button button-hero-outline" href="#actividad">${renderIcon('receipt', 18)} Mis pedidos</a>`}
+        <h1>${taxi ? 'Comprá local.<br>Movete por Aluminé.' : 'Pedí a los comercios<br>de Aluminé.'}</h1>
+        <p class="home-hero-lead">Retirá en el local o recibilo con el reparto del propio comercio. Sin crear una cuenta.</p>
+        <form class="home-search" data-form="home-search" role="search">
+          <label class="visually-hidden" for="home-search-input">Buscar comercios o productos</label>
+          <span class="search-icon" aria-hidden="true">${renderIcon('search', 18)}</span>
+          <input id="home-search-input" name="query" type="search" placeholder="Pan, pizza, almacén…"
+            autocomplete="off" enterkeyhint="search">
+          <button class="button" type="submit">Buscar</button>
+        </form>
+        <div class="home-hero-links">
+          <a class="hero-link" href="#comercios">${renderIcon('store', 16)} Ver comercios</a>
+          ${taxi ? `<a class="hero-link" href="#taxi">${renderIcon('taxi', 16)} Pedir un taxi</a>` : ''}
         </div>
       </div>
-      <div class="home-hero-character" aria-hidden="true">${renderCharacter('shopper', 180)}</div>
+      <div class="home-hero-character" aria-hidden="true">${renderCharacter('shopper', 150)}</div>
     </section>
+
+    <div class="chip-row home-filters" role="group" aria-label="Filtrar comercios">${quickFilters()}</div>
+    <ul class="trust-row" aria-label="Cómo funciona CAUCE">
+      <li>${renderIcon('user', 16)} Sin crear cuenta</li>
+      <li>${renderIcon('cash', 16)} ${paymentsOnline() ? 'Efectivo o pago online' : 'Pagás al comercio'}</li>
+      <li>${renderIcon('receipt', 16)} Seguís tu pedido</li>
+    </ul>
 
     ${operation}
 
     <section class="home-block">
       ${sectionHeading('COMERCIOS', open.length ? 'Abiertos ahora' : 'Comercios en CAUCE',
-        businesses.length ? `<a class="link-button" href="#comercios">Ver todos</a>` : '')}
+        businesses.length ? '<a class="link-button" href="#comercios">Ver todos</a>' : '')}
       ${businessesBlock}
     </section>
 
@@ -582,14 +522,15 @@ async function viewHome() {
       ${sectionHeading('CÓMO FUNCIONA', 'Pedir es simple')}
       <ol class="how-steps">
         <li><strong>Elegí un comercio</strong><span>Mirá el catálogo con precios y qué está disponible hoy.</span></li>
-        <li><strong>Confirmá tu pedido</strong><span>Retiro en el local o envío del comercio. Pagás al recibir o al retirar.</span></li>
-        <li><strong>Seguilo en vivo</strong><span>Ves cuando lo aceptan, lo preparan y sale. Te damos un enlace para no perderlo.</span></li>
+        <li><strong>Confirmá tu pedido</strong><span>Retiro en el local o envío del comercio. ${paymentsOnline()
+          ? 'Pagás en efectivo o, donde esté habilitado, online.' : 'Pagás al recibir o al retirar.'}</span></li>
+        <li><strong>Seguilo paso a paso</strong><span>Ves cuando lo aceptan, lo preparan y sale. Te damos un enlace para no perderlo.</span></li>
       </ol>
     </section>` : ''}
 
     <section class="home-block home-secondary">
       <a class="secondary-access" href="#alta-comercio">
-        <span class="secondary-access-icon" aria-hidden="true">${renderSticker('merchant', 40)}</span>
+        <span class="secondary-access-icon" aria-hidden="true">${renderIcon('store', 24)}</span>
         <span>
           <strong>Sumar mi comercio</strong>
           <span class="quiet">Creá tu cuenta, cargá tu catálogo y empezá a recibir pedidos.</span>
@@ -597,7 +538,7 @@ async function viewHome() {
       </a>
       ${taxi ? `
       <a class="secondary-access" href="#taxista">
-        <span class="secondary-access-icon" aria-hidden="true">${renderSticker('taxi', 40)}</span>
+        <span class="secondary-access-icon" aria-hidden="true">${renderIcon('taxi', 24)}</span>
         <span>
           <strong>Registrarme como taxista</strong>
           <span class="quiet">Completá tu alta y recibí solicitudes cuando esté aprobada.</span>
@@ -626,6 +567,8 @@ async function viewBusinesses() {
       (await app.repository.query('products', { businessId: business.id })).map(product => product.name).join(' '),
     ])));
   const visible = filterBusinesses(businesses, catalogs);
+  // Abiertos primero, sin perder el orden que trae la base dentro de cada grupo.
+  const ordered = [...visible.filter(business => business.open), ...visible.filter(business => !business.open)];
 
   return `
     ${offlineBanner()}
@@ -638,28 +581,27 @@ async function viewBusinesses() {
 
     <form class="search-bar" data-form="search" role="search">
       <label class="visually-hidden" for="search-input">Buscar comercios o productos</label>
-      <span class="search-icon" aria-hidden="true">${renderIcon('bag', 16)}</span>
-      <input id="search-input" name="query" type="search" placeholder="Buscar comercio o rubro"
+      <span class="search-icon" aria-hidden="true">${renderIcon('search', 16)}</span>
+      <input id="search-input" name="query" type="search" placeholder="Buscar comercio, rubro o producto"
         value="${esc(app.search.query)}" autocomplete="off" enterkeyhint="search">
-      <label class="check-label">
-        <input type="checkbox" name="onlyOpen" ${app.search.onlyOpen ? 'checked' : ''}>
-        <span>Sólo abiertos</span>
-      </label>
     </form>
 
-    <div class="category-nav-bar" role="tablist" aria-label="Rubros">
+    <div class="chip-row" role="group" aria-label="Filtrar comercios">${quickFilters()}</div>
+    ${categories.length > 2 ? `<div class="chip-row" role="group" aria-label="Rubros">
       ${categories.map(category => `
-        <button class="category-pill ${app.search.category === category ? 'active' : ''}" type="button"
-          role="tab" aria-selected="${app.search.category === category}"
-          data-action="set-category" data-category="${esc(category)}">${esc(category)}</button>`).join('')}
-    </div>
+        <button class="chip chip-soft ${app.search.category === category ? 'is-active' : ''}" type="button"
+          aria-pressed="${app.search.category === category}" data-action="set-category" data-category="${esc(category)}">${esc(category)}</button>`).join('')}
+    </div>` : ''}
+
+    ${businesses.length && filtersActive() ? `<p class="results-line quiet" role="status">${pluralize(visible.length, 'resultado', 'resultados')}
+      <button class="link-button" type="button" data-action="clear-filters">Quitar filtros</button></p>` : ''}
 
     ${!businesses.length
       ? emptyState('Todavía no hay comercios publicados',
         'Estamos sumando los primeros comercios de Aluminé. Volvé pronto, o sumá el tuyo.',
         '#alta-comercio', 'Sumar mi comercio', 'merchant')
-      : visible.length
-      ? `<div class="merchant-grid">${visible.map(businessCard).join('')}</div>`
+      : ordered.length
+      ? `<div class="merchant-grid">${ordered.map(businessCard).join('')}</div>`
       : emptyState('Sin resultados',
         'La búsqueda mira el nombre del comercio, su rubro y sus productos. Probá con otra palabra o quitá los filtros.',
         '#comercios', 'Ver todos los comercios', 'bag')}`;
@@ -687,7 +629,6 @@ async function viewBusiness(businessId) {
     app.repository.query('products', { businessId }),
     app.repository.query('cart', { businessId }),
   ]);
-  const lines = new Map(cart.lines.map(line => [line.productId, line.quantity]));
   const purchasable = products.filter(product => !product.archived);
   // Las secciones siguen el orden que eligió el comercio; lo que no tiene
   // categoría visible ("Otros") va al final.
@@ -696,150 +637,80 @@ async function viewBusiness(businessId) {
     if (!rankOf.has(product.category)) rankOf.set(product.category, product.categoryPosition ?? Number.MAX_SAFE_INTEGER);
   }
   const categories = [...rankOf.keys()].sort((a, b) => rankOf.get(a) - rankOf.get(b));
-  const count = cart.lines.reduce((total, line) => total + line.quantity, 0);
-
-  const productCard = product => {
-    const variants = Array.isArray(product.variants) ? product.variants : [];
-    // Con variantes, cada combinacion es una linea propia del carrito.
-    const quantity = variants.length
-      ? cart.lines.filter(line => line.productId === product.id).reduce((total, line) => total + line.quantity, 0)
-      : (lines.get(product.id) || 0);
-    const stock = knownStock(product);
-    const available = isCommerciallyPurchasable(product) && stock > 0;
-    const image = product.image
-      ? `<img src="${esc(product.image)}" alt="" loading="lazy" width="320" height="240">`
-      : product.dishType
-        ? getProductSvg(product.dishType)
-        : `<span class="product-mark">${esc(initialsOf(product.name))}</span>`;
-    return `
-      <article class="product-card ${available ? '' : 'is-unavailable'}">
-        <div class="product-media" aria-hidden="true">${image}</div>
-        <div class="product-body">
-          <h3>${esc(product.name)}</h3>
-          ${product.description ? `<p class="quiet">${esc(product.description)}</p>` : ''}
-          <p class="product-price">${money(confirmedPrice(product))}</p>
-          ${available ? '' : `<p class="product-flag">${product.available === false ? 'Agotado por hoy' : stock <= 0 ? 'Sin stock' : 'No disponible'}</p>`}
-        </div>
-        ${variants.length ? `
-          <div class="variant-list">
-            ${variants.map(variant => {
-              const line = cart.lines.find(item => item.productId === product.id && item.variantId === variant.id);
-              const count = line?.quantity || 0;
-              return `
-                <div class="variant-row">
-                  <span class="variant-name">${esc(variant.name)}${variant.priceDelta
-                    ? ` <span class="quiet">${variant.priceDelta > 0 ? '+' : '−'}${money(Math.abs(variant.priceDelta))}</span>` : ''}</span>
-                  ${available ? (count > 0 ? `
-                    <div class="qty-control" role="group" aria-label="Cantidad de ${esc(product.name)} ${esc(variant.name)}">
-                      <button class="qty-button" type="button" data-action="set-quantity" data-business="${esc(business.id)}"
-                        data-product="${esc(product.id)}" data-variant="${esc(variant.id)}" data-quantity="${count - 1}"
-                        aria-label="Quitar una unidad">−</button>
-                      <span class="qty-value" aria-live="polite">${count}</span>
-                      <button class="qty-button" type="button" data-action="set-quantity" data-business="${esc(business.id)}"
-                        data-product="${esc(product.id)}" data-variant="${esc(variant.id)}" data-quantity="${count + 1}"
-                        ${quantity >= stock ? 'disabled' : ''} aria-label="Agregar una unidad">+</button>
-                    </div>` : `
-                    <button class="button secondary add-btn" type="button" data-action="set-quantity" data-business="${esc(business.id)}"
-                      data-product="${esc(product.id)}" data-variant="${esc(variant.id)}" data-quantity="1">Agregar</button>`)
-                    : '<span class="quiet">No disponible</span>'}
-                </div>`;
-            }).join('')}
-          </div>`
-        : `
-        <div class="product-actions">
-          ${available ? (quantity > 0 ? `
-            <div class="qty-control" role="group" aria-label="Cantidad de ${esc(product.name)}">
-              <button class="qty-button" type="button" data-action="set-quantity" data-business="${esc(business.id)}"
-                data-product="${esc(product.id)}" data-quantity="${quantity - 1}" aria-label="Quitar una unidad">−</button>
-              <span class="qty-value" aria-live="polite">${quantity}</span>
-              <button class="qty-button" type="button" data-action="set-quantity" data-business="${esc(business.id)}"
-                data-product="${esc(product.id)}" data-quantity="${quantity + 1}" ${quantity >= stock ? 'disabled' : ''}
-                aria-label="Agregar una unidad">+</button>
-            </div>` : `
-            <button class="button add-btn" type="button" data-action="set-quantity" data-business="${esc(business.id)}"
-              data-product="${esc(product.id)}" data-quantity="1">Agregar</button>`)
-            : '<span class="quiet">No disponible</span>'}
-        </div>`}
-      </article>`;
-  };
+  const units = cart.lines.reduce((total, line) => total + line.quantity, 0);
 
   return `
     ${offlineBanner()}
     ${backLink('#comercios', 'Comercios')}
-    <section class="shop-header" data-theme="${esc(business.theme || 'sage')}">
-      <div class="shop-cover">
-        ${business.coverImage
-          ? `<img src="${esc(business.coverImage)}" alt="" width="960" height="360">`
-          : `<div class="shop-cover-fallback" aria-hidden="true"></div>`}
-        ${merchantAvatar(business, 'merchant-avatar-shop')}
-      </div>
-      <div class="shop-header-text">
-        <h1 class="page-title">${esc(business.name)}</h1>
-        <p class="quiet">${esc(business.subtitle || business.category || '')}</p>
-        <div class="shop-meta">
-          <span class="availability ${business.open ? '' : 'closed'}">${esc(availabilityText(business))}</span>
-          ${business.hoursLabel && !(business.hours || []).length ? `<span>${renderIcon('clock', 14)} ${esc(business.hoursLabel)}</span>` : ''}
-          ${business.address ? `<span>${renderIcon('pin', 14)} ${esc(business.address)}</span>` : ''}
-          ${timesLine(business) ? `<span>${renderIcon('clock', 14)} ${esc(timesLine(business))}</span>` : ''}
-        </div>
-        <div class="shop-meta">
-          ${business.pickupEnabled ? `<span class="tag">${renderIcon('bag', 13)} Retiro en el comercio</span>` : ''}
-          ${business.deliveryEnabled ? `<span class="tag">${renderIcon('delivery', 13)} Envío ${business.deliveryFee > 0 ? money(business.deliveryFee) : 'sin costo'}${business.minimumOrder > 0 ? ` · mínimo ${money(business.minimumOrder)}` : ''}</span>` : ''}
-        </div>
-        ${business.deliveryZone ? `<p class="microcopy">Zona de envío declarada por el comercio: ${esc(business.deliveryZone)}.</p>` : ''}
-        ${isConnected() ? contactButtons(business, { compact: true }) : ''}
-      </div>
-    </section>
+    ${storeHeader(business, { connected: isConnected(), times: timesLine(business),
+      contact: isConnected() ? contactButtons(business, { compact: true }) : '' })}
     ${isConnected() && (business.hours || []).length ? `<details class="hours-details"><summary>Horarios de atención</summary>${hoursSummary(business)}</details>` : ''}
 
     ${business.open ? '' : `<div class="notice" role="status"><strong>${esc(availabilityText(business))}.</strong> Podés mirar el catálogo y armar tu pedido; se confirma cuando el comercio esté recibiendo pedidos.</div>`}
 
-    ${categories.map(category => `
-      <section class="catalog-group">
-        <h2 class="catalog-group-title">${esc(category)}</h2>
-        <div class="product-grid">${purchasable.filter(product => product.category === category).map(productCard).join('')}</div>
+    ${catalogJump(categories)}
+    ${categories.map((category, index) => `
+      <section class="catalog-group" id="cat-${index}" aria-labelledby="cat-${index}-title">
+        <h2 class="catalog-group-title" id="cat-${index}-title">${esc(category)}</h2>
+        <div class="product-grid">${purchasable.filter(product => product.category === category)
+          .map(product => productCard(product, { businessId: business.id, lines: cart.lines })).join('')}</div>
       </section>`).join('') || emptyState('Catálogo vacío', 'Este comercio todavía no publicó productos.', '#comercios', 'Ver otros comercios', 'bag')}
 
-    ${count > 0 ? `
-      <div class="sticky-cart-bar">
-        <span>${pluralize(count, 'producto', 'productos')} en el carrito</span>
-        <a class="button" href="#carrito/${esc(business.id)}">Ver carrito</a>
-      </div>` : ''}`;
+    ${cartBar(business.id, { units, subtotal: cartSubtotal(cart.lines, products) })}`;
+}
+
+// Retiro o envío: lo elegido en el carrito sigue en la confirmación.
+function checkoutMode(business) {
+  const stored = draft(`checkout:${business.id}`);
+  const modes = [business.pickupEnabled ? 'pickup' : null, business.deliveryEnabled ? 'delivery' : null].filter(Boolean);
+  return { stored, modes, fulfillment: modes.includes(stored.fulfillment) ? stored.fulfillment : modes[0] };
+}
+
+// Una línea cuyo producto se dio de baja, se agotó o cambió de opciones se
+// marca y se puede quitar: nunca queda trabada en el carrito.
+function cartDetail(cart, products) {
+  return cart.lines.map(line => {
+    const product = products.find(candidate => candidate.id === line.productId && !candidate.archived);
+    const variant = (product?.variants || []).find(item => item.id === line.variantId) || null;
+    const unavailable = !product || !isCommerciallyPurchasable(product)
+      || (line.variantId && !variant) || (!line.variantId && (product?.variants || []).length > 0);
+    return { line, product, variant, unavailable };
+  });
 }
 
 async function viewCarts(businessId) {
-  if (businessId) return viewCheckout(businessId);
+  if (businessId) return route().extra === 'confirmar' ? viewCheckout(businessId) : viewCart(businessId);
   const carts = await app.repository.query('carts');
   app.cartCount = carts.reduce((total, entry) => total + entry.cart.lines.reduce((sum, line) => sum + line.quantity, 0), 0);
   if (!carts.length) {
     return emptyState('Tu carrito está vacío', 'Elegí un comercio y sumá productos. Cada comercio tiene su propio carrito.',
       '#comercios', 'Ver comercios', 'bag');
   }
+  // Con un solo carrito no hay nada que elegir: se muestra directamente.
+  if (carts.length === 1) return viewCart(carts[0].business.id);
   return `
     ${offlineBanner()}
     <section class="page-header">
       <h1 class="page-title">Tus carritos</h1>
-      <p class="quiet">Un pedido por comercio. Los carritos se mantienen separados.</p>
+      <p class="quiet">Cada comercio recibe su propio pedido.</p>
     </section>
     <div class="stack">
       ${carts.map(entry => {
         const units = entry.cart.lines.reduce((total, line) => total + line.quantity, 0);
         return `
           <article class="cart-summary-card">
+            ${merchantAvatar(entry.business, 'merchant-avatar-card')}
             <div class="cart-summary-main">
               <h2>${esc(entry.business.name)}</h2>
               <p class="quiet">${pluralize(units, 'producto', 'productos')}</p>
             </div>
-            <div class="cart-summary-actions">
-              <button class="link-button danger" type="button" data-action="clear-cart" data-business="${esc(entry.business.id)}">Vaciar</button>
-              <a class="button" href="#carrito/${esc(entry.business.id)}">Continuar</a>
-            </div>
+            <a class="button" href="#carrito/${esc(entry.business.id)}">Ver carrito</a>
           </article>`;
       }).join('')}
     </div>`;
 }
 
-async function viewCheckout(businessId) {
+async function viewCart(businessId) {
   const business = await loadPublicBusiness(businessId);
   if (!business) return unavailableBusiness();
   const [products, cart] = await Promise.all([
@@ -847,101 +718,137 @@ async function viewCheckout(businessId) {
     app.repository.query('cart', { businessId }),
   ]);
   if (!cart.lines.length) {
-    return emptyState('Carrito vacío', `Todavía no agregaste productos de ${business.name}.`,
+    return emptyState('Tu carrito está vacío', `Todavía no agregaste productos de ${business.name}.`,
       `#comercio/${business.id}`, 'Ver catálogo', 'bag');
   }
-
-  const stored = draft(`checkout:${businessId}`);
-  const modes = [
-    business.pickupEnabled ? 'pickup' : null,
-    business.deliveryEnabled ? 'delivery' : null,
-  ].filter(Boolean);
-  const fulfillment = modes.includes(stored.fulfillment) ? stored.fulfillment : modes[0];
-
+  const { modes, fulfillment } = checkoutMode(business);
+  const detail = cartDetail(cart, products);
+  const unavailableCount = detail.filter(item => item.unavailable).length;
+  const subtotal = cartSubtotal(cart.lines, products);
+  const shortfall = fulfillment === 'delivery' && business.minimumOrder > 0 ? business.minimumOrder - subtotal : 0;
   let quote = null;
   let quoteError = '';
-  try { quote = await app.repository.query('quote', { businessId, fulfillment }); }
+  try { quote = await app.repository.query('quote', { businessId, fulfillment, preview: true }); }
   catch (error) { quoteError = userMessage(error); }
-
-  // Una línea cuyo producto se dio de baja, se agotó o cambió de opciones se
-  // marca y se puede quitar: nunca queda trabada en el carrito.
-  const detail = cart.lines.map(line => {
-    const product = products.find(candidate => candidate.id === line.productId && !candidate.archived);
-    const variant = (product?.variants || []).find(item => item.id === line.variantId) || null;
-    const unavailable = !product || !isCommerciallyPurchasable(product)
-      || (line.variantId && !variant) || (!line.variantId && (product?.variants || []).length > 0);
-    return { line, product, variant, unavailable };
-  });
-  const unavailableCount = detail.filter(item => item.unavailable).length;
-  const notice = app.checkoutNotice?.businessId === businessId ? app.checkoutNotice : null;
+  const id = esc(business.id);
 
   return `
     ${offlineBanner()}
     ${backLink(`#comercio/${business.id}`, business.name)}
     <section class="page-header">
+      <h1 class="page-title">Tu carrito</h1>
+      <p class="quiet">${esc(business.name)} · ${esc(availabilityText(business))}</p>
+    </section>
+    ${business.open ? '' : `<div class="notice" role="status"><strong>${esc(availabilityText(business))}.</strong> Podés dejar el pedido armado; se confirma cuando el comercio esté recibiendo pedidos.</div>`}
+
+    <section class="checkout-section">
+      <h2 class="checkout-section-title">Cómo lo recibís</h2>
+      ${fulfillmentSwitch(business, modes, fulfillment)}
+      ${timesLine(business, fulfillment) ? `<p class="microcopy">${esc(timesLine(business, fulfillment))}</p>` : ''}
+    </section>
+
+    <section class="checkout-section">
+      <h2 class="checkout-section-title">Productos</h2>
+      ${cartLines(detail, business.id)}
+      ${unavailableCount > 1 ? `<button class="link-button" type="button" data-action="remove-unavailable" data-business="${id}">Quitar los ${unavailableCount} productos no disponibles</button>` : ''}
+      <a class="link-button cart-more" href="#comercio/${id}">+ Agregar más productos</a>
+    </section>
+
+    ${shortfall > 0 ? `<div class="notice" role="status">Te faltan <strong>${money(shortfall)}</strong> para el mínimo de envío
+      (${money(business.minimumOrder)}). Sumá productos${modes.includes('pickup') ? ' o elegí retiro' : ''}.</div>`
+      : quoteError && !unavailableCount ? `<div class="notice error" role="alert"><strong>Revisá tu pedido.</strong> ${esc(quoteError)}</div>` : ''}
+
+    <section class="checkout-section cart-total" aria-label="Total">
+      ${quote ? totalsList(quote, fulfillment) : `<p class="quiet">${unavailableCount
+        ? 'Quitá los productos que ya no están disponibles para ver el total.'
+        : 'El total aparece cuando el pedido cumple las condiciones del comercio.'}</p>`}
+      ${quote ? `<p class="microcopy">${fulfillment === 'delivery' ? 'Incluye el envío del comercio.' : 'Retirás en el local, sin costo.'}
+        Al enviar, CAUCE vuelve a confirmar precios y disponibilidad.</p>` : ''}
+    </section>
+
+    <div class="cart-continue">
+      ${quote && !unavailableCount
+        ? `<a class="button full button-continue" href="#carrito/${id}/confirmar">Continuar · ${money(quote.total)}</a>`
+        : '<button class="button full button-continue" type="button" disabled>Continuar</button>'}
+    </div>
+    <p class="cart-clear"><button class="link-button danger" type="button" data-action="clear-cart" data-business="${id}">Vaciar carrito</button></p>`;
+}
+
+async function viewCheckout(businessId) {
+  const business = await loadPublicBusiness(businessId);
+  if (!business) return unavailableBusiness();
+  const [products, cart, offered] = await Promise.all([
+    app.repository.query('products', { businessId }),
+    app.repository.query('cart', { businessId }),
+    // Formas de pago de este comercio, según la base. Si no responde, sólo efectivo.
+    isConnected() ? app.repository.query('paymentMethods', { businessId }).catch(() => null) : null,
+  ]);
+  if (!cart.lines.length) {
+    return emptyState('Tu carrito está vacío', `Todavía no agregaste productos de ${business.name}.`,
+      `#comercio/${business.id}`, 'Ver catálogo', 'bag');
+  }
+  const { stored, modes, fulfillment } = checkoutMode(business);
+  const detail = cartDetail(cart, products);
+  const unavailableCount = detail.filter(item => item.unavailable).length;
+  let quote = null;
+  let quoteError = '';
+  try { quote = await app.repository.query('quote', { businessId, fulfillment, preview: true }); }
+  catch (error) { quoteError = userMessage(error); }
+  const notice = app.checkoutNotice?.businessId === businessId ? app.checkoutNotice : null;
+  const units = cart.lines.reduce((total, line) => total + line.quantity, 0);
+
+  const connectedMethods = offered ? checkoutPaymentMethods(offered, fulfillment) : [];
+  const methods = !isConnected() ? DEMO_PAYMENT_METHODS
+    : connectedMethods.length ? connectedMethods : cashOnlyMethods(fulfillment);
+  const chosen = methods.some(method => method.id === stored.paymentMethod) ? stored.paymentMethod : methods[0]?.id;
+  const onlineMethod = methods.find(method => method.kind === 'online');
+  const onlineOffered = Boolean(onlineMethod);
+  const payNote = !isConnected()
+    ? 'Los pagos en línea no están habilitados en esta entrega. El pedido y el pago son estados independientes.'
+    : onlineMethod
+      ? `El comercio prepara el pedido cuando ${onlineMethod.label} aprueba el pago. CAUCE no ve ni guarda los datos de tu tarjeta.`
+      : 'Se paga directamente al comercio. CAUCE no cobra ni intermedia el pago.';
+  const delivery = fulfillment === 'delivery';
+  let step = 0;
+  const stepTitle = (key, text) => `<h2 class="checkout-step-title" id="paso-${key}"><span class="step-number" aria-hidden="true">${++step}</span> ${esc(text)}</h2>`;
+
+  return `
+    ${offlineBanner()}
+    ${backLink(`#carrito/${business.id}`, 'Carrito')}
+    <section class="page-header">
       <h1 class="page-title">Confirmar pedido</h1>
-      <p class="quiet">${esc(business.name)}${timesLine(business, fulfillment) ? ` · ${esc(timesLine(business, fulfillment))}` : ''}</p>
+      <p class="quiet">${esc(business.name)} · ${pluralize(units, 'producto', 'productos')}</p>
     </section>
 
     ${notice ? `<div class="notice ${notice.tone === 'error' ? 'error' : ''}" role="alert">${esc(notice.message)}</div>` : ''}
     ${business.open ? '' : `<div class="notice" role="status"><strong>${esc(availabilityText(business))}.</strong> Vas a poder confirmar cuando el comercio esté recibiendo pedidos.</div>`}
+    ${unavailableCount ? `<div class="notice error" role="alert"><strong>Cambió la disponibilidad.</strong> Hay productos que ya no se pueden pedir.
+      <a class="link-button" href="#carrito/${esc(business.id)}">Revisar el carrito</a></div>` : ''}
+    ${quoteError && !unavailableCount ? `<div class="notice error" role="alert"><strong>Revisá tu pedido.</strong> ${esc(quoteError)}
+      <a class="link-button" href="#carrito/${esc(business.id)}">Volver al carrito</a></div>` : ''}
 
-    <section class="checkout-section">
-      <h2 class="checkout-section-title">Tu pedido</h2>
-      <ul class="cart-lines-list">
-        ${detail.map(({ line, product, variant, unavailable }) => {
-          const unit = (confirmedPrice(product || {}) || 0) + (variant ? Number(variant.priceDelta) || 0 : 0);
-          const variantAttribute = line.variantId ? ` data-variant="${esc(line.variantId)}"` : '';
-          return `
-          <li class="cart-line ${unavailable ? 'is-unavailable' : ''}">
-            <div class="cart-line-product">
-              ${productThumb(product, product?.name)}
-              <div class="cart-line-info">
-                <span class="cart-line-title">${esc(product?.name || 'Producto que ya no está en el catálogo')}${variant ? ` · ${esc(variant.name)}` : ''}</span>
-                <span class="cart-line-unit-price">${unavailable ? 'No disponible' : `${money(unit)} c/u`}</span>
-              </div>
-            </div>
-            ${unavailable ? `
-            <button class="button secondary" type="button" data-action="set-quantity" data-business="${esc(business.id)}"
-              data-product="${esc(line.productId)}"${variantAttribute} data-quantity="0">Quitar</button>` : `
-            <div class="cart-line-controls">
-              <button class="qty-button" type="button" data-action="set-quantity" data-business="${esc(business.id)}"
-                data-product="${esc(line.productId)}"${variantAttribute} data-quantity="${line.quantity - 1}" aria-label="Quitar una unidad de ${esc(product.name)}">−</button>
-              <span class="qty-value">${line.quantity}</span>
-              <button class="qty-button" type="button" data-action="set-quantity" data-business="${esc(business.id)}"
-                data-product="${esc(line.productId)}"${variantAttribute} data-quantity="${line.quantity + 1}" aria-label="Agregar una unidad de ${esc(product.name)}"
-                ${line.quantity >= Math.min(99, knownStock(product) ?? 0) ? 'disabled' : ''}>+</button>
-            </div>
-            <span class="cart-line-total">${money(unit * line.quantity)}</span>`}
-          </li>`;
-        }).join('')}
-      </ul>
-      ${unavailableCount > 1 ? `<button class="link-button" type="button" data-action="remove-unavailable" data-business="${esc(business.id)}">Quitar los ${unavailableCount} productos no disponibles</button>` : ''}
-    </section>
-
-    ${quoteError && !unavailableCount ? `<div class="notice error" role="alert"><strong>Revisá tu pedido.</strong> ${esc(quoteError)}</div>` : ''}
-
-    <form class="checkout-form" data-form="checkout" data-business="${esc(business.id)}"
+    <form class="checkout-form checkout-steps" data-form="checkout" data-business="${esc(business.id)}"
       data-expected-total="${quote ? quote.total : ''}" novalidate>
-      <section class="checkout-section">
-        <h2 class="checkout-section-title">Cómo lo recibís</h2>
-        <div class="choice-group" role="radiogroup" aria-label="Modalidad de entrega">
+      <section class="checkout-step" aria-labelledby="paso-entrega">
+        ${stepTitle('entrega', 'Entrega')}
+        <div class="choice-group" role="radiogroup" aria-labelledby="paso-entrega">
           ${modes.map(mode => `
             <label class="choice ${fulfillment === mode ? 'active' : ''}">
               <input type="radio" name="fulfillment" value="${mode}" ${fulfillment === mode ? 'checked' : ''}>
               <span class="choice-body">
                 <strong>${mode === 'pickup' ? 'Retiro en el comercio' : 'Envío del comercio'}</strong>
                 <span class="quiet">${mode === 'pickup'
-                  ? esc(business.address || 'Dirección a confirmar con el comercio')
+                  ? `${esc(business.address || 'Dirección a confirmar con el comercio')} · sin costo`
                   : `${business.deliveryFee > 0 ? money(business.deliveryFee) : 'Sin costo'}${business.minimumOrder > 0 ? ` · mínimo ${money(business.minimumOrder)}` : ''}${business.deliveryZone ? ` · ${esc(business.deliveryZone)}` : ''}`}</span>
               </span>
             </label>`).join('')}
         </div>
+        ${timesLine(business, fulfillment) ? `<p class="microcopy">${esc(timesLine(business, fulfillment))}</p>` : ''}
       </section>
 
-      <section class="checkout-section">
-        <h2 class="checkout-section-title">Tus datos</h2>
-        ${isConnected() && !isSignedIn() ? `<p class="microcopy">No hace falta crear una cuenta. El comercio usa estos datos sólo para este pedido.</p>` : ''}
+      <section class="checkout-step" aria-labelledby="paso-datos">
+        ${stepTitle('datos', 'Tus datos')}
+        ${isConnected() && !isSignedIn() ? '<p class="microcopy">No hace falta crear una cuenta. El comercio usa estos datos sólo para este pedido.</p>' : ''}
         <div class="field">
           <label for="checkout-name">Nombre y apellido</label>
           <input id="checkout-name" name="name" type="text" required minlength="2" maxlength="80"
@@ -950,123 +857,57 @@ async function viewCheckout(businessId) {
         <div class="field">
           <label for="checkout-phone">Teléfono de contacto</label>
           <input id="checkout-phone" name="phone" type="tel" required inputmode="tel" autocomplete="tel"
-            placeholder="2942 000000" value="${esc(stored.phone || (isSignedIn() ? actor().phone || '' : ''))}">
-          <p class="microcopy">El comercio te llama o escribe si hay algún cambio.</p>
+            placeholder="2942 000000" aria-describedby="checkout-phone-help" value="${esc(stored.phone || (isSignedIn() ? actor().phone || '' : ''))}">
+          <p class="microcopy" id="checkout-phone-help">El comercio te llama o escribe si hay algún cambio.</p>
         </div>
-        ${fulfillment === 'delivery' ? `
-          <div class="field">
-            <label for="checkout-address">Dirección de entrega</label>
-            <input id="checkout-address" name="address" type="text" required minlength="5" maxlength="200"
-              autocomplete="street-address" placeholder="Calle, número y referencia" value="${esc(stored.address || '')}">
-          </div>
-          ${business.deliveryZone ? `
-            <label class="check-label">
-              <input type="checkbox" name="zoneAcknowledged" ${stored.zoneAcknowledged ? 'checked' : ''}>
-              <span>Confirmo que la dirección está dentro de la zona de reparto del comercio (${esc(business.deliveryZone)}).</span>
-            </label>` : ''}` : ''}
+      </section>
+
+      ${delivery ? `
+      <section class="checkout-step" aria-labelledby="paso-direccion">
+        ${stepTitle('direccion', 'Dirección')}
         <div class="field">
-          <label for="checkout-notes">Notas para el comercio (opcional)</label>
-          <textarea id="checkout-notes" name="notes" rows="2" maxlength="280">${esc(stored.notes || '')}</textarea>
+          <label for="checkout-address">Dirección de entrega</label>
+          <input id="checkout-address" name="address" type="text" required minlength="5" maxlength="200"
+            autocomplete="street-address" placeholder="Calle, número y referencia" value="${esc(stored.address || '')}">
         </div>
+        ${business.deliveryZone ? `
+          <label class="check-label">
+            <input type="checkbox" name="zoneAcknowledged" ${stored.zoneAcknowledged ? 'checked' : ''}>
+            <span>Confirmo que la dirección está dentro de la zona de reparto del comercio (${esc(business.deliveryZone)}).</span>
+          </label>` : ''}
+      </section>` : ''}
+
+      <section class="checkout-step" aria-labelledby="paso-pago">
+        ${stepTitle('pago', 'Forma de pago')}
+        ${paymentMethodSelector(methods, chosen, { note: payNote })}
       </section>
 
-      <section class="checkout-section">
-        <h2 class="checkout-section-title">Forma de pago</h2>
-        ${app.repository.capabilities.orders ? `
-          <div class="choice-group" role="radiogroup" aria-label="Forma de pago">
-            <label class="choice active">
-              <input type="radio" name="paymentMethod" value="cash" checked>
-              <span class="choice-body"><strong>${fulfillment === 'delivery' ? 'Efectivo al recibir' : 'Efectivo al retirar'}</strong>
-                <span class="quiet">Se paga directamente al comercio</span></span>
-            </label>
-          </div>
-          <p class="microcopy">CAUCE no cobra ni intermedia el pago.</p>`
-        : `
-          <div class="choice-group" role="radiogroup" aria-label="Forma de pago">
-            <label class="choice ${(stored.paymentMethod || 'cash_demo') === 'cash_demo' ? 'active' : ''}">
-              <input type="radio" name="paymentMethod" value="cash_demo" ${(stored.paymentMethod || 'cash_demo') === 'cash_demo' ? 'checked' : ''}>
-              <span class="choice-body"><strong>Efectivo al recibir</strong><span class="quiet">Prueba · no se cobra nada</span></span>
-            </label>
-            <label class="choice ${stored.paymentMethod === 'transfer_demo' ? 'active' : ''}">
-              <input type="radio" name="paymentMethod" value="transfer_demo" ${stored.paymentMethod === 'transfer_demo' ? 'checked' : ''}>
-              <span class="choice-body"><strong>Transferencia al comercio</strong><span class="quiet">Prueba · no se cobra nada</span></span>
-            </label>
-          </div>
-          <p class="microcopy">Los pagos en línea no están habilitados en esta entrega. El pedido y el pago son estados independientes.</p>`}
+      <section class="checkout-step checkout-review" aria-labelledby="paso-confirmacion">
+        ${stepTitle('confirmacion', 'Confirmación')}
+        <ul class="review-lines" aria-label="Tu pedido">
+          ${detail.filter(item => !item.unavailable).map(({ line, product, variant }) => `<li>
+            <span>${line.quantity} × ${esc(product.name)}${variant ? ` · ${esc(variant.name)}` : ''}</span>
+          </li>`).join('')}
+        </ul>
+        ${quote ? totalsList(quote, fulfillment) : ''}
+        <div class="field">
+          <label for="checkout-notes">Nota para el comercio (opcional)</label>
+          <textarea id="checkout-notes" name="notes" rows="2" maxlength="280" placeholder="Por ejemplo: sin cebolla, timbre azul">${esc(stored.notes || '')}</textarea>
+        </div>
+        <p class="microcopy">${isConnected()
+          ? 'CAUCE confirma precios y disponibilidad al enviar. Si algo cambió, te lo mostramos antes de crear el pedido.'
+          : `El importe se recalcula ${isShared() ? 'en el servidor' : 'con el catálogo guardado'} al confirmar.`}</p>
+        ${confirmNotice({ online: onlineOffered })}
+        <button class="button button-confirm-order full" type="submit" data-online-label="Continuar al pago" data-cash-label="Confirmar pedido"
+          ${quote && app.online && business.open && !unavailableCount ? '' : 'disabled'}><span class="confirm-label">${
+          chosen === 'online' ? 'Continuar al pago' : 'Confirmar pedido'}</span>${quote ? ` · ${money(quote.total)}` : ''}</button>
+        ${!app.online && isShared() ? '<p class="microcopy">Sin conexión no se confirma. Reintentá cuando vuelva.</p>' : ''}
       </section>
-
-      <section class="checkout-section checkout-total">
-        <h2 class="checkout-section-title">Total</h2>
-        ${quote ? `
-          <dl class="totals">
-            <div><dt>Subtotal</dt><dd>${money(quote.subtotal)}</dd></div>
-            <div><dt>${fulfillment === 'delivery' ? 'Envío' : 'Retiro'}</dt><dd>${fulfillment === 'delivery' ? money(quote.deliveryFee) : 'Sin costo'}</dd></div>
-            <div class="totals-final"><dt>Total</dt><dd>${money(quote.total)}</dd></div>
-          </dl>
-          <p class="microcopy">${isConnected()
-            ? 'CAUCE confirma precios y disponibilidad al enviar. Si algo cambió, te lo mostramos antes de crear el pedido.'
-            : `El importe se recalcula ${isShared() ? 'en el servidor' : 'con el catálogo guardado'} al confirmar.`}</p>`
-        : `<p class="quiet">${unavailableCount ? 'Quitá los productos no disponibles para ver el total.' : 'No se puede calcular el total hasta resolver los avisos de arriba.'}</p>`}
-      </section>
-
-      ${confirmNotice()}
-
-      <button class="button button-confirm-order full" type="submit"
-        ${quote && app.online && business.open ? '' : 'disabled'}>Confirmar pedido${quote ? ` · ${money(quote.total)}` : ''}</button>
-      ${!app.online && isShared() ? '<p class="microcopy">Sin conexión no se confirma. Reintentá cuando vuelva.</p>' : ''}
     </form>`;
 }
 
 // Enlace de seguimiento: abre el pedido desde cualquier dispositivo, sin sesión.
 const trackingUrl = token => new URL(`index.html#seguimiento/${token}`, location.href.split('#')[0]).href;
-
-function orderTimeline(order) {
-  const steps = stepsFor(order.fulfillment);
-  const current = stepIndex(order);
-  const reached = new Map((order.history || []).map(step => [step.status, step.at]));
-  return `<ol class="timeline" aria-label="Estado del pedido">
-    ${steps.map((step, index) => `
-      <li class="timeline-step ${index < current ? 'done' : index === current ? 'current' : ''}"
-        ${index === current ? 'aria-current="step"' : ''}>
-        <span class="timeline-dot" aria-hidden="true"></span>
-        <span>${esc(orderStatusLabel({ ...order, status: step }))}${reached.get(step) ? ` <span class="quiet">· ${esc(timeOnly(reached.get(step)))}</span>` : ''}</span>
-      </li>`).join('')}
-  </ol>`;
-}
-
-function orderDetail(order) {
-  return `<section class="checkout-section">
-      <h2 class="checkout-section-title">Detalle</h2>
-      <ul class="cart-lines-list">
-        ${order.lines.map(line => `
-          <li class="cart-line">
-            <div class="cart-line-product">
-              ${productThumb(line, line.name)}
-              <div class="cart-line-info">
-                <span class="cart-line-title">${esc(line.name)}</span>
-                <span class="cart-line-unit-price">${line.quantity} × ${money(line.unitPrice)}</span>
-              </div>
-            </div>
-            <span class="cart-line-total">${money(line.total)}</span>
-          </li>`).join('')}
-      </ul>
-      <dl class="totals">
-        <div><dt>Subtotal</dt><dd>${money(order.subtotal)}</dd></div>
-        <div><dt>Envío</dt><dd>${order.deliveryFee > 0 ? money(order.deliveryFee) : 'Sin costo'}</dd></div>
-        <div class="totals-final"><dt>Total</dt><dd>${money(order.total)}</dd></div>
-      </dl>
-      <p class="microcopy">Pago: ${esc(paymentLabel(order.paymentMethod))}${order.status === 'delivered' ? '' : ' · se paga al comercio en la entrega.'}</p>
-      ${order.deliveryCode && order.status !== 'delivered' ? `<p class="microcopy">Código de entrega: <strong>${esc(formatDeliveryCode(order.deliveryCode.code))}</strong> · decíselo a quien te entrega el pedido.</p>` : ''}
-      ${order.customer?.address ? `<p class="microcopy">Dirección: ${esc(order.customer.address)}</p>` : ''}
-    </section>`;
-}
-
-function cancellationNotice(order) {
-  return `<div class="notice ${order.cancellation?.kind === 'rejected' ? 'error' : ''}" role="status">
-    <strong>${order.cancellation?.kind === 'rejected' ? 'El comercio no pudo tomar el pedido.' : 'Pedido cancelado.'}</strong>
-    ${order.cancellation?.reason ? `Motivo: ${esc(order.cancellation.reason)}` : ''}
-  </div>`;
-}
 
 async function viewOrder(orderId) {
   // Sin ninguna sesión (otro navegador, datos borrados) la base no deja leer
@@ -1082,6 +923,7 @@ async function viewOrder(orderId) {
   const businessName = business?.name || 'Comercio';
   const canceled = order.status === 'canceled';
   const closed = canceled || order.status === 'delivered';
+  const times = !closed && business ? timesLine(business, order.fulfillment) : '';
 
   return `
     ${offlineBanner()}
@@ -1092,10 +934,17 @@ async function viewOrder(orderId) {
       <p class="quiet">${esc(fulfillmentLabel(order.fulfillment))} · ${esc(shortDate(order.createdAt))}</p>
     </section>
 
-    ${canceled ? cancellationNotice(order) : orderTimeline(order)}
-    ${canceled || !business ? '' : renderOrderMoment(order)}
-    ${canceled || !business ? '' : renderDeliveryTracking(order, business)}
-    ${!closed && business && timesLine(business, order.fulfillment) ? `<p class="microcopy">Tiempo estimado declarado por el comercio: ${esc(timesLine(business, order.fulfillment))}.</p>` : ''}
+    ${canceled ? cancellationNotice(order) : orderStatusHero(order, { times,
+      place: order.fulfillment === 'delivery' ? order.customer?.address : business?.address,
+      courier: order.riderName || (business ? `Reparto de ${business.name}` : '') })}
+    ${orderPaymentNotice(order, { canPay: isConnected() && !closed && order.customerId === actor()?.id, online: app.online })}
+    ${deliveryCodeCard(order)}
+    ${canceled ? '' : orderTimeline(order)}
+
+    ${isConnected() && business && !closed ? `<section class="checkout-section order-contact">
+      <h2 class="checkout-section-title">¿Necesitás hablar con ${esc(businessName)}?</h2>
+      ${contactButtons(business) || '<p class="quiet">El comercio no publicó un teléfono.</p>'}
+    </section>` : ''}
 
     ${isConnected() && order.trackingToken && !closed ? `
     <section class="checkout-section tracking-share">
@@ -1107,15 +956,10 @@ async function viewOrder(orderId) {
       </div>
     </section>` : ''}
 
-    ${isConnected() && business && !closed ? `<section class="checkout-section">
-      <h2 class="checkout-section-title">¿Necesitás hablar con ${esc(businessName)}?</h2>
-      ${contactButtons(business) || '<p class="quiet">El comercio no publicó un teléfono.</p>'}
-    </section>` : ''}
-
-    ${orderDetail(order)}
+    ${orderDetails(order, { open: closed })}
 
     ${allowedActions(order, { kind: 'customer', id: order.customerId }).includes('canceled') ? `
-      <button class="button danger full" type="button" data-action="cancel-order"
+      <button class="button button-outline-danger full" type="button" data-action="cancel-order"
         data-order="${esc(order.id)}" data-version="${order.version}">Cancelar pedido</button>
       <p class="microcopy">Podés cancelar mientras el comercio no lo haya aceptado.</p>` : ''}`;
 }
@@ -1131,6 +975,7 @@ async function viewTracking(token) {
     throw error;
   }
   const canceled = order.status === 'canceled';
+  const closed = canceled || order.status === 'delivered';
   return `
     ${offlineBanner()}
     <section class="page-header">
@@ -1138,14 +983,30 @@ async function viewTracking(token) {
       <h1 class="page-title">${esc(order.business.name)}</h1>
       <p class="quiet">${esc(fulfillmentLabel(order.fulfillment))} · ${esc(shortDate(order.createdAt))}</p>
     </section>
-    ${canceled ? cancellationNotice(order) : orderTimeline(order)}
-    ${canceled ? '' : renderOrderMoment(order)}
-    ${canceled ? '' : renderDeliveryTracking(order, order.business)}
-    ${!canceled && order.status !== 'delivered' && timesLine(order.business, order.fulfillment)
-      ? `<p class="microcopy">Tiempo estimado declarado por el comercio: ${esc(timesLine(order.business, order.fulfillment))}.</p>` : ''}
-    ${canceled || order.status === 'delivered' ? '' : contactButtons(order.business)}
-    ${orderDetail(order)}
+    ${canceled ? cancellationNotice(order) : orderStatusHero(order, { times: closed ? '' : timesLine(order.business, order.fulfillment),
+      place: order.fulfillment === 'delivery' ? order.customer?.address : order.business.address,
+      courier: `Reparto de ${order.business.name}` })}
+    ${orderPaymentNotice(order)}
+    ${deliveryCodeCard(order)}
+    ${canceled ? '' : orderTimeline(order)}
+    ${closed ? '' : contactButtons(order.business)}
+    ${orderDetails(order, { open: closed })}
     <p class="microcopy">Esta página se actualiza sola cada medio minuto.</p>`;
+}
+
+// Vuelta desde el proveedor de pagos. La ruta sólo dice por dónde volvió la
+// persona: el resultado sale de leer el pago en la base (intento o pedido).
+async function viewPaymentReturn(outcome) {
+  const known = RETURN_OUTCOMES.includes(outcome) ? outcome : 'pendiente';
+  if (!isConnected()) {
+    app.paymentWaiting = false;
+    return emptyState('Pagos online no habilitados', 'En esta demostración los pedidos se pagan al comercio.',
+      '#actividad', 'Mis pedidos', 'bag');
+  }
+  const reference = paymentReturnReference(location.hash, location.search);
+  const payment = actor()?.id ? await app.repository.query('paymentStatus', { reference }) : null;
+  app.paymentWaiting = Boolean(payment && payment.paymentMethod === 'online' && isWaitingPayment(payment.paymentStatus));
+  return `${offlineBanner()}${paymentReturnView(known, payment)}`;
 }
 
 async function viewActivity() {
@@ -1157,21 +1018,30 @@ async function viewActivity() {
   ]);
   const nameOf = id => businesses.find(business => business.id === id)?.name || 'Comercio';
   const tab = taxi ? app.activityTab : 'pedidos';
+  const orderItem = order => `
+    <a class="op-card" href="#pedido/${esc(order.id)}">
+      ${order.lines?.[0]?.image
+        ? productThumb(order.lines[0], order.lines[0].name, 'op-card-thumb')
+        : `<span class="op-card-icon">${renderIcon('receipt', 18)}</span>`}
+      <span class="op-card-body">
+        <strong>${esc(nameOf(order.businessId))}</strong>
+        <span class="quiet">${esc(order.code)} · ${esc(shortDate(order.createdAt))} · ${money(order.total)}</span>
+        ${order.paymentMethod === 'online' ? paymentBadge(order) : ''}
+      </span>
+      <span class="status-chip ${orderStatusTone(order.status)}">${esc(orderStatusLabel(order))}</span>
+    </a>`;
+  const active = orders.filter(order => !['delivered', 'canceled'].includes(order.status));
+  const past = orders.filter(order => ['delivered', 'canceled'].includes(order.status));
 
   const ordersList = orders.length ? `
-    <div class="stack">
-      ${orders.map(order => `
-        <a class="op-card" href="#pedido/${esc(order.id)}">
-          ${order.lines?.[0]?.image
-            ? productThumb(order.lines[0], order.lines[0].name, 'op-card-thumb')
-            : `<span class="op-card-icon">${renderIcon('receipt', 18)}</span>`}
-          <span class="op-card-body">
-            <strong>${esc(order.code)} · ${esc(nameOf(order.businessId))}</strong>
-            <span class="quiet">${esc(shortDate(order.createdAt))} · ${money(order.total)}</span>
-          </span>
-          <span class="status-chip ${orderStatusTone(order.status)}">${esc(orderStatusLabel(order))}</span>
-        </a>`).join('')}
-    </div>`
+    ${active.length ? `<section class="activity-group" aria-labelledby="actividad-curso">
+      <h2 class="checkout-section-title" id="actividad-curso">En curso</h2>
+      <div class="stack">${active.map(orderItem).join('')}</div>
+    </section>` : ''}
+    ${past.length ? `<section class="activity-group" aria-labelledby="actividad-anteriores">
+      <h2 class="checkout-section-title" id="actividad-anteriores">Anteriores</h2>
+      <div class="stack">${past.map(orderItem).join('')}</div>
+    </section>` : ''}`
     : emptyState('Todavía no hiciste pedidos', 'Cuando pidas a un comercio, vas a ver acá el estado y el detalle.',
       '#comercios', 'Ver comercios', 'bag');
 
@@ -1212,18 +1082,16 @@ async function viewActivity() {
 
     <section class="home-block home-secondary">
       ${isSignedIn() ? `
-        <button class="secondary-access" type="button" data-action="sign-out">
+        <a class="secondary-access" href="#cuenta">
           <span class="secondary-access-icon" aria-hidden="true">${renderIcon('user', 26)}</span>
-          <span><strong>Cerrar sesión</strong><span class="quiet">${esc(actor().email || '')}</span></span>
-        </button>` : `
+          <span><strong>Tu cuenta</strong><span class="quiet">${esc(actor().email || '')} · accesos, datos y cierre de sesión</span></span>
+        </a>` : `
         <a class="secondary-access" href="#cuenta">
           <span class="secondary-access-icon" aria-hidden="true">${renderIcon('user', 26)}</span>
           <span><strong>Ingresar o crear cuenta</strong><span class="quiet">${taxi ? 'Necesaria para comercios, taxistas y administración.' : 'Para comercios y su equipo. Para comprar no hace falta.'}</span></span>
         </a>`}
       ${hasRole('merchant') ? `<a class="secondary-access" href="#panel"><span class="secondary-access-icon" aria-hidden="true">${renderIcon('store', 26)}</span><span><strong>Panel de mi comercio</strong><span class="quiet">Pedidos, catálogo y reparto.</span></span></a>` : ''}
       ${hasRole('rider') ? `<a class="secondary-access" href="#entregas"><span class="secondary-access-icon" aria-hidden="true">${renderIcon('delivery', 26)}</span><span><strong>Mis entregas</strong><span class="quiet">Los pedidos que te asignó el comercio.</span></span></a>` : ''}
-      ${hasRole('driver') && taxi ? `<a class="secondary-access" href="#taxista"><span class="secondary-access-icon" aria-hidden="true">${renderIcon('taxi', 26)}</span><span><strong>Panel de taxista</strong><span class="quiet">Disponibilidad y solicitudes.</span></span></a>` : ''}
-      ${hasRole('admin') ? `<a class="secondary-access" href="#admin"><span class="secondary-access-icon" aria-hidden="true">${renderIcon('shield-check', 26)}</span><span><strong>Administración</strong><span class="quiet">Altas pendientes y supervisión.</span></span></a>` : ''}
       ${app.repository.capabilities.reset ? `
         <button class="secondary-access quiet-access" type="button" data-action="reset-demo">
           <span class="secondary-access-icon" aria-hidden="true">${renderIcon('key', 26)}</span>
@@ -1237,23 +1105,28 @@ async function viewActivity() {
 async function viewAccount() {
   const notice = app.authNotice ? `<div class="notice" role="status">${esc(app.authNotice)}</div>` : '';
   if (isSignedIn()) {
+    const access = (href, icon, title, hint) => `<a class="secondary-access" href="${href}">
+      <span class="secondary-access-icon" aria-hidden="true">${renderIcon(icon, 24)}</span>
+      <span><strong>${esc(title)}</strong><span class="quiet">${esc(hint)}</span></span></a>`;
     return `
-      ${backLink('#actividad', 'Mi actividad')}
+      ${backLink('#actividad', 'Mis pedidos')}
       <section class="page-header">
         <h1 class="page-title">Tu cuenta</h1>
         <p class="quiet">${esc(actor().name)} · ${esc(actor().email || 'sin correo')}</p>
       </section>
       ${notice}
       <section class="checkout-section">
-        <h2 class="checkout-section-title">Accesos</h2>
-        <p class="quiet">Accesos: ${esc(actor().roles.map(role => ROLE_LABELS[role] || role).join(' · '))}</p>
+        <h2 class="checkout-section-title">Tus accesos</h2>
         <div class="stack">
-          ${hasRole('merchant') ? '<a class="button secondary" href="#panel">Panel de mi comercio</a>' : '<a class="button secondary" href="#alta-comercio">Sumar mi comercio</a>'}
-          ${hasRole('rider') ? '<a class="button secondary" href="#entregas">Mis entregas</a>' : ''}
-          ${!feature('taxi') ? '' : hasRole('driver') ? '<a class="button secondary" href="#taxista">Panel de taxista</a>' : '<a class="button secondary" href="#taxista">Registrarme como taxista</a>'}
-          ${hasRole('admin') ? '<a class="button secondary" href="#admin">Administración</a>' : ''}
-          <button class="button danger" type="button" data-action="sign-out">Cerrar sesión</button>
+          ${hasRole('merchant') ? access('#panel', 'store', 'Panel de mi comercio', 'Pedidos, catálogo, reparto y horarios.')
+            : access('#alta-comercio', 'store', 'Sumar mi comercio', 'Creá tu comercio y cargá tu catálogo.')}
+          ${hasRole('rider') ? access('#entregas', 'delivery', 'Mis entregas', 'Los pedidos que te asignó el comercio.') : ''}
+          ${!feature('taxi') ? '' : hasRole('driver') ? access('#taxista', 'taxi', 'Panel de taxista', 'Disponibilidad y solicitudes.')
+            : access('#taxista', 'taxi', 'Registrarme como taxista', 'Completá tu alta.')}
+          ${hasRole('admin') ? access('#admin', 'shield-check', 'Administración', 'Altas, comercios y el día en CAUCE.') : ''}
+          ${access('#actividad', 'receipt', 'Mis pedidos', 'Lo que pediste y su estado.')}
         </div>
+        <p class="microcopy">Roles: ${esc(actor().roles.map(role => ROLE_LABELS[role] || role).join(' · '))}.</p>
       </section>
       ${app.repository.capabilities.accountManagement ? `
         <form class="checkout-form" data-form="profile-update">
@@ -1268,22 +1141,26 @@ async function viewAccount() {
           </div>
           <button class="button full" type="submit" ${app.online ? '' : 'disabled'}>Guardar perfil</button>
         </form>
-        <form class="checkout-form" data-form="password-update">
-          <h2 class="checkout-section-title">Cambiar contraseña</h2>
-          <div class="field">
-            <label for="current-password">Contraseña actual</label>
-            <input id="current-password" name="currentPassword" type="password" required autocomplete="current-password">
-          </div>
-          <div class="field">
-            <label for="new-password">Nueva contraseña</label>
-            <input id="new-password" name="password" type="password" required minlength="10" autocomplete="new-password">
-            <p class="microcopy">Al menos 10 caracteres, combinando letras y números.</p>
-          </div>
-          <button class="button secondary full" type="submit" ${app.online ? '' : 'disabled'}>Guardar contraseña</button>
-        </form>` : ''}`;
+        <details class="account-help" data-keep-open="cuenta-clave" ${app.openDetails.has('cuenta-clave') ? 'open' : ''}>
+          <summary>Cambiar contraseña</summary>
+          <form class="checkout-form" data-form="password-update">
+            <div class="field">
+              <label for="current-password">Contraseña actual</label>
+              <input id="current-password" name="currentPassword" type="password" required autocomplete="current-password">
+            </div>
+            <div class="field">
+              <label for="new-password">Nueva contraseña</label>
+              <input id="new-password" name="password" type="password" required minlength="10" autocomplete="new-password" aria-describedby="new-password-help">
+              <p class="microcopy" id="new-password-help">Al menos 10 caracteres, combinando letras y números.</p>
+            </div>
+            <button class="button secondary full" type="submit" ${app.online ? '' : 'disabled'}>Guardar contraseña</button>
+          </form>
+        </details>` : ''}
+      <button class="button button-outline-danger full account-signout" type="button" data-action="sign-out">Cerrar sesión</button>`;
   }
 
   const identities = app.repository.capabilities.demoIdentities ? await app.repository.identities() : [];
+  const tab = app.accountTab === 'crear' ? 'crear' : 'ingresar';
 
   return `
     ${offlineBanner()}
@@ -1297,59 +1174,75 @@ async function viewAccount() {
     ${notice}
 
     ${app.repository.capabilities.passwordAuth ? `
-      <form class="checkout-form" data-form="sign-in">
-        <h2 class="checkout-section-title">Ya tengo cuenta</h2>
-        <div class="field">
-          <label for="signin-email">Correo</label>
-          <input id="signin-email" name="email" type="email" required autocomplete="email" inputmode="email">
-        </div>
-        <div class="field">
-          <label for="signin-password">Contraseña</label>
-          <input id="signin-password" name="password" type="password" required autocomplete="current-password">
-        </div>
-        <button class="button full" type="submit" ${app.online ? '' : 'disabled'}>Ingresar</button>
-      </form>
+      <div class="tabs account-tabs" role="tablist" aria-label="Ingresar o crear una cuenta">
+        <button class="tab ${tab === 'ingresar' ? 'active' : ''}" type="button" role="tab" id="tab-ingresar"
+          aria-selected="${tab === 'ingresar'}" aria-controls="cuenta-ingresar" data-action="set-account-tab" data-tab="ingresar">Ingresar</button>
+        <button class="tab ${tab === 'crear' ? 'active' : ''}" type="button" role="tab" id="tab-crear"
+          aria-selected="${tab === 'crear'}" aria-controls="cuenta-crear" data-action="set-account-tab" data-tab="crear">Crear cuenta</button>
+      </div>
 
-      <form class="checkout-form" data-form="register">
-        <h2 class="checkout-section-title">Crear una cuenta</h2>
-        <div class="field">
-          <label for="reg-name">Nombre y apellido</label>
-          <input id="reg-name" name="name" type="text" required minlength="2" maxlength="80" autocomplete="name">
-        </div>
-        <div class="field">
-          <label for="reg-email">Correo</label>
-          <input id="reg-email" name="email" type="email" required autocomplete="email" inputmode="email">
-        </div>
-        <div class="field">
-          <label for="reg-phone">Teléfono</label>
-          <input id="reg-phone" name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="2942 000000">
-        </div>
-        <div class="field">
-          <label for="reg-password">Contraseña</label>
-          <input id="reg-password" name="password" type="password" required minlength="10" autocomplete="new-password">
-          <p class="microcopy">Al menos 10 caracteres, combinando letras y números.</p>
-        </div>
-        <button class="button full" type="submit" ${app.online ? '' : 'disabled'}>Crear cuenta</button>
-      </form>
+      <div class="account-panel" role="tabpanel" id="cuenta-ingresar" aria-labelledby="tab-ingresar" data-account-panel="ingresar" ${tab === 'ingresar' ? '' : 'hidden'}>
+        <form class="checkout-form" data-form="sign-in">
+          <h2 class="checkout-section-title">Ya tengo cuenta</h2>
+          <div class="field">
+            <label for="signin-email">Correo</label>
+            <input id="signin-email" name="email" type="email" required autocomplete="email" inputmode="email">
+          </div>
+          <div class="field">
+            <label for="signin-password">Contraseña</label>
+            <input id="signin-password" name="password" type="password" required autocomplete="current-password">
+          </div>
+          <button class="button full" type="submit" ${app.online ? '' : 'disabled'}>Ingresar</button>
+        </form>
+        ${app.repository.capabilities.accountManagement ? `
+        <details class="account-help" data-keep-open="cuenta-recuperar" ${app.openDetails.has('cuenta-recuperar') ? 'open' : ''}>
+          <summary>¿Olvidaste tu contraseña?</summary>
+          <form class="checkout-form" data-form="password-reset">
+            <div class="field">
+              <label for="reset-email">Correo de tu cuenta</label>
+              <input id="reset-email" name="email" type="email" required autocomplete="email" inputmode="email">
+            </div>
+            <button class="button secondary full" type="submit" ${app.online ? '' : 'disabled'}>Enviar enlace de recuperación</button>
+            <p class="microcopy">Te llega un enlace que sirve una sola vez y dura una hora.</p>
+          </form>
+        </details>` : ''}
+        ${app.repository.capabilities.accountManagement ? `
+        <details class="account-help" data-keep-open="cuenta-reenviar" ${app.openDetails.has('cuenta-reenviar') ? 'open' : ''}>
+          <summary>¿No te llegó el correo de confirmación?</summary>
+          <form class="checkout-form" data-form="resend-confirmation">
+            <div class="field">
+              <label for="resend-email">Correo con el que te registraste</label>
+              <input id="resend-email" name="email" type="email" required autocomplete="email" inputmode="email">
+            </div>
+            <button class="button secondary full" type="submit" ${app.online ? '' : 'disabled'}>Reenviar confirmación</button>
+            <p class="microcopy">Revisá también la carpeta de correo no deseado.</p>
+          </form>
+        </details>` : ''}
+      </div>
 
-      ${app.repository.capabilities.accountManagement ? `
-      <form class="checkout-form" data-form="password-reset">
-        <h2 class="checkout-section-title">Recuperar contraseña</h2>
-        <div class="field">
-          <label for="reset-email">Correo de tu cuenta</label>
-          <input id="reset-email" name="email" type="email" required autocomplete="email" inputmode="email">
-        </div>
-        <button class="button secondary full" type="submit" ${app.online ? '' : 'disabled'}>Enviar enlace de recuperación</button>
-      </form>
-      <form class="checkout-form" data-form="resend-confirmation">
-        <h2 class="checkout-section-title">¿No te llegó el correo de confirmación?</h2>
-        <div class="field">
-          <label for="resend-email">Correo con el que te registraste</label>
-          <input id="resend-email" name="email" type="email" required autocomplete="email" inputmode="email">
-        </div>
-        <button class="button secondary full" type="submit" ${app.online ? '' : 'disabled'}>Reenviar confirmación</button>
-        <p class="microcopy">Revisá también la carpeta de correo no deseado.</p>
-      </form>` : ''}`
+      <div class="account-panel" role="tabpanel" id="cuenta-crear" aria-labelledby="tab-crear" data-account-panel="crear" ${tab === 'crear' ? '' : 'hidden'}>
+        <form class="checkout-form" data-form="register">
+          <h2 class="checkout-section-title">Crear una cuenta</h2>
+          <div class="field">
+            <label for="reg-name">Nombre y apellido</label>
+            <input id="reg-name" name="name" type="text" required minlength="2" maxlength="80" autocomplete="name">
+          </div>
+          <div class="field">
+            <label for="reg-email">Correo</label>
+            <input id="reg-email" name="email" type="email" required autocomplete="email" inputmode="email">
+          </div>
+          <div class="field">
+            <label for="reg-phone">Teléfono</label>
+            <input id="reg-phone" name="phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="2942 000000">
+          </div>
+          <div class="field">
+            <label for="reg-password">Contraseña</label>
+            <input id="reg-password" name="password" type="password" required minlength="10" autocomplete="new-password" aria-describedby="reg-password-help">
+            <p class="microcopy" id="reg-password-help">Al menos 10 caracteres, combinando letras y números.</p>
+          </div>
+          <button class="button full" type="submit" ${app.online ? '' : 'disabled'}>Crear cuenta</button>
+        </form>
+      </div>`
     : `
       <div class="notice">
         <strong>Esta demostración no usa contraseñas.</strong>
@@ -1472,6 +1365,7 @@ async function viewBusinessSignup() {
 }
 
 async function viewMerchantPanel(businessId) {
+  const shownToken = renderToken;
   if (!isSignedIn()) {
     // Sesión vencida o cerrada: después de ingresar vuelve a esta misma sección.
     if (businessId) app.returnTo = location.hash;
@@ -1522,7 +1416,7 @@ async function viewMerchantPanel(businessId) {
   const role = business.membershipRole || 'owner';
   const canManage = canManageBusiness(role);
   const connected = isConnected();
-  const sections = panelSections(role, { connected });
+  const sections = panelSections(role, { connected, payments: paymentsOnline() });
   const section = resolveSection(route().extra, sections);
 
   const [orders, products, riders, categories, team, serverRequirements, productCategories, riderAccounts] = await Promise.all([
@@ -1536,16 +1430,20 @@ async function viewMerchantPanel(businessId) {
     connected && section === 'catalogo' ? app.repository.query('productCategories', { businessId }) : [],
     connected && canManage && section === 'reparto' ? app.repository.query('riderAccounts', { businessId }) : {},
   ]);
+  // Pagos: estado de la cuenta y números reales del día, leídos de la base.
+  const paymentOverview = section === 'pagos' ? await app.repository.query('businessPaymentOverview', { businessId }) : null;
   const requirements = serverRequirements || missingPublicationRequirements(business, products);
 
-  // Pedidos nuevos desde la última vez que el panel los vio: aviso sonoro y
-  // visual. La primera carga sólo registra lo que ya estaba.
-  const seen = app.seenOrders.get(businessId);
-  const { pending, fresh } = freshOrderIds(orders, seen);
-  app.seenOrders.set(businessId, new Set([...(seen || []), ...pending]));
-  if (fresh.length) announceNewOrders(fresh.length);
-  else if (!pending.length) clearOrderAlert();
-  hideFloatingOrderAlert();
+  // Pedidos nuevos desde la última vez que el panel los mostró: aviso sonoro y
+  // visual. La primera carga sólo registra lo que ya estaba. Cuenta recién al
+  // mostrarse: un refresco que se descarta no los da por vistos.
+  const { pending, fresh } = freshOrderIds(orders, app.seenOrders.get(businessId));
+  whenShown = { token: shownToken, run() {
+    app.seenOrders.set(businessId, new Set([...(app.seenOrders.get(businessId) || []), ...pending]));
+    if (fresh.length) announceNewOrders(fresh.length);
+    else if (!pending.length) clearOrderAlert();
+    hideFloatingOrderAlert();
+  } };
   app.panelSyncedAt = new Date();
 
   const context = { businessId: business.id, localityId: business.localityId, connected, riders, fresh,
@@ -1572,6 +1470,9 @@ async function viewMerchantPanel(businessId) {
       ${canManage ? merchantRidersTab(business, riders, riderAccounts) : ''}`;
   } else if (section === 'equipo') {
     content = teamTab(business, team, { isOwner: role === 'owner', role });
+  } else if (section === 'pagos') {
+    content = paymentsSection(paymentOverview, { businessId: business.id, isOwner: role === 'owner', online: app.online,
+      connection: connectionResult(location.hash) });
   }
 
   return `
@@ -2090,17 +1991,22 @@ async function viewAdmin() {
     </article>`;
 
   const counter = (label, value) => `<div class="metric"><dt>${esc(label)}</dt><dd>${value}</dd></div>`;
+  const pendingCount = queue.businesses.length + (feature('taxi') ? queue.drivers.length : 0);
 
+  // Primero lo que espera una decisión, después lo que necesita atención y
+  // recién ahí los números. Lo histórico y los errores, plegados.
   return `
     ${offlineBanner()}
-    <section class="page-header">
-      <h1 class="page-title">Administración</h1>
-      <p class="quiet">Revisión de altas y supervisión agregada de la operación.</p>
+    <section class="page-header admin-header">
+      <div>
+        <h1 class="page-title">Administración</h1>
+        <p class="quiet">${pendingCount ? `${pluralize(pendingCount, 'solicitud espera', 'solicitudes esperan')} revisión.` : 'Sin solicitudes pendientes.'}
+          ${!pilot ? '' : (pilot.stuckTotal ?? pilot.stuck.length)
+            ? ` ${pluralize(pilot.stuckTotal ?? pilot.stuck.length, 'pedido necesita', 'pedidos necesitan')} atención.`
+            : ' Ningún pedido demorado.'}</p>
+      </div>
       ${isConnected() ? `<button class="button secondary" type="button" data-action="retry">${renderIcon('refresh', 16)} Actualizar</button>` : ''}
     </section>
-
-    ${pilot ? `${pilotToday(pilot)}${pilotIncidents(pilot.stuck, pilot.stuckTotal)}` : isConnected()
-      ? '<div class="notice error" role="alert">No se pudieron leer los números de hoy. Actualizá en un momento.</div>' : ''}
 
     <section class="panel-section">
       <h2 class="checkout-section-title">Comercios pendientes (${queue.businesses.length})</h2>
@@ -2114,23 +2020,38 @@ async function viewAdmin() {
         : '<p class="quiet">No hay altas de conductores esperando revisión.</p>'}
     </section>` : ''}
 
+    ${pilot ? `${pilotIncidents(pilot.stuck, pilot.stuckTotal)}${pilotToday(pilot)}` : isConnected()
+      ? '<div class="notice error" role="alert">No se pudieron leer los números de hoy. Actualizá en un momento.</div>' : ''}
+
     ${isConnected() ? `<section class="panel-section">
       <h2 class="checkout-section-title">Comercios publicados (${published.length})</h2>
       ${published.length ? `<ul class="plain-list admin-business-list">${published.map(item => `
-        <li><span><strong>${esc(item.name)}</strong> · ${esc(businessStatusLabel(item.status))} · ${esc(item.category || 'sin rubro')}
-          ${businessTodayLine(todayOf.get(item.id))}</span>
-          <button class="link-button danger" type="button" data-action="admin-business-status" data-business="${esc(item.id)}"
+        <li>
+          <span class="admin-business-main"><strong>${esc(item.name)}</strong>
+            <span class="status-chip ${item.status === 'active' ? 'done' : 'received'}">${esc(businessStatusLabel(item.status))}</span>
+            <span class="quiet">${esc(item.category || 'sin rubro')}</span>
+            ${businessTodayLine(todayOf.get(item.id))}</span>
+          <button class="link-button danger admin-business-action" type="button" data-action="admin-business-status" data-business="${esc(item.id)}"
             data-status="suspended" data-name="${esc(item.name)}">Suspender</button></li>`).join('')}</ul>`
         : '<p class="quiet">Todavía no hay comercios publicados.</p>'}
       ${suspended.length ? `<h3 class="checkout-section-title">Suspendidos (${suspended.length})</h3>
       <ul class="plain-list admin-business-list">${suspended.map(item => `
-        <li><span><strong>${esc(item.name)}</strong>${item.reviewNote ? ` · ${esc(item.reviewNote)}` : ''}</span>
-          <button class="link-button" type="button" data-action="admin-business-status" data-business="${esc(item.id)}"
+        <li><span class="admin-business-main"><strong>${esc(item.name)}</strong>${item.reviewNote ? ` <span class="quiet">${esc(item.reviewNote)}</span>` : ''}</span>
+          <button class="link-button admin-business-action" type="button" data-action="admin-business-status" data-business="${esc(item.id)}"
             data-status="active" data-name="${esc(item.name)}">Rehabilitar</button></li>`).join('')}</ul>` : ''}
     </section>` : ''}
 
-    <section class="panel-section">
-      <h2 class="checkout-section-title">Operación registrada desde el inicio</h2>
+    ${isConnected() ? `<details class="panel-section admin-fold">
+      <summary><span class="checkout-section-title">Errores recientes en dispositivos (${events.length})</span></summary>
+      ${events.length ? `<ul class="plain-list event-list">${events.map(event => `
+        <li><span class="quiet">${esc(shortDate(event.created_at))}</span> · <strong>${esc(event.kind)}</strong> · ${esc(event.code)}
+          ${event.route ? `· ${esc(event.route)}` : ''}<br><span class="microcopy">${esc(event.message)}</span></li>`).join('')}</ul>`
+        : '<p class="quiet">Sin errores registrados.</p>'}
+      <p class="microcopy">Sin datos personales: correos, teléfonos y tokens se descartan antes de guardar.</p>
+    </details>` : ''}
+
+    <details class="panel-section admin-fold" ${isConnected() ? '' : 'open'}>
+      <summary><span class="checkout-section-title">Operación registrada desde el inicio</span></summary>
       <p class="microcopy">Origen: ${esc(metrics.source)} Nada de esto es una proyección ni una estimación.</p>
       <dl class="metrics-grid">
         ${counter('Comercios publicados', metrics.businesses.active || 0)}
@@ -2143,16 +2064,7 @@ async function viewAdmin() {
         ${feature('taxi') ? counter('Viajes aceptados', metrics.trips.accepted) : ''}
       </dl>
       <p class="microcopy">Vista agregada: no incluye direcciones de clientes, teléfonos ni recorridos individuales.</p>
-    </section>
-
-    ${isConnected() ? `<section class="panel-section">
-      <h2 class="checkout-section-title">Errores recientes en dispositivos (${events.length})</h2>
-      ${events.length ? `<ul class="plain-list event-list">${events.map(event => `
-        <li><span class="quiet">${esc(shortDate(event.created_at))}</span> · <strong>${esc(event.kind)}</strong> · ${esc(event.code)}
-          ${event.route ? `· ${esc(event.route)}` : ''}<br><span class="microcopy">${esc(event.message)}</span></li>`).join('')}</ul>`
-        : '<p class="quiet">Sin errores registrados.</p>'}
-      <p class="microcopy">Sin datos personales: correos, teléfonos y tokens se descartan antes de guardar.</p>
-    </section>` : ''}`;
+    </details>`;
 }
 
 // ───────────────────────── taxis ─────────────────────────
@@ -2596,6 +2508,42 @@ async function viewInstitutional() {
 
 // ───────────────────────── acciones ─────────────────────────
 
+// Errores de validación que tienen un campo: el mensaje queda junto al campo,
+// el campo se marca como inválido y recibe el foco (además del aviso).
+const FIELD_ERRORS = Object.freeze({
+  INVALID_NAME: 'name', INVALID_PHONE: 'phone', ADDRESS_REQUIRED: 'address', ZONE_NOT_CONFIRMED: 'zoneAcknowledged',
+  INVALID_EMAIL: 'email', INVALID_PASSWORD: 'password',
+});
+
+function markFieldError(form, error) {
+  const name = FIELD_ERRORS[error?.code];
+  const field = /** @type {HTMLInputElement|null} */ (name ? form?.querySelector(`[name="${name}"]`) : null);
+  if (!field) return;
+  const id = `${field.id || `${form.dataset.form}-${name}`}-error`;
+  let note = document.getElementById(id);
+  if (!note) {
+    note = document.createElement('p');
+    note.className = 'field-error';
+    note.id = id;
+    (field.closest('.field, .check-label') || field).after(note);
+  }
+  note.textContent = error.message;
+  field.setAttribute('aria-invalid', 'true');
+  const described = new Set((field.getAttribute('aria-describedby') || '').split(' ').filter(Boolean));
+  described.add(id);
+  field.setAttribute('aria-describedby', [...described].join(' '));
+  field.focus();
+}
+
+function clearFieldError(field) {
+  if (field?.getAttribute?.('aria-invalid') !== 'true') return;
+  field.removeAttribute('aria-invalid');
+  const ids = (field.getAttribute('aria-describedby') || '').split(' ').filter(Boolean);
+  for (const id of ids.filter(value => value.endsWith('-error'))) document.getElementById(id)?.remove();
+  const rest = ids.filter(value => !value.endsWith('-error'));
+  if (rest.length) field.setAttribute('aria-describedby', rest.join(' ')); else field.removeAttribute('aria-describedby');
+}
+
 async function withBusy(element, operation) {
   if (!element || element.dataset.busy === 'true') return;
   element.dataset.busy = 'true';
@@ -2610,6 +2558,7 @@ async function withBusy(element, operation) {
       toast('Sin conexión con CAUCE. No se envió nada: reintentá cuando vuelva.', 'error');
     } else {
       toast(userMessage(error), 'error');
+      markFieldError(element.closest?.('form'), error);
     }
     // Un conflicto de versión o de estado se resuelve mostrando lo actual; tras
     // una conexión lenta también: la operación pudo haber llegado.
@@ -2645,6 +2594,67 @@ const ACTIONS = {
   'set-category'(element) {
     app.search.category = element.dataset.category;
     return render();
+  },
+  // Abiertos, con envío o con retiro. Desde el inicio llevan al listado.
+  'quick-filter'(element) {
+    const key = element.dataset.filter;
+    if (key === 'open') app.search.onlyOpen = !app.search.onlyOpen;
+    else app.search.mode = app.search.mode === key ? '' : key;
+    if (route().page !== 'comercios') { go('#comercios'); return undefined; }
+    return render();
+  },
+  'clear-filters'() {
+    app.search = { query: '', category: 'Todos', onlyOpen: false, mode: '' };
+    return render();
+  },
+  // Retiro o envío desde el carrito: cambia el total a la vista y queda
+  // elegido para la confirmación.
+  'set-fulfillment'(element) {
+    draft(`checkout:${element.dataset.business}`, { fulfillment: element.dataset.mode });
+    return render();
+  },
+  // Categorías del catálogo: el hash es la ruta, así que se desplaza sin tocarlo.
+  'jump-category'(element) {
+    const section = document.getElementById(element.dataset.target || '');
+    if (!section) return;
+    section.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+    section.querySelector('h2')?.setAttribute('tabindex', '-1');
+    section.querySelector('h2')?.focus({ preventScroll: true });
+  },
+  // Ingresar / Crear cuenta sin redibujar: lo que ya se escribió no se pierde.
+  'set-account-tab'(element) {
+    app.accountTab = element.dataset.tab === 'crear' ? 'crear' : 'ingresar';
+    for (const tab of document.querySelectorAll('.account-tabs [role="tab"]')) {
+      const selected = /** @type {HTMLElement} */ (tab).dataset.tab === app.accountTab;
+      tab.classList.toggle('active', selected);
+      tab.setAttribute('aria-selected', String(selected));
+    }
+    for (const panel of /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('[data-account-panel]'))) {
+      panel.hidden = panel.dataset.accountPanel !== app.accountTab;
+    }
+  },
+  // Pagar online: el servidor crea (o devuelve) el intento y el checkout del
+  // proveedor. Nada se da por pagado hasta que lo confirma el proveedor.
+  async 'payment-start'(element) {
+    const { checkoutUrl } = await runCommand('payment.start', { orderId: element.dataset.order });
+    location.assign(checkoutUrl);
+  },
+  async 'payment-connect'(element) {
+    const { authorizationUrl } = await runCommand('payment.connect', { businessId: element.dataset.business,
+      provider: element.dataset.provider });
+    location.assign(authorizationUrl);
+  },
+  async 'payment-disconnect'(element) {
+    const label = element.dataset.label || 'la cuenta de pagos';
+    const confirmed = await askConfirm({
+      title: `¿Desconectar ${label}?`,
+      message: 'El checkout deja de ofrecer el pago online en el momento. Los pagos ya aprobados no cambian.',
+      confirmLabel: 'Desconectar', cancelLabel: 'Volver',
+    });
+    if (!confirmed) return;
+    await runCommand('payment.disconnect', { businessId: element.dataset.business, provider: element.dataset.provider });
+    toast(`${label} desconectada del comercio.`);
+    await render();
   },
   'set-activity-tab'(element) {
     app.activityTab = element.dataset.tab;
@@ -2972,10 +2982,12 @@ const FORMS = {
     toast('Comercio actualizado.'); await render();
   },
   search(form) {
-    const data = new FormData(form);
-    app.search.query = String(data.get('query') || '');
-    app.search.onlyOpen = data.get('onlyOpen') === 'on';
+    app.search.query = String(new FormData(form).get('query') || '');
     return render();
+  },
+  'home-search'(form) {
+    app.search.query = String(new FormData(form).get('query') || '').trim();
+    go('#comercios');
   },
 
   async 'sign-in'(form) {
@@ -2997,6 +3009,7 @@ const FORMS = {
     const result = await app.repository.register(data);
     if (result?.confirmationRequired) {
       form.reset();
+      app.accountTab = 'ingresar';
       app.authNotice = `Te enviamos un correo a ${data.email} para confirmar la cuenta. Abrí el enlace (vale una hora) y después ingresá. Si no llega, revisá la carpeta de spam o pedí que lo reenviemos.`;
       await render(); return;
     }
@@ -3228,7 +3241,7 @@ const FORMS = {
       }
       if (error?.code === 'GUEST_CHECKOUT_UNAVAILABLE') {
         app.authNotice = 'Para confirmar el pedido, ingresá con tu cuenta. Tu carrito queda guardado.';
-        app.returnTo = `#carrito/${businessId}`;
+        app.returnTo = `#carrito/${businessId}/confirmar`;
         go('#cuenta');
         return;
       }
@@ -3236,6 +3249,21 @@ const FORMS = {
     }
     app.formDrafts.delete(`checkout:${businessId}`);
     app.session = await app.repository.session();
+    // Pago online: el pedido ya existe; ahora se paga en el proveedor. Si el
+    // pago no se puede abrir, el pedido queda con el pago pendiente y se
+    // puede pagar desde el pedido.
+    if (order.paymentMethod === 'online' && !order.alreadyExisted) {
+      try {
+        const { checkoutUrl } = await runCommand('payment.start', { orderId: order.id });
+        location.assign(checkoutUrl);
+        return;
+      } catch (error) {
+        toast(`Pedido ${order.code} creado, pero no pudimos abrir el pago: ${userMessage(error)}`, 'error');
+        go(`#pedido/${order.id}`);
+        await render({ focus: true });
+        return;
+      }
+    }
     toast(order.alreadyExisted
       ? `Ese pedido ya estaba enviado: ${order.code}.`
       : `Pedido ${order.code} enviado. Te avisamos acá cuando el comercio lo acepte.`);
@@ -3288,6 +3316,7 @@ const VIEWS = {
   institucional: viewInstitutional,
   recuperar: viewRecovery,
   seguimiento: viewTracking,
+  pago: viewPaymentReturn,
 };
 
 // Títulos por ruta y rutas que nunca se indexan (paneles y datos personales).
@@ -3296,10 +3325,10 @@ const ROUTE_TITLES = Object.freeze({
   actividad: 'Mis pedidos · CAUCE', cuenta: 'Tu cuenta · CAUCE', 'alta-comercio': 'Sumar mi comercio · CAUCE',
   panel: 'Panel del comercio · CAUCE', admin: 'Administración · CAUCE', institucional: 'Qué es CAUCE',
   recuperar: 'Recuperar contraseña · CAUCE', seguimiento: 'Seguimiento de pedido · CAUCE',
-  entregas: 'Mis entregas · CAUCE',
+  entregas: 'Mis entregas · CAUCE', pago: 'Pago · CAUCE',
 });
 const PRIVATE_ROUTES = new Set(['carrito', 'pedido', 'actividad', 'cuenta', 'alta-comercio', 'panel', 'admin',
-  'recuperar', 'seguimiento', 'taxista', 'viaje', 'entregas']);
+  'recuperar', 'seguimiento', 'taxista', 'viaje', 'entregas', 'pago']);
 const TAXI_ROUTES = new Set(['taxi', 'viaje', 'taxista']);
 
 function applyRouteMeta(page) {
@@ -3317,6 +3346,10 @@ function applyRouteMeta(page) {
 }
 
 let renderToken = 0;
+// Lo que una vista hace recién cuando se muestra (marcar pedidos como vistos,
+// avisar): un redibujo descartado no lo aplica.
+/** @type {{ token: number, run: () => void } | null} */
+let whenShown = null;
 
 // ── sincronización en vivo ──
 // Una suscripción por vista, acotada a lo que esa vista muestra: el comercio
@@ -3327,7 +3360,7 @@ const live = { key: '', stop: null, timer: null };
 // Realtime es la vía principal; el sondeo es el respaldo. Un teléfono que se
 // bloquea o una red móvil que cambia cortan el WebSocket sin aviso: el panel
 // igual se actualiza cada 30 segundos y al volver a la pestaña.
-const POLL_MS = Object.freeze({ panel: 30000, pedido: 45000, seguimiento: 30000, taxista: 15000, entregas: 15000 });
+const POLL_MS = Object.freeze({ panel: 30000, pedido: 45000, seguimiento: 30000, taxista: 15000, entregas: 15000, pago: 5000 });
 
 function syncLive(page, param) {
   const me = actor();
@@ -3347,7 +3380,9 @@ function syncLive(page, param) {
   }
   const pollEvery = connected && (panel || order
     || (page === 'seguimiento' && param) || (page === 'taxista' && me?.driverId)
-    || (page === 'entregas' && isSignedIn())) ? POLL_MS[page] : 0;
+    || (page === 'entregas' && isSignedIn())
+    // La vuelta del pago consulta hasta que el proveedor confirma o rechaza.
+    || (page === 'pago' && app.paymentWaiting)) ? POLL_MS[page] : 0;
   const key = `${page}:${param || ''}:${me?.id || ''}:${scopes.length}:${pollEvery}`;
   if (key === live.key) return;
   live.stop?.();
@@ -3372,7 +3407,7 @@ function syncLive(page, param) {
         return;
       }
       if (Date.now() - app.pointerAt < 600) { live.timer = setTimeout(run, 300); return; }
-      render();
+      render({ background: true });
     }, 250);
   };
   // Cerrar un canal al cambiar de vista es normal: sólo cuenta como falla lo
@@ -3408,7 +3443,20 @@ function isEditing() {
 // sesión se revalida antes de decidir qué se muestra.
 const GATED_ROUTES = new Set(['panel', 'admin', 'taxista', 'cuenta', 'alta-comercio', 'entregas']);
 
-async function render({ focus = false } = {}) {
+// Si cada desplegable estaba abierto la última vez que la app lo registró.
+/** @type {WeakMap<HTMLDetailsElement, boolean>} */
+const registeredOpen = new WeakMap();
+
+/** @param {HTMLDetailsElement} details */
+function registerOpen(details) {
+  const key = details.dataset.keepOpen || '';
+  if (details.open) app.openDetails.add(key); else app.openDetails.delete(key);
+  registeredOpen.set(details, details.open);
+}
+
+const keepOpenDetails = () => /** @type {HTMLDetailsElement[]} */ ([...main.querySelectorAll('details[data-keep-open]')]);
+
+async function render({ focus = false, background = false } = {}) {
   // La ruta se lee ahora: cualquier navegación pedida queda atendida acá.
   busy.navigating = false;
   if (!app.repository) return;
@@ -3438,7 +3486,35 @@ async function render({ focus = false } = {}) {
       ? await view(param)
       : emptyState('Página no encontrada', 'Volvé al inicio para seguir navegando.', '#inicio', 'Ir al inicio');
     if (token !== renderToken) return;
+    // Un refresco de fondo arranca sólo si nadie está escribiendo, pero la
+    // consulta tarda: si en ese lapso la persona empezó a escribir, reemplazar
+    // la vista borraría lo tipeado. Se descarta (un pedido nuevo igual se
+    // avisa) y el próximo refresco lo retoma.
+    if (background && isEditing()) {
+      if (page === 'panel' && param) peekNewOrders(param);
+      busy.rendering = false;
+      settle();
+      return;
+    }
+    // `toggle` llega una tarea después del toque (en WebKit, más tarde): si un
+    // redibujo de fondo reemplaza la vista en el medio, el aviso le llega a un
+    // elemento que ya no está y lo que la persona abrió se cerraba. Lo que
+    // cambió y la app todavía no registró se toma del DOM y se aplica sobre el
+    // HTML nuevo, que pudo armarse antes del toque. Lo que el código cierra a
+    // propósito (al guardar un producto) no se toca.
+    const unregistered = new Map();
+    for (const details of keepOpenDetails()) {
+      if (!registeredOpen.has(details) || details.open === registeredOpen.get(details)) continue;
+      unregistered.set(details.dataset.keepOpen, details.open);
+      registerOpen(details);
+    }
     main.innerHTML = markup;
+    for (const details of keepOpenDetails()) {
+      if (unregistered.has(details.dataset.keepOpen)) details.open = unregistered.get(details.dataset.keepOpen);
+      registeredOpen.set(details, details.open);
+    }
+    if (whenShown?.token === token) whenShown.run();
+    whenShown = null;
   } catch (error) {
     if (token !== renderToken) return;
     main.innerHTML = errorView(error);
@@ -3483,6 +3559,14 @@ function bindEvents() {
     withBusy(target, () => handler(target));
   });
 
+  // "Saltar al contenido" no es una ruta: enfoca el contenido sin tocar la
+  // dirección (con #main el enrutador mostraba "Página no encontrada").
+  document.addEventListener('click', event => {
+    if (!/** @type {HTMLElement} */ (event.target).closest?.('a.skip')) return;
+    event.preventDefault();
+    main.focus();
+  });
+
   document.addEventListener('submit', event => {
     const form = /** @type {HTMLFormElement} */ (event.target);
     const handler = FORMS[form.dataset.form];
@@ -3502,6 +3586,9 @@ function bindEvents() {
     }
   };
   document.addEventListener('input', markDirty);
+  // Al corregir un campo marcado, el error se va.
+  document.addEventListener('input', event => clearFieldError(/** @type {HTMLElement} */ (event.target)));
+  document.addEventListener('change', event => clearFieldError(/** @type {HTMLElement} */ (event.target)));
   document.addEventListener('change', markDirty);
   document.addEventListener('change', event => {
     const select = /** @type {HTMLSelectElement} */ (event.target);
@@ -3511,9 +3598,7 @@ function bindEvents() {
   // Los desplegables marcados con data-keep-open siguen abiertos al redibujar.
   document.addEventListener('toggle', event => {
     const details = /** @type {HTMLDetailsElement} */ (event.target);
-    const key = details?.dataset?.keepOpen;
-    if (!key) return;
-    if (details.open) app.openDetails.add(key); else app.openDetails.delete(key);
+    if (details?.dataset?.keepOpen) registerOpen(details);
   }, true);
 
   // La búsqueda se aplica al escribir, sin recargar la vista entera en cada tecla.
@@ -3532,6 +3617,12 @@ function bindEvents() {
     // Marcar la opción elegida sin volver a dibujar: no se pierde el foco.
     for (const choice of form.querySelectorAll('.choice')) {
       choice.classList.toggle('active', choice.querySelector('input')?.checked === true);
+    }
+    if (field.name === 'paymentMethod') {
+      const button = /** @type {HTMLElement|null} */ (form.querySelector('.button-confirm-order'));
+      const label = button?.querySelector('.confirm-label');
+      if (button && label) label.textContent = (field.value === 'online' ? button.dataset.onlineLabel : button.dataset.cashLabel) || '';
+      draft(`checkout:${form.dataset.business}`, { paymentMethod: field.value });
     }
     // Cambiar de modalidad sí cambia el formulario (dirección, zona) y el total,
     // así que se guarda lo escrito y se vuelve a dibujar la vista.
@@ -3564,14 +3655,14 @@ function bindEvents() {
     applyOfflineState();
     // Con backend, volver a tener red es volver a pedir lo actual, salvo que
     // la persona esté escribiendo.
-    if (!isConnected() || !isEditing()) render();
+    if (!isConnected() || !isEditing()) render({ background: isConnected() });
   });
 
   // Volver a la pestaña (o desbloquear el teléfono) actualiza lo que se ve.
   document.addEventListener('visibilitychange', () => {
     if (document.hidden || !isConnected()) return;
     const { page } = route();
-    if (['panel', 'pedido', 'seguimiento', 'actividad', 'inicio'].includes(page) && !isEditing()) render();
+    if (['panel', 'pedido', 'seguimiento', 'actividad', 'inicio', 'pago'].includes(page) && !isEditing()) render({ background: true });
   });
 
   // El navegador sólo deja sonar avisos después de una interacción.

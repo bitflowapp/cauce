@@ -6,6 +6,7 @@ import { validateTripRequest } from '../core/taxi-dispatch.js';
 import { sanitizeText, validateCustomerName, isValidArgentinePhone } from '../core/validators.js';
 import { validateHours, DEFAULT_TIMEZONE } from '../core/business-hours.js';
 import { mapPilotMetrics } from '../core/pilot-metrics.js';
+import { optimizeImage, IMAGE_SIDES } from './image-prep.js';
 
 const MEDIA_BUCKET = 'business-media';
 const LOCALITY = 'alumine';
@@ -69,6 +70,11 @@ const SERVER_MESSAGES = Object.freeze({
   'Authentication required': 'Ingresá a tu cuenta para continuar.',
   'Delivery code required': 'Para entregar, ingresá el código que te dicta el cliente.',
   'Account already linked to another rider': 'Esa cuenta ya está vinculada a otra persona de reparto de este comercio.',
+  'Payment not approved': 'El pago online de este pedido todavía no está aprobado.',
+  'Payments disabled': 'Los pagos online no están habilitados en CAUCE.',
+  'Order already paid': 'Este pedido ya está pagado.',
+  'Payment not required': 'Este pedido se paga en efectivo al comercio.',
+  'Order canceled': 'El pedido está cancelado.',
 });
 
 const CODE_MESSAGES = Object.freeze({
@@ -171,6 +177,24 @@ export function createSupabaseRepository({ client, redirectTo, storage, onError 
     if (controller?.signal.aborted && result?.error) failTimeout();
     fail(result.error);
     return result.data;
+  };
+  // Edge Functions de pagos. Un 503 quiere decir apagado o sin configurar: se
+  // explica sin detalles técnicos.
+  const invoke = async (name, body) => {
+    requireValue(typeof client.functions?.invoke === 'function', 'PAYMENT_UNAVAILABLE', 'Los pagos online no están disponibles.');
+    let result;
+    try { result = await client.functions.invoke(name, { body }); }
+    catch (error) { fail(error); }
+    if (result?.error) {
+      const status = result.error.context?.status ?? result.error.status ?? null;
+      const wrapped = new CauceError(status === 503 ? 'PAYMENTS_DISABLED' : 'PAYMENT_UNAVAILABLE', status === 503
+        ? 'Los pagos online no están habilitados en este momento.'
+        : 'No pudimos completar la operación con el proveedor de pagos. Reintentá en unos minutos.');
+      wrapped.technical = { code: `FUNCTION_${status ?? 'ERROR'}`, message: String(result.error.message || '').slice(0, 200), status };
+      onError?.(wrapped);
+      throw wrapped;
+    }
+    return result?.data;
   };
   const publicUrl = path => (path ? client.storage.from(MEDIA_BUCKET).getPublicUrl(path).data.publicUrl : '');
 
@@ -440,9 +464,11 @@ export function createSupabaseRepository({ client, redirectTo, storage, onError 
   }
 
   // ── medios ──
-  async function uploadMedia(businessId, folder, file) {
-    requireValue(file && typeof file.size === 'number', 'INVALID_IMAGE', 'Elegí una imagen.');
-    requireValue(IMAGE_TYPES.includes(file.type), 'INVALID_IMAGE_TYPE', 'Se admiten imágenes JPEG, PNG o WebP.');
+  async function uploadMedia(businessId, folder, original) {
+    requireValue(original && typeof original.size === 'number', 'INVALID_IMAGE', 'Elegí una imagen.');
+    requireValue(IMAGE_TYPES.includes(original.type), 'INVALID_IMAGE_TYPE', 'Se admiten imágenes JPEG, PNG o WebP.');
+    // Achicada al tamaño en que se muestra: carga rápida con datos móviles.
+    const file = await optimizeImage(original, { maxSide: IMAGE_SIDES[folder] || IMAGE_SIDES.product });
     requireValue(file.size > 0 && file.size <= MAX_IMAGE_BYTES, 'IMAGE_TOO_LARGE', 'La imagen no puede superar 5 MB.');
     const extension = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' }[file.type];
     const path = `businesses/${businessId}/${folder}/${crypto.randomUUID()}.${extension}`;
@@ -542,10 +568,32 @@ export function createSupabaseRepository({ client, redirectTo, storage, onError 
       } catch { return 0; }
       return total;
     },
+    // `preview`: el total de un comercio cerrado, sólo para mostrarlo. Confirmar
+    // sigue exigiendo que esté abierto, y el servidor recalcula todo.
     async quote(payload) {
       const owner = await cartOwner();
       const { business, products } = await businessAndProducts(payload?.businessId);
-      return quoteCart(readCart(owner, business.id), business, products, payload?.fulfillment || 'pickup');
+      return quoteCart(readCart(owner, business.id), payload?.preview ? { ...business, open: true } : business, products,
+        payload?.fulfillment || 'pickup');
+    },
+    // Formas de pago que ofrece este comercio ahora (efectivo según modalidad;
+    // online sólo con el interruptor encendido y la cuenta conectada).
+    async paymentMethods(payload) {
+      return read(client.rpc('payment_methods', { business: payload?.businessId }));
+    },
+    // Estado real de un pago, por pedido o por intento. Sólo quien compró o el
+    // comercio lo ven; para cualquier otra sesión es null.
+    async paymentStatus(payload) {
+      const reference = String(payload?.reference || '');
+      if (!/^[0-9a-f-]{36}$/i.test(reference)) return null;
+      const row = await read(client.rpc('payment_status', { reference }));
+      return row && { orderId: row.order_id, code: row.code, orderStatus: row.order_status,
+        paymentMethod: row.payment_method, paymentStatus: row.payment_status, amount: Number(row.total || 0),
+        attemptId: row.attempt?.id || null, checkoutUrl: row.attempt?.checkout_url || '',
+        updatedAt: row.attempt?.updated_at || null };
+    },
+    async businessPaymentOverview(payload) {
+      return read(client.rpc('business_payment_overview', { business: payload?.businessId }));
     },
     async myOrders() {
       const user = await currentUser();
@@ -576,7 +624,7 @@ export function createSupabaseRepository({ client, redirectTo, storage, onError 
       requireValue(row, 'ORDER_NOT_FOUND', 'No encontramos un pedido con ese enlace de seguimiento.');
       return {
         id: row.id, code: row.code, status: row.status, fulfillment: row.fulfillment, paymentMethod: row.payment_method,
-        customer: { address: row.address || '' }, deliveryCode: row.delivery_code ? { code: row.delivery_code } : null,
+        paymentStatus: row.payment_status || '', customer: { address: row.address || '' }, deliveryCode: row.delivery_code ? { code: row.delivery_code } : null,
         subtotal: Number(row.subtotal_ars), deliveryFee: Number(row.delivery_fee_ars), total: Number(row.total_ars),
         cancellation: row.status === 'canceled' ? { kind: 'canceled', reason: row.cancel_reason || '' } : null,
         createdAt: row.created_at, updatedAt: row.updated_at, trackingToken: token,
@@ -1051,7 +1099,8 @@ export function createSupabaseRepository({ client, redirectTo, storage, onError 
       try {
         orderId = await read(client.rpc('create_order', {
           business: businessId, idem: payload.requestId, fulfillment,
-          payment_method: fulfillment === 'delivery' ? 'cash_on_delivery' : 'cash_on_pickup',
+          payment_method: payload?.paymentMethod === 'online' ? 'online'
+            : fulfillment === 'delivery' ? 'cash_on_delivery' : 'cash_on_pickup',
           contact, items, expected_total: expectedTotal,
         }));
       } catch (error) {
@@ -1079,6 +1128,27 @@ export function createSupabaseRepository({ client, redirectTo, storage, onError 
       writeCart(owner, businessId, emptyCart({ businessId, localityId: LOCALITY }));
       invalidate();
       return QUERIES.order({ orderId });
+    },
+    // Pago online: la Edge Function crea (o devuelve) el intento del pedido y
+    // el checkout del proveedor. El importe sale del pedido en la base; el
+    // navegador sólo recibe la dirección a la que tiene que ir.
+    async 'payment.start'(payload) {
+      const data = await invoke('payments-checkout', { order_id: payload?.orderId, flow: 'checkout_pro' });
+      requireValue(typeof data?.checkout_url === 'string' && /^https:\/\//.test(data.checkout_url), 'PAYMENT_UNAVAILABLE',
+        'No pudimos abrir el pago online. Reintentá en unos minutos o elegí efectivo en tu próximo pedido.');
+      return { checkoutUrl: data.checkout_url };
+    },
+    async 'payment.connect'(payload) {
+      await requireAccount('Ingresá con la cuenta titular del comercio.');
+      const data = await invoke('payments-oauth', { business: payload?.businessId, provider: payload?.provider });
+      requireValue(typeof data?.authorization_url === 'string' && /^https:\/\//.test(data.authorization_url),
+        'PAYMENT_UNAVAILABLE', 'No pudimos iniciar la conexión con el proveedor de pagos. Reintentá en unos minutos.');
+      return { authorizationUrl: data.authorization_url };
+    },
+    async 'payment.disconnect'(payload) {
+      await read(client.rpc('disconnect_payment_account', { business: payload?.businessId,
+        provider: String(payload?.provider || '') }));
+      return true;
     },
     async 'order.transition'(payload) {
       const row = await read(client.rpc('transition_order', {

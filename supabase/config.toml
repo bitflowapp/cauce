@@ -435,3 +435,15 @@ enabled = true
 # formatted with uppercase keywords, indent 2, max width 180, trailing commas,
 # and column/key alignment. Set to "null" to emit raw, unformatted SQL.
 # format_options = "{\"keywordCase\":\"upper\",\"indent\":2,\"maxWidth\":180,\"commaStyle\":\"trailing\"}"
+
+# Edge Functions de pagos online (apagadas: ver docs/PAGOS-ONLINE.md).
+# El proveedor llama al webhook y vuelve del OAuth sin un JWT de Supabase: la
+# autenticidad la dan la firma x-signature y el `state` de un solo uso.
+[functions.payments-webhook]
+verify_jwt = false
+
+[functions.payments-oauth]
+verify_jwt = false
+
+[functions.payments-checkout]
+verify_jwt = true

@@ -5,6 +5,7 @@ import { esc, money, timeOnly, paymentLabel, pluralize } from './format.js';
 import { renderIcon } from './icons.js';
 import { whatsappNumber } from './merchant-tools.js';
 import { formatArgentinePhone } from '../core/validators.js';
+import { orderPayment } from '../core/payment.js';
 import {
   RIDER_STATUS_LABELS, CODE_STATUSES, DELIVERY_CODE_ATTEMPTS, riderStep, canConfirmDelivery, splitRiderOrders, mapsUrl,
 } from '../core/rider-app.js';
@@ -26,6 +27,17 @@ function codeForm(order, disabled) {
     <p class="microcopy" id="rider-code-help-${id}">Pedíselo al cliente al entregar: son 4 dígitos.${left < DELIVERY_CODE_ATTEMPTS
       ? ` ${left === 1 ? 'Queda 1 intento' : `Quedan ${left} intentos`}.` : ''}</p>
   </form>`;
+}
+
+// Qué hacer con la plata al entregar: cobrar en efectivo o no cobrar nada.
+function chargeLine(order) {
+  const payment = orderPayment(order);
+  if (payment.kind === 'online') {
+    return payment.collected
+      ? `<p class="rider-charge is-paid"><span>${renderIcon('check', 16)} Pagado online · no cobrar</span> <strong>${money(order.total)}</strong></p>`
+      : `<p class="rider-charge is-pending"><span>Pago online sin confirmar · consultá al comercio antes de entregar</span> <strong>${money(order.total)}</strong></p>`;
+  }
+  return `<p class="rider-charge"><span>A cobrar · ${esc(paymentLabel(order.paymentMethod))}</span> <strong>${money(order.total)}</strong></p>`;
 }
 
 export function riderCard(order, { online = true, feedback = null } = {}) {
@@ -60,7 +72,7 @@ export function riderCard(order, { online = true, feedback = null } = {}) {
       ${(order.lines || []).map(line => `<li><span class="order-line-qty">${Number(line.quantity) || 0} ×</span>
         <span class="order-line-name">${esc(line.name)}</span></li>`).join('')}
     </ul>
-    <p class="rider-charge"><span>A cobrar · ${esc(paymentLabel(order.paymentMethod))}</span> <strong>${money(order.total)}</strong></p>
+    ${chargeLine(order)}
     ${step ? `<button class="button rider-step" type="button" data-action="rider-step" data-order="${esc(order.id)}"
       data-version="${order.version}" data-next="${esc(step.status)}" ${disabled}>${esc(step.label)}</button>` : ''}
     ${feedback?.orderId === order.id ? `<p class="notice error rider-feedback" role="alert">${esc(feedback.message)}</p>` : ''}
@@ -82,7 +94,9 @@ function historyItem(order) {
 export function riderHome({ orders = [], riders = [], online = true, updatedAt = '', feedback = null } = {}) {
   const { active, history } = splitRiderOrders(orders);
   const shops = [...new Set(riders.filter(rider => rider.active !== false).map(rider => rider.businessName).filter(Boolean))];
-  const collected = history.filter(order => order.status === 'delivered').reduce((sum, order) => sum + (Number(order.total) || 0), 0);
+  // Lo cobrado en mano: los pedidos pagados online no pasan por quien reparte.
+  const collected = history.filter(order => order.status === 'delivered' && order.paymentMethod !== 'online')
+    .reduce((sum, order) => sum + (Number(order.total) || 0), 0);
   return `<section class="rider-app" aria-labelledby="rider-title">
     <header class="rider-app-head">
       <div>
@@ -96,10 +110,10 @@ export function riderHome({ orders = [], riders = [], online = true, updatedAt =
     ${updatedAt ? `<p class="microcopy rider-updated">Actualizado ${esc(timeOnly(updatedAt))} · se actualiza solo cada 15 segundos.</p>` : ''}
     ${active.length ? `<div class="rider-deliveries" aria-label="Entregas en curso">${active.map(order => riderCard(order, { online, feedback })).join('')}</div>`
       : `<div class="empty-state rider-empty"><h2>No tenés entregas asignadas</h2>
-        <p class="quiet">Cuando el comercio te asigne un pedido, aparece acá con la dirección, el contacto y el importe a cobrar.</p></div>`}
+        <p class="quiet">Cuando el comercio te asigne un pedido, aparece acá con la dirección, el contacto y qué cobrar.</p></div>`}
     ${history.length ? `<section class="rider-history" aria-labelledby="rider-history-title">
       <h2 id="rider-history-title">Últimos 7 días</h2>
-      <p class="quiet">${pluralize(history.filter(order => order.status === 'delivered').length, 'entrega', 'entregas')} · ${money(collected)} cobrados</p>
+      <p class="quiet">${pluralize(history.filter(order => order.status === 'delivered').length, 'entrega', 'entregas')} · ${money(collected)} cobrados en efectivo</p>
       <ul class="plain-list">${history.map(historyItem).join('')}</ul>
     </section>` : ''}
   </section>`;

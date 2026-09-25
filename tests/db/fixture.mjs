@@ -7,6 +7,7 @@ import { readFile, readdir } from 'node:fs/promises';
 export const PLATFORM_SQL = `
 create role anon nologin;
 create role authenticated nologin;
+create role service_role nologin bypassrls;
 create schema auth;
 create table auth.users (id uuid primary key, email text, is_anonymous boolean not null default false,
   deleted_at timestamptz, raw_user_meta_data jsonb default '{}');

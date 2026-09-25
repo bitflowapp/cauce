@@ -133,10 +133,22 @@ export async function layoutIssues(page) {
       const box = element.getBoundingClientRect();
       return style.visibility !== 'hidden' && style.display !== 'none' && box.width > 0 && box.height > 0;
     };
+    // Una fila que se desplaza de costado (filtros, categorías) deja a propósito
+    // parte de sus botones fuera de la vista: se alcanzan deslizando. Lo que
+    // cuenta es que la fila misma entre en la pantalla.
+    const scroller = element => {
+      for (let node = element.parentElement; node && node !== document.body; node = node.parentElement) {
+        const overflow = getComputedStyle(node).overflowX;
+        if ((overflow === 'auto' || overflow === 'scroll') && node.scrollWidth > node.clientWidth) return node;
+      }
+      return null;
+    };
     for (const element of document.querySelectorAll('#main button, #main a.button, #main input, #main select, #main textarea, .bottom-nav a')) {
       if (!visible(element) || element.closest('[hidden]')) continue;
       const box = element.getBoundingClientRect();
-      if (box.right > width + 1 || box.left < -1) issues.push(`fuera de pantalla: ${element.textContent.trim().slice(0, 30) || element.name}`);
+      const row = scroller(element)?.getBoundingClientRect();
+      const reachable = row && row.left >= -1 && row.right <= width + 1;
+      if (!reachable && (box.right > width + 1 || box.left < -1)) issues.push(`fuera de pantalla: ${element.textContent.trim().slice(0, 30) || element.name}`);
       const primary = element.matches('button, a.button, .bottom-nav a');
       if (primary && box.height < 40 && !element.matches('.link-button, .qty-button')) {
         issues.push(`área táctil baja (${Math.round(box.height)}px): ${element.textContent.trim().slice(0, 30)}`);

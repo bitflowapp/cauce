@@ -26,7 +26,9 @@ function affirmsPhrase(content, phrase) {
 }
 
 async function appText() {
-  const files = ['js/app.js', 'index.html', 'js/ui/format.js', 'js/domain/state.js'];
+  // Todo el texto de la interfaz: el shell y cada módulo que arma pantallas.
+  const ui = (await readdir(resolve(root, 'js/ui'))).filter(name => name.endsWith('.js')).map(name => `js/ui/${name}`);
+  const files = ['js/app.js', 'index.html', 'js/domain/state.js', ...ui];
   const parts = await Promise.all(files.map(file => readFile(resolve(root, file), 'utf8')));
   return parts.join('\n');
 }
@@ -131,7 +133,7 @@ test('antes de confirmar se aclara que no hay servicio ni cobro real', async () 
   const app = await readFile(resolve(root, 'js/app.js'), 'utf8');
   assert.match(app, /no genera un servicio ni un cobro real/i);
   // El aviso se usa tanto al confirmar un pedido como al pedir un taxi.
-  const uses = app.match(/\$\{confirmNotice\(\)\}/g) || [];
+  const uses = app.match(/\$\{confirmNotice\([^)]*\)\}/g) || [];
   assert.ok(uses.length >= 2, `El aviso previo debe aparecer en pedidos y en taxis (apariciones: ${uses.length})`);
 });
 
@@ -139,6 +141,18 @@ test('los pagos en línea se declaran deshabilitados', async () => {
   const app = await readFile(resolve(root, 'js/app.js'), 'utf8');
   assert.match(app, /pagos en línea no están habilitados/i);
   assert.match(app, /pedido y el pago son estados independientes/i);
+});
+
+test('el pago online sólo se ofrece si la base lo habilita, y nunca se da por pagado desde la pantalla', async () => {
+  const app = await readFile(resolve(root, 'js/app.js'), 'utf8');
+  // La demostración nunca ofrece pago online; el entorno conectado, sólo con el interruptor.
+  assert.match(app, /const paymentsOnline = \(\) => isConnected\(\) && app\.features\?\.payments_online === true;/);
+  // Las formas de pago del checkout salen de la base (o sólo efectivo si no responde).
+  assert.match(app, /checkoutPaymentMethods\(offered, fulfillment\)/);
+  assert.match(app, /cashOnlyMethods\(fulfillment\)/);
+  const ui = await readFile(resolve(root, 'js/ui/payments.js'), 'utf8');
+  assert.doesNotMatch(ui, /['"]approved['"]\s*[:=]/, 'la interfaz no escribe estados de pago');
+  assert.match(ui, /la pantalla no los inventa/i);
 });
 
 test('los datos de ejemplo se declaran ficticios', async () => {

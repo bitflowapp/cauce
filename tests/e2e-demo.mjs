@@ -53,7 +53,7 @@ async function main() {
     await page.waitForFunction(`document.body.innerText.includes('en el carrito')`);
     step('Se arma un carrito');
 
-    await visit('#carrito/orilla');
+    await visit('#carrito/orilla/confirmar');
     await page.waitForFunction(`!!document.querySelector('[data-form="checkout"]')`);
     await page.fill('#checkout-name', 'Vecina de prueba');
     await page.fill('#checkout-phone', '2942123456');

@@ -289,8 +289,9 @@ test('el esquema construido no deja huecos de privilegio', async () => {
     where n.nspname in ('public', 'private') and has_function_privilege('anon', p.oid, 'EXECUTE')
     order by 1`).map(row => row.name);
   assert.deepEqual(anonExecutable, [
-    'private.app_status', 'private.business_open_now', 'private.report_client_event', 'private.track_order',
-    'public.app_status', 'public.open_now', 'public.report_client_event', 'public.track_order',
+    'private.app_status', 'private.business_open_now', 'private.payment_methods', 'private.report_client_event',
+    'private.track_order', 'public.app_status', 'public.open_now', 'public.payment_methods',
+    'public.report_client_event', 'public.track_order',
   ]);
   const anonWrites = await sql`select table_name, privilege_type from information_schema.role_table_grants
     where grantee = 'anon' and privilege_type <> 'SELECT' and table_schema in ('public', 'private')`;

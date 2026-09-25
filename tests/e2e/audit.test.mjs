@@ -151,6 +151,9 @@ for (const engine of browsersToRun) {
       await open(visitor.page, `#comercio/${R.id}`);
       await visitor.page.keyboard.press('Tab');
       assert.equal(await visitor.page.evaluate(() => document.activeElement?.className), 'skip');
+      // Enter en "Saltar al contenido": el foco va al contenido y la ruta no cambia.
+      await visitor.page.keyboard.press('Enter');
+      assert.deepEqual(await visitor.page.evaluate(() => [location.hash, document.activeElement?.id]), [`#comercio/${R.id}`, 'main']);
       let reached = false;
       for (let i = 0; i < 40 && !reached; i += 1) {
         await visitor.page.keyboard.press(engine === 'webkit' ? 'Alt+Tab' : 'Tab');

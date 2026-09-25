@@ -33,7 +33,7 @@ async function cartWith(page, times = 1) {
     await card.getByRole('button', { name: 'Agregar una unidad' }).click();
     await ready(page);
   }
-  await go(page, `#carrito/${E.id}`);
+  await go(page, `#carrito/${E.id}/confirmar`);
 }
 async function fillContact(page, name) {
   await page.fill('#checkout-name', name);
@@ -55,7 +55,7 @@ for (const engine of browsersToRun) {
       await page.fill('#signin-email', people[`buyer-${engine}`].email);
       await page.fill('#signin-password', people[`buyer-${engine}`].password);
       await page.locator('form[data-form="sign-in"] button[type="submit"]').click();
-      await page.waitForFunction(id => location.hash === `#carrito/${id}`, E.id, { timeout: 20000 });
+      await page.waitForFunction(id => location.hash === `#carrito/${id}/confirmar`, E.id, { timeout: 20000 });
       await ready(page);
       assert.match(await page.locator('.totals-final dd').textContent(), /2\.400/, 'el carrito sigue armado');
       await fillContact(page, `Con cuenta ${engine} ${run}`);
@@ -112,17 +112,22 @@ for (const engine of browsersToRun) {
       const [{ count }] = await sql`select count(*)::int from public.orders where contact_name = ${`Doble ${engine} ${run}`}`;
       assert.equal(count, 1);
 
-      // Se agota lo que ya estaba en el carrito: se marca y se puede quitar.
+      // Se agota lo que ya estaba en el carrito: la confirmación se traba y
+      // avisa; en el carrito se marca y se puede quitar.
       await cartWith(page);
       await setAvailable(false);
       await page.reload();
       await ready(page);
+      assert.ok(await page.locator('button.button-confirm-order').isDisabled());
+      assert.ok(await page.getByText('Cambió la disponibilidad.').isVisible());
+      assert.equal(await page.getByRole('link', { name: 'Revisar el carrito' }).getAttribute('href'), `#carrito/${E.id}`);
+      await go(page, `#carrito/${E.id}`);
       const line = page.locator('.cart-line.is-unavailable');
       assert.equal(await line.count(), 1);
-      assert.ok(await page.locator('button.button-confirm-order').isDisabled());
+      assert.ok(await page.locator('button.button-continue').isDisabled(), 'no se puede seguir con un producto agotado');
       await line.getByRole('button', { name: 'Quitar' }).click();
       await ready(page);
-      assert.ok(await page.getByText('Carrito vacío').isVisible());
+      assert.ok(await page.getByText('Tu carrito está vacío').isVisible());
       await setAvailable(true);
 
       // Comercio cerrado: se puede armar el carrito, no confirmar.
