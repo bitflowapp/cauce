@@ -2,7 +2,7 @@
 // ver en cada tarjeta, con lo escrito por el cliente siempre escapado.
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { orderCard, ordersBoard, dashboard, newOrdersBanner, panelNav, deliveryBoard, syncBar } from '../js/ui/business-panel.js';
+import { orderCard, ordersBoard, dashboard, newOrdersBanner, panelNav, deliveryBoard, syncBar, openBar } from '../js/ui/business-panel.js';
 import { soundMuted, setSoundMuted, soundReady } from '../js/ui/order-alert.js';
 import { hoursEditor, hoursFromEntries, allDaysClosed } from '../js/ui/merchant-tools.js';
 import { panelSections, deliveryBoardData } from '../js/core/business-panel.js';
@@ -98,10 +98,27 @@ test('el inicio: lo vendido hoy, números accionables, más vendidos, últimas v
   assert.ok(empty.includes('Todavía no hay ventas hoy.') && empty.includes('Todavía no hay ventas entregadas.'));
 });
 
+test('abierto o cerrado, y pausar o reactivar, sólo para quien administra', () => {
+  const open = { open: true, label: 'ABIERTO', reason: 'Recibiendo pedidos.', canToggle: true, switchOn: true };
+  const owner = openBar({ id: 'b1', status: 'active' }, open, { canManage: true });
+  assert.match(owner, /data-action="toggle-open"[^>]*data-open="false"[\s\S]*Cerrar atención/);
+  assert.match(owner, /data-action="business-status"[^>]*data-status="paused"[^>]*>Pausar el comercio</);
+  const paused = openBar({ id: 'b1', status: 'paused' },
+    { open: false, label: 'CERRADO', reason: 'Pausaste el comercio.', canToggle: false }, { canManage: true });
+  assert.match(paused, /data-status="active"[^>]*>Reactivar el comercio</);
+  assert.equal(/toggle-open/.test(paused), false);
+  assert.equal(/data-action=/.test(openBar({ id: 'b1', status: 'active' }, open, { canManage: false })), false, 'el equipo sólo ve el estado');
+  assert.match(openBar({ id: 'b1', status: 'active' }, open, { canManage: true, online: false }), /toggle-open[^>]*disabled/);
+});
+
 test('navegación por secciones y aviso de pedidos nuevos', () => {
   const nav = panelNav('b1', panelSections('staff', { connected: true }), 'pedidos', { newCount: 2 });
   assert.match(nav, /data-tab="pedidos">Pedidos <span class="tab-badge"/);
   assert.equal(nav.includes('data-tab="configuracion"'), false, 'staff no ve configuración');
+  const owner = panelNav('b1', panelSections('owner', { connected: true }), 'inicio');
+  assert.deepEqual([...owner.matchAll(/data-tab="(\w+)"/g)].map(match => match[1]),
+    ['inicio', 'pedidos', 'catalogo', 'reparto', 'horarios', 'configuracion', 'equipo'], 'lo operativo primero');
+  assert.equal([...owner.matchAll(/class="tab[^"]*is-admin/g)].length, 3, 'horarios, configuración y equipo van en la fila de administración');
   assert.equal(newOrdersBanner('b1', 0), '');
   assert.match(newOrdersBanner('b1', 3), /href="#panel\/b1\/pedidos"[\s\S]*3 pedidos nuevos/);
 });

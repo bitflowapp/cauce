@@ -1723,6 +1723,20 @@ function merchantCatalogTab(business, products, { canManage = true, categories =
   const live = products.filter(product => !product.archived);
   const unavailable = live.filter(product => product.available === false || (product.trackStock && product.stock <= 0)).length;
   const stockLabel = product => (!connected || product.trackStock ? `stock ${product.stock}` : 'sin control de stock');
+  // Precio (y stock, si se controla) sin abrir el formulario completo: lo que
+  // más se toca desde el teléfono.
+  const quickEdit = product => {
+    const pid = esc(product.id);
+    const tracked = !connected || product.trackStock;
+    return `<form class="inline-form catalog-quick" data-form="product-quick" data-business="${bid}" data-product="${pid}"
+      data-tracked="${tracked ? 'true' : 'false'}">
+      <label for="quick-price-${pid}">Precio</label>
+      <input id="quick-price-${pid}" name="price" type="number" required min="1" max="10000000" step="1" inputmode="numeric" value="${esc(product.price)}">
+      ${tracked ? `<label for="quick-stock-${pid}">Stock</label>
+      <input id="quick-stock-${pid}" name="stock" type="number" required min="0" max="10000" step="1" inputmode="numeric" value="${esc(product.stock ?? 0)}">` : ''}
+      <button class="button secondary" type="submit" ${disabled}>Guardar</button>
+    </form>`;
+  };
 
   const row = product => `
     <article class="catalog-row ${product.archived ? 'is-archived' : ''}" aria-label="Producto ${esc(product.name)}">
@@ -1745,6 +1759,7 @@ function merchantCatalogTab(business, products, { canManage = true, categories =
           data-product="${esc(product.id)}" data-field="archived" data-value="${product.archived ? 'false' : 'true'}" ${disabled}>
           ${product.archived ? 'Reactivar' : 'Desactivar'}</button>` : ''}
       </div>
+      ${canManage && !product.archived ? quickEdit(product) : ''}
       ${!canManage && connected && product.trackStock && !product.archived ? `<form class="inline-form" data-form="product-stock" data-business="${bid}"
         data-product="${esc(product.id)}" data-available="${product.available ? 'true' : 'false'}">
         <label class="visually-hidden" for="stock-${esc(product.id)}">Stock de ${esc(product.name)}</label>
@@ -1795,11 +1810,10 @@ function merchantDataTab(business, missing, categories = []) {
   const media = Boolean(app.repository.capabilities.media);
   const connected = isConnected();
   const disabled = editable ? '' : 'disabled';
-  return `
-    <section class="panel-section">
-      ${business.status === 'pending_review'
-        ? '<div class="notice">La solicitud está en revisión. Vas a poder editar cuando administración responda.</div>' : ''}
-      <form class="checkout-form" data-form="business-update" data-business="${esc(business.id)}">
+  // Un comercio que ya opera cambia a diario envío, mínimo y tiempos: van
+  // arriba, con su propio botón. Uno nuevo empieza por sus datos.
+  const operationFirst = ['active', 'paused'].includes(business.status);
+  const details = `
         <h2 class="checkout-section-title">Datos del comercio</h2>
         <div class="field">
           <label for="b-name">Nombre comercial</label>
@@ -1851,9 +1865,9 @@ function merchantDataTab(business, missing, categories = []) {
           <input id="b-hours" name="hoursLabel" type="text" maxlength="80" value="${esc(business.hoursLabel || '')}"
             placeholder="Lunes a sábado de 9 a 13 y de 17 a 21" ${disabled}>
           ${connected ? '<p class="microcopy">Los horarios que controlan cuándo se toman pedidos se cargan en la pestaña Horarios.</p>' : ''}
-        </div>
-
-        <h2 class="checkout-section-title">Modalidades de entrega</h2>
+        </div>`;
+  const operation = `
+        <h2 class="checkout-section-title" id="operacion">Envío, pedidos y tiempos</h2>
         <label class="check-label">
           <input type="checkbox" name="pickupEnabled" ${business.pickupEnabled ? 'checked' : ''} ${disabled}>
           <span>Retiro en el comercio</span>
@@ -1886,7 +1900,15 @@ function merchantDataTab(business, missing, categories = []) {
             <label for="b-delivery-min">Envío estimado (minutos)</label>
             <input id="b-delivery-min" name="deliveryMinutes" type="number" min="5" max="240" step="5" value="${business.deliveryMinutes ?? ''}" inputmode="numeric" ${disabled}>
           </div>
-        </div>` : ''}
+        </div>` : ''}`;
+  return `
+    <section class="panel-section">
+      ${business.status === 'pending_review'
+        ? '<div class="notice">La solicitud está en revisión. Vas a poder editar cuando administración responda.</div>' : ''}
+      <form class="checkout-form" data-form="business-update" data-business="${esc(business.id)}">
+        ${operationFirst ? `${operation}
+        <button class="button full" type="submit" ${editable && app.online ? '' : 'disabled'}>Guardar envío y tiempos</button>
+        ${details}` : `${details}${operation}`}
         <button class="button full" type="submit" ${editable && app.online ? '' : 'disabled'}>Guardar datos</button>
       </form>
     </section>
@@ -2618,7 +2640,17 @@ const ACTIONS = {
     await render();
   },
   async 'business-status'(element) {
+    // Pausar saca el comercio de CAUCE: se confirma. Reactivar, no.
+    if (element.dataset.status === 'paused') {
+      const confirmed = await askConfirm({
+        title: '¿Pausar el comercio?',
+        message: 'No aparece en CAUCE ni recibe pedidos hasta que lo reactives. Para un rato o un día sin atención alcanza con “Cerrar atención”.',
+        confirmLabel: 'Pausar', cancelLabel: 'Volver',
+      });
+      if (!confirmed) return;
+    }
     await runCommand('business.setStatus', { businessId: element.dataset.business, status: element.dataset.status });
+    toast(element.dataset.status === 'paused' ? 'Comercio pausado: no aparece en CAUCE.' : 'Comercio activo otra vez.');
     await render();
   },
   async 'toggle-open'(element) {
@@ -2929,6 +2961,15 @@ const FORMS = {
     await runCommand('team.add', { businessId: form.dataset.business, email: data.email, role: data.role });
     form.reset();
     toast('Listo: ya puede usar el panel de este comercio.');
+    await render();
+  },
+
+  async 'product-quick'(form) {
+    const data = new FormData(form);
+    const patch = { price: Number(data.get('price')) };
+    if (form.dataset.tracked === 'true') patch.stock = Number(data.get('stock'));
+    await runCommand('product.update', { businessId: form.dataset.business, productId: form.dataset.product, patch });
+    toast(form.dataset.tracked === 'true' ? 'Precio y stock guardados.' : 'Precio guardado.');
     await render();
   },
 

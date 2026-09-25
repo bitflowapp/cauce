@@ -8,15 +8,17 @@ import { DEFAULT_TIMEZONE, localClock, nextOpening, normalizeHours, formatTime }
 // ── secciones ──
 // `manage`: titular y encargado/a. `connected`: sólo con el backend real
 // (horarios y equipo viven en la base; la demostración no los tiene).
+// Primero lo operativo (todo el equipo), después la administración: en el
+// teléfono quedan en dos filas, la de uso diario arriba.
 export const PANEL_SECTIONS = Object.freeze([
   Object.freeze({ key: 'inicio', label: 'Inicio', manage: false, connected: false }),
   Object.freeze({ key: 'pedidos', label: 'Pedidos', manage: false, connected: false }),
   Object.freeze({ key: 'catalogo', label: 'Catálogo', manage: false, connected: false }),
-  Object.freeze({ key: 'horarios', label: 'Horarios', manage: true, connected: true }),
-  Object.freeze({ key: 'configuracion', label: 'Configuración', manage: true, connected: false }),
   // Reparto es operativo para todo el equipo; cargar o pausar a quien reparte
   // (business_riders) sólo lo permite la base a titular y encargado/a.
   Object.freeze({ key: 'reparto', label: 'Reparto', manage: false, connected: false }),
+  Object.freeze({ key: 'horarios', label: 'Horarios', manage: true, connected: true }),
+  Object.freeze({ key: 'configuracion', label: 'Configuración', manage: true, connected: false }),
   Object.freeze({ key: 'equipo', label: 'Equipo', manage: true, connected: true }),
 ]);
 const SECTION_ALIASES = Object.freeze({ datos: 'configuracion', resumen: 'inicio' });

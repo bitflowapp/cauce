@@ -25,7 +25,7 @@ const panelHref = (businessId, section = '') => `#panel/${esc(businessId)}${sect
 export function panelNav(businessId, sections, current, { newCount = 0 } = {}) {
   return `<div class="tabs panel-nav" role="tablist" aria-label="Secciones del panel">
     ${sections.map(section => `
-      <button class="tab ${current === section.key ? 'active' : ''}" type="button" role="tab"
+      <button class="tab ${current === section.key ? 'active' : ''} ${section.manage ? 'is-admin' : ''}" type="button" role="tab"
         aria-selected="${current === section.key}" data-action="set-panel-tab" data-business="${esc(businessId)}"
         data-tab="${esc(section.key)}">${esc(section.label)}${section.key === 'pedidos' && newCount
           ? ` <span class="tab-badge" aria-label="${newCount} ${newCount === 1 ? 'nuevo' : 'nuevos'}">${newCount}</span>` : ''}</button>`).join('')}
@@ -33,15 +33,25 @@ export function panelNav(businessId, sections, current, { newCount = 0 } = {}) {
 }
 
 // ── abierto / cerrado ──
+// Cerrar la atención es lo de todos los días (sigue visible en CAUCE);
+// pausar lo saca de CAUCE hasta reactivarlo, y se confirma antes.
 export function openBar(business, state, { canManage = false, online = true } = {}) {
+  const disabled = online ? '' : 'disabled';
+  const id = esc(business.id);
   return `<div class="panel-openbar ${state.open ? 'is-open' : 'is-closed'}" role="status">
     <span class="panel-openbar-state">
       <strong class="open-flag">${esc(state.label)}</strong>
       <small>${esc(state.reason)}</small>
     </span>
-    ${canManage && state.canToggle ? `<button class="button ${state.switchOn ? 'button-outline-danger' : ''}" type="button" data-action="toggle-open"
-      data-business="${esc(business.id)}" data-open="${state.switchOn ? 'false' : 'true'}" ${online ? '' : 'disabled'}>
-      ${state.switchOn ? 'Cerrar atención' : 'Abrir atención'}</button>` : ''}
+    ${canManage ? `<span class="panel-openbar-actions">
+      ${state.canToggle ? `<button class="button ${state.switchOn ? 'button-outline-danger' : ''}" type="button" data-action="toggle-open"
+        data-business="${id}" data-open="${state.switchOn ? 'false' : 'true'}" ${disabled}>
+        ${state.switchOn ? 'Cerrar atención' : 'Abrir atención'}</button>` : ''}
+      ${business.status === 'active' ? `<button class="link-button" type="button" data-action="business-status"
+        data-business="${id}" data-status="paused" ${disabled}>Pausar el comercio</button>` : ''}
+      ${business.status === 'paused' ? `<button class="button" type="button" data-action="business-status"
+        data-business="${id}" data-status="active" ${disabled}>Reactivar el comercio</button>` : ''}
+    </span>` : ''}
   </div>`;
 }
 

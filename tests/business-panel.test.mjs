@@ -32,12 +32,12 @@ async function serverMerchantTransitions() {
 
 test('cada rol ve sus secciones; staff opera pedidos, catálogo y reparto', () => {
   const keys = (role, connected) => panelSections(role, { connected }).map(section => section.key);
-  const all = ['inicio', 'pedidos', 'catalogo', 'horarios', 'configuracion', 'reparto', 'equipo'];
+  const all = ['inicio', 'pedidos', 'catalogo', 'reparto', 'horarios', 'configuracion', 'equipo'];
   assert.deepEqual(keys('owner', true), all);
   assert.deepEqual(keys('manager', true), all);
   assert.deepEqual(keys('staff', true), ['inicio', 'pedidos', 'catalogo', 'reparto']);
   // En la demostración no hay horarios ni equipo en la base.
-  assert.deepEqual(keys('owner', false), ['inicio', 'pedidos', 'catalogo', 'configuracion', 'reparto']);
+  assert.deepEqual(keys('owner', false), ['inicio', 'pedidos', 'catalogo', 'reparto', 'configuracion']);
   assert.equal(canManageBusiness('staff'), false);
   assert.equal(canManageBusiness('manager'), true);
 });

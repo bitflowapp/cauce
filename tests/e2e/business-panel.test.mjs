@@ -196,7 +196,7 @@ for (const engine of browsersToRun) {
       await m.fill('#b-fee', '1800');
       await m.fill('#b-min', '3500');
       await m.fill('#b-prep', '20');
-      await m.locator('form[data-form="business-update"] button[type="submit"]').click();
+      await m.getByRole('button', { name: 'Guardar envío y tiempos' }).click();
       await expectToast(m, 'Datos guardados.');
       await ready(m);
 
@@ -223,7 +223,7 @@ for (const engine of browsersToRun) {
       const m = manager.page;
       await landOnPanel(m, people.managerA);
       const tabs = (await m.getByRole('tab').allTextContents()).map(text => text.replace(/\d+/g, '').trim());
-      assert.deepEqual(tabs, ['Inicio', 'Pedidos', 'Catálogo', 'Horarios', 'Configuración', 'Reparto', 'Equipo']);
+      assert.deepEqual(tabs, ['Inicio', 'Pedidos', 'Catálogo', 'Reparto', 'Horarios', 'Configuración', 'Equipo']);
       const { id, code } = await newOrder(A, { fulfillment: 'delivery' });
       await go(m, `#panel/${A.id}/pedidos`);
       await panelAction(m, code, 'Aceptar');

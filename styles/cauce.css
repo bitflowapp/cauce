@@ -7023,3 +7023,38 @@ main {
 .recent-sale-id { display: grid; }
 .recent-sale-id .quiet { font-size: 12px; }
 .recent-sale-total { font-variant-numeric: tabular-nums; }
+
+/* Abrir, cerrar y pausar, a mano. */
+.panel-openbar-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 4px 12px; }
+.panel-openbar-actions .link-button { min-height: 40px; }
+
+/* Configuración: el bloque siguiente no se pega al botón del primero. */
+.checkout-form > .button + .checkout-section-title { margin-top: 22px; }
+
+/* Precio y stock en la misma fila del producto. */
+.catalog-quick { margin: 8px 0 4px; }
+.catalog-quick label { font-size: 12px; font-weight: 700; color: var(--muted); }
+.catalog-quick input { flex: 1 1 72px; max-width: 120px; }
+
+@media (max-width: 560px) {
+  /* Encabezado corto: el contenido empieza arriba, no a mitad de pantalla. */
+  .panel-header { margin-bottom: 10px; }
+  .panel-header .page-title { font-size: 22px; line-height: 1.2; }
+  /* Dos filas: arriba lo de todos los días, abajo la administración. */
+  #main .tabs.panel-nav {
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    overflow: visible;
+    column-gap: 0;
+  }
+  #main .tabs.panel-nav .tab { grid-column: span 3; padding: 10px 2px; text-align: center; }
+  #main .tabs.panel-nav .tab.is-admin { grid-column: span 4; min-height: 40px; font-size: 12px; }
+  #main .tabs.panel-nav .tab-badge { min-width: 16px; height: 16px; margin-left: 2px; padding: 0 4px; font-size: 10px; line-height: 16px; }
+  .panel-openbar { padding: 10px 12px; }
+  .panel-openbar-actions { width: 100%; justify-content: space-between; }
+  .panel-openbar-actions .button { flex: 1 1 auto; }
+}
+@media (max-width: 360px) {
+  /* En 320 px cada sección tiene ~72 px: el número de pedidos nuevos entra al lado del nombre. */
+  #main .tabs.panel-nav .tab { font-size: 12px; white-space: nowrap; }
+}
