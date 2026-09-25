@@ -1,8 +1,8 @@
 {
-  "paso": "smoke-previo",
+  "paso": "limpiar-qa",
   "aplicar": true,
   "confirmar": "ygqbcvxdrewcnzedfcyo",
   "email": "",
   "invitar": false,
-  "motivo": "P5 sobre el código final (bc42018: sin canal en vivo sin sesión y vista estable con acciones pendientes): el build de producción contra el proyecto real, con comercios y cuentas CAUCE QA que se borran al terminar."
+  "motivo": "P13 después del smoke previo sobre el código final (run 36086705024): QA_USERS, QA_BUSINESSES, QA_ORDERS y QA_STORAGE deben quedar en 0. Nunca toca otras cuentas."
 }
