@@ -43,7 +43,7 @@ on:
   # También desde las ramas de las próximas entregas: así el smoke previo y la
   # migración corren con su código contra el proyecto real antes de integrar.
   push:
-    branches: [claude/cauce-production-hardening-km1t5s, feat/cauce-business-panel-v1, feat/cauce-rider-v1, feat/cauce-pilot-metrics]
+    branches: [claude/cauce-production-hardening-km1t5s, feat/cauce-business-panel-v1, feat/cauce-rider-v1, feat/cauce-pilot-metrics, feat/cauce-mercadopago-sandbox]
     paths: [ops/solicitud.json]
 
 permissions:
