@@ -257,8 +257,12 @@ export async function pagosSandbox(t, list, { apply, mode = 'mixto' }) {
           const result = await authorizeSeller(page, account, { siteUrl: SITE_URL, trace, timeoutMs: 240000 });
           const finalUrl = page.url();
           await safeShot(page, shot(`oauth-${letter}-vuelta`), { hideText: [account.user] });
-          record(`OAuth ${label}: sin tokens en la URL final`, !/APP_USR|TEST-|TG-|access_token|refresh_token/i.test(finalUrl), 'URL revisada');
-          return { result, via: 'navegador', callback };
+          if (result !== null || mode !== 'mixto') {
+            record(`OAuth ${label}: sin tokens en la URL final`, !/APP_USR|TEST-|TG-|access_token|refresh_token/i.test(finalUrl), 'URL revisada');
+            return { result, via: 'navegador', callback };
+          }
+          // Una pantalla que la automatización no conoce: la completa una persona.
+          note(`OAuth ${label}: la automatización no llegó a la vuelta`, `${trace.length} acciones → paso asistido`);
         } catch (error) {
           if (!(error instanceof Blocked) || mode !== 'mixto') throw error;
           await safeShot(page, shot(`oauth-${letter}-frenado`), { hideText: [account.user] });
@@ -400,13 +404,18 @@ export async function pagosSandbox(t, list, { apply, mode = 'mixto' }) {
           const trace = evidence.trace[`pago-${label}`] = [];
           const shown = await payCheckout(page, { holder, buyer: mp.BUYER, siteUrl: SITE_URL, trace, timeoutMs: 300000 });
           await safeShot(page, shot(`pago-${label}-resultado`), { hideText: [mp.BUYER.user] });
-          return { orderId, shown, via: 'navegador', returnedTo: page.url().startsWith(SITE_URL) ? page.url().replace(/\?.*$/, '') : null };
+          if (shown !== null || mode !== 'mixto') {
+            return { orderId, shown, via: 'navegador', returnedTo: page.url().startsWith(SITE_URL) ? page.url().replace(/\?.*$/, '') : null };
+          }
+          // Sin resultado reconocible: si se pagó, el aviso llega enseguida; si no, lo completa una persona.
+          note(`pago ${label}: la automatización no llegó al resultado`, `${trace.length} acciones → paso asistido`);
         } catch (error) {
           if (!(error instanceof Blocked) || mode !== 'mixto') throw error;
           await safeShot(page, shot(`pago-${label}-frenado`), { hideText: [mp.BUYER.user] });
           note(`pago ${label}: navegador frenado`, `${error.reason} → paso asistido`);
-          if (orderId) return payAssisted(shop, outcome, label, orderId);
         } finally { await context.close(); }
+        // Sólo llega acá lo que pasa al modo asistido (bloqueo o sin resultado), con el pedido ya creado si lo hubo.
+        return payAssisted(shop, outcome, label, orderId);
       }
       return payAssisted(shop, outcome, label, null);
     }
@@ -561,13 +570,18 @@ export async function pagosSandbox(t, list, { apply, mode = 'mixto' }) {
           // Simulación de una inconsistencia: la orden del proveedor ya existe con el importe real.
           await t.sql(`update public.payment_attempts set amount_ars = amount_ars + 1 where id = ${uuid(attempt.id)}`);
           const { context, page } = await newPage({ width: 390, height: 844 });
+          let shown = null;
           try {
             await page.goto(started.body.checkout_url);
             evidence.trace['pago-importe'] = [];
-            await payCheckout(page, { holder: HOLDER.approved, buyer: mp.BUYER, siteUrl: SITE_URL, trace: evidence.trace['pago-importe'] });
+            shown = await payCheckout(page, { holder: HOLDER.approved, buyer: mp.BUYER, siteUrl: SITE_URL, trace: evidence.trace['pago-importe'] });
           } catch (error) {
             if (!(error instanceof Blocked)) throw error;
           } finally { await context.close(); }
+          if (shown !== 'approved') {
+            note('importe distinto contra el proveedor real', 'no ejecutado: el pago automático no llegó a completarse; lo cubren las pruebas de las funciones con el doble');
+            return;
+          }
           const flagged = await until(async () => (await eventsOf(attempt.provider_order_id)).find(event => event.detail === 'amount_mismatch'));
           const order = await orderRow(orderId);
           record('importe distinto: queda para revisar y el pedido no figura pagado', Boolean(flagged) && order.payment_status !== 'approved',
