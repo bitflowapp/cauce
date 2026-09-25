@@ -132,6 +132,7 @@ export async function target({ local = false, custom = null } = {}) {
 export function supabaseCli(args, { allowFail = false, quiet = false, input = '' } = {}) {
   const result = spawnSync(process.platform === 'win32' ? 'npx.cmd' : 'npx', ['supabase', ...args], {
     cwd: root, encoding: 'utf8', env: { ...process.env }, maxBuffer: 64 * 1024 * 1024, input,
+    shell: process.platform === 'win32',
   });
   const output = redact(`${result.stdout || ''}${result.stderr || ''}`).trim();
   if (!quiet && output) console.log(output.split('\n').map(line => `    ${line}`).join('\n'));

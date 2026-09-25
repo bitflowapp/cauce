@@ -28,10 +28,14 @@ const npx = process.platform === 'win32' ? 'npx.cmd' : 'npx';
 // es lo más sensible (sesiones y tokens vigentes).
 export const DATA_EXCLUDE = [
   'auth.sessions', 'auth.refresh_tokens', 'auth.one_time_tokens', 'auth.flow_state', 'auth.audit_log_entries',
-  'auth.mfa_challenges', 'auth.mfa_amr_claims', 'auth.saml_relay_states', 'auth.oauth_authorizations',
-  'auth.oauth_client_states', 'auth.webauthn_challenges', 'storage.s3_multipart_uploads',
-  'storage.s3_multipart_uploads_parts', 'supabase_functions.hooks', 'storage.buckets_analytics',
-  'storage.buckets_vectors', 'storage.iceberg_namespaces', 'storage.iceberg_tables', 'storage.vector_indexes',
+  'auth.mfa_challenges', 'auth.mfa_amr_claims', 'auth.mfa_factors', 'auth.mfa_recovery_code_sets',
+  'auth.mfa_recovery_codes', 'auth.saml_providers', 'auth.saml_relay_states', 'auth.sso_providers',
+  'auth.sso_domains', 'auth.oauth_authorizations', 'auth.oauth_client_states', 'auth.oauth_clients',
+  'auth.oauth_consents', 'auth.custom_oauth_providers', 'auth.scim_tokens', 'auth.scim_users',
+  'auth.webauthn_challenges', 'auth.webauthn_credentials', 'auth.instances', 'auth.schema_migrations',
+  'storage.migrations', 'storage.s3_multipart_uploads', 'storage.s3_multipart_uploads_parts',
+  'supabase_functions.hooks', 'storage.buckets_analytics', 'storage.buckets_vectors',
+  'storage.iceberg_namespaces', 'storage.iceberg_tables', 'storage.vector_indexes',
 ];
 
 // Plan → respaldo que ofrece Supabase (documentación pública de Supabase; la
@@ -87,7 +91,7 @@ export async function withTempStack({ migrations, offset = 1000, projectId = 'ca
   await cp(join(root, 'supabase', 'templates'), join(work, 'supabase', 'templates'), { recursive: true });
   await writeFile(join(work, 'supabase', 'seed.sql'), '');
   const cli = (cliArgs, options = {}) => spawnSync(npx, ['supabase', ...cliArgs, '--workdir', work],
-    { cwd: root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, input: '', ...options });
+    { cwd: root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, input: '', shell: process.platform === 'win32', ...options });
   let db;
   try {
     log(`\nLevantando un stack temporal (${projectId}, ${migrations.length} migraciones)…`);
@@ -109,7 +113,12 @@ export async function withTempStack({ migrations, offset = 1000, projectId = 'ca
 
 // Carga el dump de datos sobre las tablas vacías del stack temporal.
 export async function loadData({ db, adminUrl }, { dumped, dataFile }, list) {
-  await db.unsafe(`truncate ${dumped.map(name => name.split('.').map(part => `"${part}"`).join('.')).join(', ')} cascade`);
+  const existingRows = await db.unsafe(`select table_schema || '.' || table_name as name from information_schema.tables where table_type = 'BASE TABLE'`);
+  const existingSet = new Set(existingRows.map(r => r.name));
+  const targetTables = dumped.filter(name => existingSet.has(name));
+  if (targetTables.length) {
+    await db.unsafe(`truncate ${targetTables.map(name => name.split('.').map(part => `"${part}"`).join('.')).join(', ')} cascade`);
+  }
   const load = spawnSync('psql', [adminUrl, '-v', 'ON_ERROR_STOP=1', '-q', '-f', dataFile],
     { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
   list.check('los datos se restauran sin errores', load.status === 0, redact(load.stderr || '').trim().slice(0, 300) || 'ok');
@@ -190,17 +199,22 @@ export async function backup(t, list) {
     list.info('BACKUP_RETENTION', `${info.pitr_enabled ? 'PITR habilitado · ' : ''}plan ${org?.plan || 'desconocido'}: ${PLAN_RETENTION[org?.plan] || 'ver dashboard'}`);
   }
 
-  // 2. Dump y 3. restauración en un stack nuevo con las migraciones del repo.
+  // 2. Dump y 3. restauración en un stack nuevo con las migraciones aplicadas en el origen.
+  const allFiles = await migrationFiles();
+  const remoteRows = await t.sql('select version from supabase_migrations.schema_migrations order by version');
+  const remoteSet = new Set(remoteRows.map(r => String(r.version)));
+  const applied = allFiles.filter(f => remoteSet.has(f.split('_')[0]));
+  const pending = allFiles.filter(f => !remoteSet.has(f.split('_')[0]));
+
   const source = await dumpDatabase(t, out, list);
-  await withTempStack({ migrations: await migrationFiles() }, async stack => {
+  await withTempStack({ migrations: applied.length ? applied : allFiles }, async stack => {
     if (!await loadData(stack, source, list)) return;
     const restored = toCounts(await stack.db.unsafe(COUNT_SQL));
     const { compared, mismatches } = compareCounts(source.counts, restored, source.dumped);
     list.check('las filas restauradas coinciden con el origen', compared.length > 0 && mismatches.length === 0,
       mismatches.length ? mismatches.map(name => `${name}: ${source.counts[name]} → ${restored[name]}`).join('; ')
         : `${compared.length} tablas comparadas`);
-    await verifyDatabase(stack, list);
-    // Desvío de esquema: lo restaurado (migraciones) contra el origen.
+    // Desvío de esquema: lo restaurado (migraciones aplicadas en el origen) contra el origen.
     const restoredSchema = join(out, 'schema-restaurado.sql');
     const dumpRestored = stack.cli(['db', 'dump', '--local', '-f', restoredSchema]);
     if (dumpRestored.status !== 0) list.fail('dump del esquema restaurado', redact(dumpRestored.stderr).slice(-300));
@@ -216,6 +230,13 @@ export async function backup(t, list) {
           ? `sólo en el origen: ${onlySource.slice(0, 3).join(' | ') || '—'} · sólo en migraciones: ${onlyRestored.slice(0, 3).join(' | ') || '—'}`
           : 'idéntico');
     }
+    if (pending.length) {
+      for (const file of pending) await cp(join(root, 'supabase', 'migrations', file), join(stack.work, 'supabase', 'migrations', file));
+      const pushed = stack.cli(['db', 'push', '--local', '--yes']);
+      list.check('las migraciones pendientes se aplican sobre la base restaurada', pushed.status === 0,
+        pushed.status === 0 ? pending.join(', ') : redact(`${pushed.stdout}${pushed.stderr}`).slice(-300));
+    }
+    await verifyDatabase(stack, list);
     if (list.failed === 0) list.pass('RESTORE_TEST', 'dump → stack nuevo con migraciones → datos → verificación');
   });
 
