@@ -1,8 +1,8 @@
 {
-  "paso": "auth",
-  "aplicar": true,
-  "confirmar": "ygqbcvxdrewcnzedfcyo",
+  "paso": "correo",
+  "aplicar": false,
+  "confirmar": "",
   "email": "",
   "invitar": false,
-  "motivo": "Fase A · B2/B3: cargar el SMTP propio y las plantillas de CAUCE en Auth (los secretos ya están). Después se verifica 13/13."
+  "motivo": "Fase A · B3: confirmación de cuenta, recuperación (el enlace anterior deja de valer) e invitación con entrega real a una casilla externa. Borra las cuentas QA que crea."
 }
