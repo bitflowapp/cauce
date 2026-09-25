@@ -1,8 +1,8 @@
 {
-  "paso": "smoke-previo",
+  "paso": "limpiar-qa",
   "aplicar": true,
   "confirmar": "ygqbcvxdrewcnzedfcyo",
   "email": "",
   "invitar": false,
-  "motivo": "P5 antes del deploy: el build de producción servido localmente contra el proyecto real. Comercios CAUCE QA dados de alta con el procedimiento normal, compra sin cuenta con retiro y con cuenta con envío, flujo completo del comercio, seguimiento, seguridad y anchos 320–1440 en Chromium y WebKit. Borra todo lo creado al final."
+  "motivo": "Después del smoke previo (run 36081431076, 7/7): verificar QA_USERS, QA_BUSINESSES, QA_ORDERS y QA_STORAGE = 0; si quedara algo con el patrón de QA, borrarlo. No toca registros reales."
 }
