@@ -27,6 +27,11 @@ export const PAYMENT_TRANSITIONS = Object.freeze({
   processing: Object.freeze(['approved', 'rejected', 'cancelled', 'expired']),
   approved: Object.freeze(['refunded', 'partially_refunded']),
   partially_refunded: Object.freeze(['refunded']),
+  // Un aprobado que el proveedor informa después de cerrar el intento es plata
+  // cobrada: se refleja, y la base lo deja para revisar (nunca en silencio).
+  rejected: Object.freeze(['approved']),
+  expired: Object.freeze(['approved']),
+  cancelled: Object.freeze(['approved']),
 });
 
 export function canTransitionPayment(from, to) {
