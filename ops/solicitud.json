@@ -1,8 +1,8 @@
 {
-  "paso": "estado",
-  "aplicar": false,
-  "confirmar": "",
+  "paso": "smoke-previo",
+  "aplicar": true,
+  "confirmar": "ygqbcvxdrewcnzedfcyo",
   "email": "",
   "invitar": false,
-  "motivo": "Retomar el cierre del piloto: qué secretos hay cargados (SMTP incluido) y estado real del proyecto después del trabajo posterior. Sólo lectura."
+  "motivo": "P5 antes del deploy: el build de producción servido localmente contra el proyecto real. Comercios CAUCE QA dados de alta con el procedimiento normal, compra sin cuenta con retiro y con cuenta con envío, flujo completo del comercio, seguimiento, seguridad y anchos 320–1440 en Chromium y WebKit. Borra todo lo creado al final."
 }
