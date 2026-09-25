@@ -4,35 +4,36 @@
 
 ## Estado
 
-**NOT_READY · detenido en B3 (SMTP).** Todo lo que no depende del correo
-está hecho y probado contra el proyecto real con el workflow de operación:
-backup y restauración, migración, Auth (salvo SMTP), el recorrido completo
-de comercio y cliente con el build de producción, la limpieza de QA y los
-registros. Falta el SMTP propio: sin él no hay confirmación ni recuperación
-reales ni invitación a la administración, y no se publica.
+**READY · publicado el 25/09 a las 06:17 UTC** (`main` 2695953, build
+conectado a `ygqbcvxdrewcnzedfcyo` en https://bitflowapp.github.io/cauce/).
+Verificado sobre el sitio publicado:
+
+- smoke completo 7/7 en Chromium y WebKit;
+- residuo QA en 0;
+- registros sin respuestas 5xx.
+
+Queda una sola acción humana: que la persona de `CAUCE_ADMIN_EMAIL` acepte la
+invitación (ya enviada) y elija su contraseña. Recién ahí `admin --aplicar`
+le otorga la administración, y un comercio real puede pedir su publicación y
+ser aprobado.
 
 | # | Gate | Resultado en el proyecto real | Evidencia |
 | --- | --- | --- | --- |
 | B5 | Backup y restauración | **PASS.** 4 backups diarios de Supabase (último 24/09 07:54 UTC), retención 7 días (plan Pro). Copia cifrada AES-256 (artefacto de 30 días). Restauración en la versión del origen (8 migraciones): 24 tablas con los mismos conteos, esquema idéntico salvo privilegios que fija la plataforma (N-21), y la migración pendiente aplicada sobre la copia con todas las verificaciones. | run 36078082544 · 14/14 |
 | B1 | Migración `20260924120000` | **PASS.** Historial 8/8 igual al repo; el dry-run listó únicamente `20260924120000`; ensayo sobre una copia de los datos reales; aplicada el 25/09 a las 00:46 UTC; 9/9 sincronizadas; smoke público 20/20. | runs 36078604627 y 36078756560 |
-| B2 | Auth real | **PASS salvo SMTP.** `site_url` `https://bitflowapp.github.io/cauce`, retornos sólo de ese sitio, confirmación obligatoria, compra sin cuenta (150 sesiones por hora e IP), contraseña de 10+ con letras y números, rotación de tokens, enlaces de 1 h. Las plantillas de CAUCE se cargan junto con el SMTP. | run 36079258576 · 11/13 |
+| B2 | Auth real | **PASS.** `site_url` `https://bitflowapp.github.io/cauce`, retornos sólo de ese sitio, confirmación obligatoria, compra sin cuenta (150 sesiones por hora e IP), contraseña de 10+ con letras y números, rotación de tokens, enlaces de 1 h, SMTP propio y plantillas de CAUCE. | runs 36079258576 y 36101124472 · 13/13 |
 | P5 | Comercio y cliente de punta a punta, con el build de producción contra el proyecto real (`smoke-previo`) | **PASS 7/7.** Alta por el procedimiento normal (datos, horarios, retiro y envío, categoría, productos, aprobación); compra sin cuenta con retiro, el comercio acepta → prepara → listo → retirado y el cliente lo ve en vivo; enlace de seguimiento sin datos personales; compra con cuenta y envío con encargado y repartidor (total 5.900 con 900 de envío, calculado por el servidor); 320, 390, 430, 768, 1280 y 1440 px en Chromium y WebKit; seguridad (panel sin sesión, comercio ajeno, staff, administración, precio cambiado, total escrito a mano, autoaceptación, saltos de estado, visita sin pedidos). | runs 36081431076 y 36086705024 (código final) |
 | P13 | Residuo QA | **PASS.** QA_USERS 0 · QA_BUSINESSES 0 · QA_ORDERS 0 · QA_STORAGE 0. | runs 36081816451 y 36087093631 (después del último smoke) |
 | P14 | Registros (24 h) | **PASS.** Ninguna respuesta 5xx, y cada 4xx y error tiene origen conocido: llamadas anteriores a la migración (`app_status`, `open_now`; la última a las 00:40), las pruebas de seguridad de los smokes (rechazadas como corresponde) y el sondeo de sólo lectura de la auditoría (24/09 16:35–16:42 UTC, rechazado entero). El único defecto real, un canal en vivo abierto sin sesión, se corrigió (N-23) y no volvió a aparecer en el smoke sobre el código final. Un corte de replicación de Realtime (25/09 00:05) se recuperó solo. | runs 36083254425 y 36087184244 |
-| B3 | SMTP, confirmación y recuperación reales | **STOP:** faltan `CAUCE_SMTP_PASS` y `CAUCE_SMTP_SENDER` (§3.1). | — |
-| B4 | Administración real | El mecanismo pasó en el proyecto real (P5: sólo `private.platform_admins` da acceso). La cuenta de la persona se crea por invitación, que llega por correo (B3). | — |
-| B6 | Deploy de producción | No publicado: B3 es un gate crítico. `main` está protegida. | — |
+| B3 | SMTP, confirmación y recuperación reales | **PASS.** Los nueve secretos cargados (sólo se verifican los nombres). Con entrega real a una casilla externa: alta sin confirmar no entra; la confirmación llega, vuelve al sitio real y confirma desde otro dispositivo; la recuperación llega, fija la contraseña nueva, la anterior deja de valer y el enlace no se reutiliza; la invitación llega y la persona elige su contraseña. Cuentas de prueba borradas. | runs 36101016643 (secretos), 36101193671 · 22/22 |
+| B4 | Administración real | **Invitación enviada** a la cuenta de `CAUCE_ADMIN_EMAIL` (no existía). Falta que la persona la acepte en el sitio publicado y elija su contraseña; después `admin --aplicar` otorga el privilegio. Si el enlace venció (1 h), sirve "¿Olvidaste tu contraseña?" con ese correo. | runs 36101307803 y 36102590496 |
+| B6 | Deploy de producción | **PASS.** Integrado #3 (`main` 2695953); Pages corrió las compuertas, exigió el esquema remoto, publicó el build conectado y lo verificó. | run 36102110690 |
+| P15 | Smoke sobre el sitio publicado | **PASS 7/7** en Chromium y WebKit. Cubre:<br>• compra sin cuenta con retiro y seguimiento;<br>• cliente con cuenta, envío y reparto a cargo del encargado;<br>• 320–1440 px;<br>• seguridad sobre la API publicada.<br>Limpió 5 pedidos, 2 comercios y 8 cuentas QA. | run 36102265827 |
+| P16 | Residuo QA y registros después del deploy | **PASS.** QA_USERS, QA_BUSINESSES, QA_ORDERS y QA_STORAGE en 0. Ningún 5xx en 24 h; los 4xx y errores son las pruebas de seguridad de los smokes, llamadas previas a la migración y la reconexión de Realtime de las 00:05, que se recuperó sola. | runs 36102522235 y 36102676129 |
 
-Con el SMTP cargado siguen, en este orden (§3.2): `auth` (SMTP y
-plantillas), `correo` (confirmación, recuperación con el enlace anterior
-invalidado e invitación, con entrega real), deploy
-(`.github/deploy-target` = `production` + integrar el PR), `admin`
-(invitación), `smoke-publicado`, `limpiar-qa` y `registros`.
-
-Integrar esta rama a `main` **no publica el build conectado** mientras
-`.github/deploy-target` diga `demo`: Pages vuelve a publicar la demostración
-(con este código, sin red). Y aun con `production`, se niega a publicar si el
-esquema remoto no es compatible.
+Con `.github/deploy-target` en `production`, integrar a `main` publica el
+build conectado; Pages igual se niega a publicar si el esquema remoto no es
+compatible. Para volver a la demostración sin tocar código: §3.7.
 
 ## 1. Compuertas y cómo se verifican
 

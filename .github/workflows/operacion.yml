@@ -109,7 +109,7 @@ jobs:
           echo "Paso: $paso · aplicar: $aplicar"
       - name: Secretos disponibles (sólo nombres, nunca valores)
         run: |
-          for name in SUPABASE_ACCESS_TOKEN SUPABASE_DB_PASSWORD CAUCE_SMTP_PASS CAUCE_SMTP_SENDER CAUCE_BACKUP_PASSPHRASE; do
+          for name in SUPABASE_ACCESS_TOKEN SUPABASE_DB_PASSWORD CAUCE_SMTP_HOST CAUCE_SMTP_PORT CAUCE_SMTP_USER CAUCE_SMTP_PASS CAUCE_SMTP_SENDER CAUCE_BACKUP_PASSPHRASE; do
             if [ -n "${!name}" ]; then echo "✔ $name"; else echo "✘ $name"; fi
           done
           if [ -n "$ADMIN_EMAIL_SECRET" ]; then echo "✔ CAUCE_ADMIN_EMAIL"; else echo "✘ CAUCE_ADMIN_EMAIL"; fi
