@@ -4,5 +4,5 @@
   "confirmar": "",
   "email": "",
   "invitar": false,
-  "motivo": "P14, segundo intento con el endpoint vigente de logs: 5xx de la API y errores de Postgres, Auth, Realtime y Storage en la ventana del smoke previo. Sólo lectura."
+  "motivo": "P14 con la tabla unificada logs (ClickHouse): 5xx y 4xx de la API y errores de cada servicio en las últimas 24 h, que cubren backup, migración, smoke previo y limpieza. Sólo lectura."
 }

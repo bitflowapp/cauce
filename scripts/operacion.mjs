@@ -401,52 +401,66 @@ async function limpiarQa(t, list) {
   for (const [name, count] of Object.entries(residue)) list.check(`${name} = 0`, count === 0, String(count));
 }
 
-// Registros del proyecto real (Logs Explorer por la API): respuestas 5xx de
-// la API y los errores más frecuentes de cada servicio en las últimas horas.
-// Los rechazos esperables (RLS, U0005, transiciones inválidas de las pruebas
-// de seguridad) aparecen como errores de la base: se listan para leerlos, y
-// sólo un 5xx hace fallar el paso.
+// Registros del proyecto real por la API (tabla unificada `logs`, SQL de
+// ClickHouse): respuestas 5xx de la API y los errores más frecuentes de cada
+// servicio en las últimas horas. Los rechazos esperables (RLS, U0005,
+// transiciones inválidas de las pruebas de seguridad) aparecen como 4xx y
+// errores de la base: se listan para leerlos, y sólo un 5xx (o no poder
+// consultarlos) hace fallar el paso.
+const STATUS = "toInt32OrZero(log_attributes['response.status_code'])";
+const SEVERE = "upper(severity_text) in ('ERROR', 'FATAL', 'PANIC', 'CRITICAL')";
 const LOG_QUERIES = {
-  'API 5xx': `select r.status_code as code, q.method as method, q.path as path, count(*) as n
-    from edge_logs cross join unnest(metadata) as m cross join unnest(m.request) as q cross join unnest(m.response) as r
-    where r.status_code >= 500 group by code, method, path order by n desc limit 10`,
-  'API por código': `select r.status_code as code, count(*) as n
-    from edge_logs cross join unnest(metadata) as m cross join unnest(m.response) as r
-    group by code order by code limit 20`,
-  'Postgres (ERROR/FATAL)': `select p.error_severity as severity, event_message as message, count(*) as n
-    from postgres_logs cross join unnest(metadata) as m cross join unnest(m.parsed) as p
-    where p.error_severity in ('ERROR', 'FATAL', 'PANIC') group by severity, message order by n desc limit 8`,
-  'Auth (errores)': `select event_message as message, count(*) as n
-    from auth_logs cross join unnest(metadata) as m where m.level = 'error' group by message order by n desc limit 8`,
-  'Realtime (errores)': `select event_message as message, count(*) as n
-    from realtime_logs cross join unnest(metadata) as m where m.level = 'error' group by message order by n desc limit 8`,
-  'Storage (errores)': `select event_message as message, count(*) as n
-    from storage_logs cross join unnest(metadata) as m where m.level = 'error' group by message order by n desc limit 8`,
+  'API 5xx': `select ${STATUS} as code, log_attributes['request.method'] as method,
+      log_attributes['request.path'] as path, count() as n
+    from logs where source = 'edge_logs' and ${STATUS} between 500 and 599
+    group by code, method, path order by n desc limit 10`,
+  'API por código': `select ${STATUS} as code, count() as n
+    from logs where source = 'edge_logs' group by code order by code limit 20`,
+  'API 4xx por ruta': `select ${STATUS} as code, log_attributes['request.method'] as method,
+      log_attributes['request.path'] as path, count() as n
+    from logs where source = 'edge_logs' and ${STATUS} between 400 and 499
+    group by code, method, path order by n desc limit 12`,
+  'Eventos por servicio': `select source, severity_text as severity, count() as n
+    from logs where source != 'edge_logs' group by source, severity order by source, n desc limit 40`,
+  'Errores por servicio': `select source, severity_text as severity, substring(event_message, 1, 180) as message, count() as n
+    from logs where source != 'edge_logs' and (${SEVERE}
+      or log_attributes['parsed.error_severity'] in ('ERROR', 'FATAL', 'PANIC')
+      or lower(log_attributes['level']) in ('error', 'fatal'))
+    group by source, severity, message order by n desc limit 25`,
 };
+// Los registros de Actions pueden ser públicos: ni correos ni IP de nadie.
+const anonymize = text => redact(text)
+  .replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, '[correo]')
+  .replace(/\b\d{1,3}(?:\.\d{1,3}){3}\b/g, '[ip]')
+  .replace(/\b[0-9a-f]{0,4}(?::[0-9a-f]{0,4}){4,7}\b/gi, '[ip]');
 
 async function registros(t, list) {
   if (t.local) throw new Error('Los registros se consultan en el proyecto real.');
-  const hours = Math.min(Math.max(Number(option('horas')) || 3, 1), 24);
+  // La API admite hasta 24 h y redondea al minuto: un minuto de margen.
+  const hours = Math.min(Math.max(Number(option('horas')) || 24, 1), 24);
   const end = new Date();
-  const start = new Date(end.getTime() - hours * 3600 * 1000);
-  list.info('ventana', `últimas ${hours} h (${start.toISOString()} → ${end.toISOString()})`);
+  const start = new Date(end.getTime() - hours * 3600 * 1000 + 60 * 1000);
+  list.info('ventana', `${start.toISOString()} → ${end.toISOString()}`);
   for (const [label, sql] of Object.entries(LOG_QUERIES)) {
     const query = new URLSearchParams({ sql, iso_timestamp_start: start.toISOString(), iso_timestamp_end: end.toISOString() });
     let rows;
     try {
-      // logs.all está deprecado (410): el endpoint vigente es /analytics/endpoints/logs.
+      // logs.all se retiró (410): el endpoint vigente es /analytics/endpoints/logs.
       const response = await t.management(`/analytics/endpoints/logs?${query}`);
       if (response?.error) throw new Error(typeof response.error === 'string' ? response.error : JSON.stringify(response.error));
       rows = response?.result || [];
     } catch (error) {
       // El mensaje trae la URL (larga, con el SQL): se muestra sólo el estado y la respuesta.
       const detail = /HTTP (\d+) ([\s\S]*)$/.exec(redact(error.message));
-      list.info(label, `no se pudo consultar: ${detail ? `HTTP ${detail[1]} ${detail[2]}` : redact(error.message)}`.slice(0, 400));
+      const text = `no se pudo consultar: ${detail ? `HTTP ${detail[1]} ${detail[2]}` : redact(error.message)}`.slice(0, 400);
+      // Sin la consulta de 5xx no hay control: eso no puede pasar en silencio.
+      if (label === 'API 5xx') list.check('la API no respondió 5xx', false, text);
+      else list.info(label, text);
       continue;
     }
-    const text = rows.map(row => Object.values(row).map(value => String(value).replace(/\s+/g, ' ').slice(0, 140)).join(' · ')).join(' | ');
-    if (label === 'API 5xx') list.check('la API no respondió 5xx', rows.length === 0, text || 'ninguno');
-    else list.info(label, text || 'ninguno');
+    const text = rows.map(row => Object.values(row).map(value => String(value).replace(/\s+/g, ' ').slice(0, 180)).join(' · ')).join(' | ');
+    if (label === 'API 5xx') list.check('la API no respondió 5xx', rows.length === 0, anonymize(text) || 'ninguno');
+    else list.info(label, anonymize(text) || 'ninguno');
   }
 }
 
