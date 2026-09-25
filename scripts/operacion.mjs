@@ -13,6 +13,9 @@
 //   node scripts/operacion.mjs backup              dump, restauración de prueba y copia cifrada
 //   node scripts/operacion.mjs limpiar-qa [--aplicar]   residuo de pruebas (cuentas cauce-qa-…)
 //   node scripts/operacion.mjs registros [--horas 3]    5xx y errores de cada servicio (Logs Explorer)
+//   node scripts/operacion.mjs pagos-estado             funciones, secretos (sólo nombres), pilotos y cuentas
+//   node scripts/operacion.mjs pagos-funciones [--aplicar]  despliega las Edge Functions de pagos (cerradas)
+//   node scripts/operacion.mjs pagos-limpiar [--aplicar]    saca pilotos, credenciales y comercios QA de pagos
 //
 // --local ensaya el mismo paso contra el stack de `npx supabase start`.
 import { randomBytes } from 'node:crypto';
@@ -25,6 +28,7 @@ import {
 } from './lib/proyecto.mjs';
 import { disposableInbox, mailpitInbox, tokenLink } from './lib/casilla.mjs';
 import { backup, rehearseMigration } from './lib/respaldo.mjs';
+import { pagosEstado, pagosFunciones, pagosLimpiar } from './lib/pagos.mjs';
 
 const args = process.argv.slice(2);
 const step = args[0];
@@ -475,7 +479,10 @@ async function registros(t, list) {
 // ───────────────────────── arranque ─────────────────────────
 
 const STEPS = { estado, migrar, auth, correo, admin, backup: (t, checks) => { t.link(); return backup(t, checks); },
-  'limpiar-qa': limpiarQa, registros };
+  'limpiar-qa': limpiarQa, registros,
+  'pagos-estado': (t, checks) => pagosEstado(t, checks),
+  'pagos-funciones': (t, checks) => pagosFunciones(t, checks, { apply }),
+  'pagos-limpiar': (t, checks) => pagosLimpiar(t, checks, { apply }) };
 if (!STEPS[step]) {
   console.error(`Paso desconocido: ${step || '(ninguno)'}. Pasos: ${Object.keys(STEPS).join(', ')}.`);
   process.exit(2);

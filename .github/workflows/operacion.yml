@@ -20,7 +20,8 @@ on:
         type: choice
         required: true
         default: estado
-        options: [estado, migrar, auth, correo, admin, backup, smoke-previo, smoke-publicado, limpiar-qa, registros]
+        options: [estado, migrar, auth, correo, admin, backup, smoke-previo, smoke-publicado, limpiar-qa, registros,
+          pagos-estado, pagos-funciones, pagos-sandbox, pagos-limpiar]
       aplicar:
         description: Escribir cambios (si no, sólo muestra qué haría)
         type: boolean
@@ -77,6 +78,16 @@ jobs:
       # Paso admin: el correo de la administración puede venir del pedido o de
       # este secreto (así no queda en el repositorio y los logs lo ocultan).
       ADMIN_EMAIL_SECRET: ${{ secrets.CAUCE_ADMIN_EMAIL }}
+      # Cuentas de PRUEBA de Mercado Pago (sandbox): sólo las usa pagos-sandbox.
+      MP_TEST_SELLER_A_USER: ${{ secrets.MP_TEST_SELLER_A_USER }}
+      MP_TEST_SELLER_A_PASSWORD: ${{ secrets.MP_TEST_SELLER_A_PASSWORD }}
+      MP_TEST_SELLER_A_CODE: ${{ secrets.MP_TEST_SELLER_A_CODE }}
+      MP_TEST_SELLER_B_USER: ${{ secrets.MP_TEST_SELLER_B_USER }}
+      MP_TEST_SELLER_B_PASSWORD: ${{ secrets.MP_TEST_SELLER_B_PASSWORD }}
+      MP_TEST_SELLER_B_CODE: ${{ secrets.MP_TEST_SELLER_B_CODE }}
+      MP_TEST_BUYER_USER: ${{ secrets.MP_TEST_BUYER_USER }}
+      MP_TEST_BUYER_PASSWORD: ${{ secrets.MP_TEST_BUYER_PASSWORD }}
+      MP_TEST_BUYER_CODE: ${{ secrets.MP_TEST_BUYER_CODE }}
     steps:
       - uses: actions/checkout@v4
       - name: Pedido validado
@@ -94,7 +105,7 @@ jobs:
           esac
           [ -z "$email" ] && [ "$paso" = "admin" ] && email="$ADMIN_EMAIL_SECRET"
           # Nada que no pase estas reglas llega al entorno del paso.
-          case "$paso" in estado|migrar|auth|correo|admin|backup|smoke-previo|smoke-publicado|limpiar-qa|registros) ;; *) echo "::error::paso inválido"; exit 1 ;; esac
+          case "$paso" in estado|migrar|auth|correo|admin|backup|smoke-previo|smoke-publicado|limpiar-qa|registros|pagos-estado|pagos-funciones|pagos-sandbox|pagos-limpiar) ;; *) echo "::error::paso inválido"; exit 1 ;; esac
           [[ "$aplicar" =~ ^(true|false)$ && "$invitar" =~ ^(true|false)$ ]] || { echo "::error::aplicar/invitar inválidos"; exit 1; }
           [[ -z "$email" || "$email" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$ ]] || { echo "::error::correo inválido"; exit 1; }
           [[ -z "$confirmar" || "$confirmar" =~ ^[a-z]{20}$ ]] || { echo "::error::confirmación inválida"; exit 1; }
@@ -102,7 +113,7 @@ jobs:
             echo "::error::Para escribir hay que repetir el ref del proyecto en 'confirmar'."; exit 1
           fi
           # Los smokes crean (y borran) comercios, cuentas y pedidos CAUCE QA en el proyecto real.
-          if [[ "$paso" == smoke-* ]] && [ "$aplicar" != "true" ]; then
+          if [[ "$paso" == smoke-* || "$paso" == pagos-sandbox ]] && [ "$aplicar" != "true" ]; then
             echo "::error::El smoke crea y borra datos CAUCE QA: pedirlo con aplicar y confirmar."; exit 1
           fi
           skip=0
@@ -117,6 +128,9 @@ jobs:
             if [ -n "${!name}" ]; then echo "✔ $name"; else echo "✘ $name"; fi
           done
           if [ -n "$ADMIN_EMAIL_SECRET" ]; then echo "✔ CAUCE_ADMIN_EMAIL"; else echo "✘ CAUCE_ADMIN_EMAIL"; fi
+          for name in MP_TEST_SELLER_A_USER MP_TEST_SELLER_A_PASSWORD MP_TEST_SELLER_A_CODE MP_TEST_SELLER_B_USER MP_TEST_SELLER_B_PASSWORD MP_TEST_SELLER_B_CODE MP_TEST_BUYER_USER MP_TEST_BUYER_PASSWORD MP_TEST_BUYER_CODE; do
+            if [ -n "${!name}" ]; then echo "✔ $name"; else echo "✘ $name"; fi
+          done
       - uses: actions/setup-node@v4
         if: env.SKIP != '1'
         with:
@@ -126,7 +140,7 @@ jobs:
         if: env.SKIP != '1'
         run: npm ci
       - name: Navegadores para el smoke (antes o después de publicar)
-        if: (env.PASO == 'smoke-publicado' || env.PASO == 'smoke-previo') && env.SKIP != '1'
+        if: (env.PASO == 'smoke-publicado' || env.PASO == 'smoke-previo' || env.PASO == 'pagos-sandbox') && env.SKIP != '1'
         run: npx playwright install --with-deps chromium webkit
       - name: Paso
         if: env.SKIP != '1'
