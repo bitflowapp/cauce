@@ -424,11 +424,17 @@ const SEVERE = "upper(severity_text) in ('ERROR', 'FATAL', 'PANIC', 'CRITICAL')"
 const LAST = 'toString(toStartOfMinute(max(timestamp))) as last';
 const CALLER = `substring(any(log_attributes['request.headers.x_client_info']), 1, 28) as client,
       substring(any(log_attributes['request.headers.referer']), 1, 40) as referer`;
+// Un 503 de una función de pagos es su contrato mientras está cerrada (sin
+// secretos o sin interruptor ni piloto): se informa aparte. Cualquier otro
+// 5xx, también de esas funciones, cuenta como falla.
+const PAYMENTS_CLOSED = `${STATUS} = 503 and startsWith(log_attributes['request.path'], '/functions/v1/payments-')`;
 const LOG_QUERIES = {
   'API 5xx': `select ${STATUS} as code, log_attributes['request.method'] as method,
       log_attributes['request.path'] as path, count() as n, ${LAST}, ${CALLER}
-    from logs where source = 'edge_logs' and ${STATUS} between 500 and 599
+    from logs where source = 'edge_logs' and ${STATUS} between 500 and 599 and not (${PAYMENTS_CLOSED})
     group by code, method, path order by n desc limit 10`,
+  'Funciones de pagos cerradas (503 esperado)': `select log_attributes['request.path'] as path, count() as n, ${LAST}
+    from logs where source = 'edge_logs' and ${PAYMENTS_CLOSED} group by path order by n desc limit 5`,
   'API por código': `select ${STATUS} as code, count() as n
     from logs where source = 'edge_logs' group by code order by code limit 20`,
   'API 4xx por ruta': `select ${STATUS} as code, log_attributes['request.method'] as method,
