@@ -1,8 +1,8 @@
 {
-  "paso": "limpiar-qa",
-  "aplicar": true,
-  "confirmar": "ygqbcvxdrewcnzedfcyo",
+  "paso": "registros",
+  "aplicar": false,
+  "confirmar": "",
   "email": "",
   "invitar": false,
-  "motivo": "P13 después del smoke previo sobre el código final (run 36086705024): QA_USERS, QA_BUSINESSES, QA_ORDERS y QA_STORAGE deben quedar en 0. Nunca toca otras cuentas."
+  "motivo": "P14 después del smoke previo sobre el código final: sin 5xx, y el canal en vivo sin sesión (N-23) no debe volver a aparecer después de las 01:21 UTC. Sólo lectura."
 }
