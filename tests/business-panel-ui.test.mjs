@@ -2,7 +2,8 @@
 // ver en cada tarjeta, con lo escrito por el cliente siempre escapado.
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { orderCard, ordersBoard, dashboard, newOrdersBanner, panelNav, deliveryBoard } from '../js/ui/business-panel.js';
+import { orderCard, ordersBoard, dashboard, newOrdersBanner, panelNav, deliveryBoard, syncBar } from '../js/ui/business-panel.js';
+import { soundMuted, setSoundMuted, soundReady } from '../js/ui/order-alert.js';
 import { hoursEditor, hoursFromEntries, allDaysClosed } from '../js/ui/merchant-tools.js';
 import { panelSections, deliveryBoardData } from '../js/core/business-panel.js';
 
@@ -138,4 +139,16 @@ test('reparto: tablero de envíos, quién lleva qué y la elección que no se pi
   assert.match(chosen, /<option value="r3" selected>Beto</);
   assert.equal(/<option value="r1" selected>/.test(chosen), false);
   assert.match(orderCard(order(), { ...context, online: false }), /type="submit" disabled>Asignar reparto</);
+});
+
+test('sonido de pedidos: opcional, se silencia y se vuelve a activar', () => {
+  assert.match(syncBar({ soundOn: false }), /data-action="enable-sound"[\s\S]*Activar sonido de pedidos/);
+  assert.match(syncBar({ soundOn: true }), /data-action="mute-sound"[\s\S]*Silenciar/);
+  assert.match(syncBar({ soundOn: false, muted: true }), /data-action="enable-sound"[\s\S]*Sonido silenciado · Activar/);
+  assert.match(syncBar({ liveHealthy: false }), /Reconectando: revisamos cada 30 segundos/);
+  setSoundMuted(true);
+  assert.equal(soundMuted(), true);
+  assert.equal(soundReady(), false, 'silenciado nunca suena');
+  setSoundMuted(false);
+  assert.equal(soundMuted(), false);
 });

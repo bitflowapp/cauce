@@ -46,13 +46,15 @@ export function openBar(business, state, { canManage = false, online = true } = 
 }
 
 // ── conexión en vivo ──
-export function syncBar({ liveHealthy = true, syncedAt = null, soundOn = false } = {}) {
+export function syncBar({ liveHealthy = true, syncedAt = null, soundOn = false, muted = false } = {}) {
   return `<div class="panel-sync" role="status" aria-live="polite">
     <span class="panel-sync-dot ${liveHealthy ? 'ok' : 'warn'}" aria-hidden="true"></span>
     <span>${liveHealthy ? 'En vivo' : 'Reconectando: revisamos cada 30 segundos'}${syncedAt ? ` · actualizado ${esc(timeOnly(syncedAt))}` : ''}</span>
     <button class="link-button" type="button" data-action="refresh-panel">${renderIcon('refresh', 14)} Actualizar</button>
-    ${soundOn ? `<span class="panel-sound is-on">${renderIcon('bell', 14)} Sonido activado</span>`
-      : `<button class="link-button panel-sound" type="button" data-action="enable-sound">${renderIcon('bell-off', 14)} Activar sonido de pedidos</button>`}
+    ${soundOn ? `<button class="link-button panel-sound is-on" type="button" data-action="mute-sound"
+        aria-label="Sonido de pedidos activado. Silenciar">${renderIcon('bell', 14)} Sonido activado · Silenciar</button>`
+      : `<button class="link-button panel-sound" type="button" data-action="enable-sound">${renderIcon('bell-off', 14)}
+        ${muted ? 'Sonido silenciado · Activar' : 'Activar sonido de pedidos'}</button>`}
   </div>`;
 }
 

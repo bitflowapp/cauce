@@ -14,7 +14,9 @@ import { createTelemetry, classify } from './core/telemetry.js';
 import { nextOpening, MAX_RANGES_PER_DAY } from './core/business-hours.js';
 import { ROLE_LABELS } from './core/accounts.js';
 import { askReason as askReasonDialog, askConfirm as askConfirmDialog } from './ui/dialog.js';
-import { announceNewOrders, clearOrderAlert, unlockSound, soundReady, setBaseTitle } from './ui/order-alert.js';
+import {
+  announceNewOrders, clearOrderAlert, unlockSound, soundReady, soundMuted, setSoundMuted, setBaseTitle,
+} from './ui/order-alert.js';
 import {
   contactButtons, timesLine, hoursSummary, hoursEditor, readHoursForm, allDaysClosed, teamTab, ROLE_NAMES, ROLE_HINTS,
 } from './ui/merchant-tools.js';
@@ -1582,7 +1584,7 @@ async function viewMerchantPanel(businessId) {
     ${panelNav(business.id, sections, section, { newCount: pending.length })}
     ${operational || ['horarios', 'configuracion'].includes(section) ? openBar(business, state, { canManage, online: app.online }) : ''}
     ${role === 'staff' && section === 'inicio' ? `<p class="microcopy panel-role">Tu rol: ${esc(ROLE_NAMES.staff)}. ${esc(ROLE_HINTS.staff)}</p>` : ''}
-    ${(operational || section === 'reparto') && connected ? syncBar({ liveHealthy: app.liveHealthy, syncedAt: app.panelSyncedAt, soundOn: soundReady() }) : ''}
+    ${(operational || section === 'reparto') && connected ? syncBar({ liveHealthy: app.liveHealthy, syncedAt: app.panelSyncedAt, soundOn: soundReady(), muted: soundMuted() }) : ''}
     ${content}`;
 }
 
@@ -2711,9 +2713,15 @@ const ACTIONS = {
     toast('Panel actualizado.');
   },
   'enable-sound'() {
+    setSoundMuted(false);
     unlockSound();
     setTimeout(() => render(), 150);
     toast(soundReady() || unlockSound() ? 'Sonido activado para pedidos nuevos.' : 'Este navegador no permite reproducir sonido.');
+  },
+  'mute-sound'() {
+    setSoundMuted(true);
+    toast('Sonido silenciado en este dispositivo. Los pedidos nuevos se siguen avisando en pantalla.');
+    return render();
   },
   async 'team-role'(element) {
     const { business, user, role } = element.dataset;
