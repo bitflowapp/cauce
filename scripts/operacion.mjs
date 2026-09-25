@@ -12,6 +12,7 @@
 //   node scripts/operacion.mjs admin --email x@y [--invitar] [--aplicar]
 //   node scripts/operacion.mjs backup              dump, restauración de prueba y copia cifrada
 //   node scripts/operacion.mjs limpiar-qa [--aplicar]   residuo de pruebas (cuentas cauce-qa-…)
+//   node scripts/operacion.mjs registros [--horas 3]    5xx y errores de cada servicio (Logs Explorer)
 //
 // --local ensaya el mismo paso contra el stack de `npx supabase start`.
 import { randomBytes } from 'node:crypto';
@@ -400,10 +401,56 @@ async function limpiarQa(t, list) {
   for (const [name, count] of Object.entries(residue)) list.check(`${name} = 0`, count === 0, String(count));
 }
 
+// Registros del proyecto real (Logs Explorer por la API): respuestas 5xx de
+// la API y los errores más frecuentes de cada servicio en las últimas horas.
+// Los rechazos esperables (RLS, U0005, transiciones inválidas de las pruebas
+// de seguridad) aparecen como errores de la base: se listan para leerlos, y
+// sólo un 5xx hace fallar el paso.
+const LOG_QUERIES = {
+  'API 5xx': `select r.status_code as code, q.method as method, q.path as path, count(*) as n
+    from edge_logs cross join unnest(metadata) as m cross join unnest(m.request) as q cross join unnest(m.response) as r
+    where r.status_code >= 500 group by code, method, path order by n desc limit 10`,
+  'API por código': `select r.status_code as code, count(*) as n
+    from edge_logs cross join unnest(metadata) as m cross join unnest(m.response) as r
+    group by code order by code limit 20`,
+  'Postgres (ERROR/FATAL)': `select p.error_severity as severity, event_message as message, count(*) as n
+    from postgres_logs cross join unnest(metadata) as m cross join unnest(m.parsed) as p
+    where p.error_severity in ('ERROR', 'FATAL', 'PANIC') group by severity, message order by n desc limit 8`,
+  'Auth (errores)': `select event_message as message, count(*) as n
+    from auth_logs cross join unnest(metadata) as m where m.level = 'error' group by message order by n desc limit 8`,
+  'Realtime (errores)': `select event_message as message, count(*) as n
+    from realtime_logs cross join unnest(metadata) as m where m.level = 'error' group by message order by n desc limit 8`,
+  'Storage (errores)': `select event_message as message, count(*) as n
+    from storage_logs cross join unnest(metadata) as m where m.level = 'error' group by message order by n desc limit 8`,
+};
+
+async function registros(t, list) {
+  if (t.local) throw new Error('Los registros se consultan en el proyecto real.');
+  const hours = Math.min(Math.max(Number(option('horas')) || 3, 1), 24);
+  const end = new Date();
+  const start = new Date(end.getTime() - hours * 3600 * 1000);
+  list.info('ventana', `últimas ${hours} h (${start.toISOString()} → ${end.toISOString()})`);
+  for (const [label, sql] of Object.entries(LOG_QUERIES)) {
+    const query = new URLSearchParams({ sql, iso_timestamp_start: start.toISOString(), iso_timestamp_end: end.toISOString() });
+    let rows;
+    try {
+      const response = await t.management(`/analytics/endpoints/logs.all?${query}`);
+      if (response?.error) throw new Error(typeof response.error === 'string' ? response.error : JSON.stringify(response.error));
+      rows = response?.result || [];
+    } catch (error) {
+      list.info(label, `no se pudo consultar: ${redact(error.message).slice(0, 200)}`);
+      continue;
+    }
+    const text = rows.map(row => Object.values(row).map(value => String(value).replace(/\s+/g, ' ').slice(0, 140)).join(' · ')).join(' | ');
+    if (label === 'API 5xx') list.check('la API no respondió 5xx', rows.length === 0, text || 'ninguno');
+    else list.info(label, text || 'ninguno');
+  }
+}
+
 // ───────────────────────── arranque ─────────────────────────
 
 const STEPS = { estado, migrar, auth, correo, admin, backup: (t, checks) => { t.link(); return backup(t, checks); },
-  'limpiar-qa': limpiarQa };
+  'limpiar-qa': limpiarQa, registros };
 if (!STEPS[step]) {
   console.error(`Paso desconocido: ${step || '(ninguno)'}. Pasos: ${Object.keys(STEPS).join(', ')}.`);
   process.exit(2);
