@@ -16,6 +16,8 @@
 //   node scripts/operacion.mjs pagos-estado             funciones, secretos (sólo nombres), pilotos y cuentas
 //   node scripts/operacion.mjs pagos-funciones [--aplicar]  despliega las Edge Functions de pagos (cerradas)
 //   node scripts/operacion.mjs pagos-limpiar [--aplicar]    saca pilotos, credenciales y comercios QA de pagos
+//   node scripts/operacion.mjs pagos-sandbox --aplicar [--modo automatico|asistido|mixto]
+//        Mercado Pago real en modo de prueba de punta a punta (cuentas y tarjetas de prueba) y limpieza
 //
 // --local ensaya el mismo paso contra el stack de `npx supabase start`.
 import { randomBytes } from 'node:crypto';
@@ -29,6 +31,7 @@ import {
 import { disposableInbox, mailpitInbox, tokenLink } from './lib/casilla.mjs';
 import { backup, rehearseMigration } from './lib/respaldo.mjs';
 import { pagosEstado, pagosFunciones, pagosLimpiar } from './lib/pagos.mjs';
+import { pagosSandbox } from './lib/pagos-sandbox.mjs';
 
 const args = process.argv.slice(2);
 const step = args[0];
@@ -482,7 +485,8 @@ const STEPS = { estado, migrar, auth, correo, admin, backup: (t, checks) => { t.
   'limpiar-qa': limpiarQa, registros,
   'pagos-estado': (t, checks) => pagosEstado(t, checks),
   'pagos-funciones': (t, checks) => pagosFunciones(t, checks, { apply }),
-  'pagos-limpiar': (t, checks) => pagosLimpiar(t, checks, { apply }) };
+  'pagos-limpiar': (t, checks) => pagosLimpiar(t, checks, { apply }),
+  'pagos-sandbox': (t, checks) => pagosSandbox(t, checks, { apply, mode: option('modo') || 'mixto' }) };
 if (!STEPS[step]) {
   console.error(`Paso desconocido: ${step || '(ninguno)'}. Pasos: ${Object.keys(STEPS).join(', ')}.`);
   process.exit(2);
