@@ -75,7 +75,7 @@ for (const engine of browsersToRun) {
       await expectToast(shop.page, 'Producto agregado al catálogo.');
 
       // 5. Solicitud de publicación.
-      await tab(shop.page, 'datos');
+      await tab(shop.page, 'configuracion');
       await shop.page.getByText('Los datos mínimos están completos.').waitFor();
       await shop.page.getByRole('button', { name: 'Solicitar publicación' }).click();
       await expectToast(shop.page, 'Solicitud enviada. Queda pendiente de revisión administrativa.');

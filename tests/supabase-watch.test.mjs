@@ -68,3 +68,36 @@ test('cada vista escucha sólo su alcance y un alcance desconocido no abre canal
   assert.equal(channels.length, 2);
   stop();
 });
+
+// Conexión trabada: sin respuesta ni error. El repositorio corta la consulta
+// y avisa en vez de dejar el panel esperando para siempre.
+function queryClient(respond) {
+  const builder = {
+    signal: null,
+    select() { return builder; }, eq() { return builder; }, or() { return builder; },
+    order() { return builder; }, limit() { return builder; }, maybeSingle() { return builder; },
+    abortSignal(signal) { builder.signal = signal; return builder; },
+    then(resolve, reject) { return respond(builder.signal).then(resolve, reject); },
+  };
+  return { auth: {}, from: () => builder, rpc: () => builder };
+}
+
+test('una consulta trabada se corta y se avisa como conexión lenta', async () => {
+  // Como postgrest-js: un fetch abortado vuelve como { error }, no como excepción.
+  const client = queryClient(signal => new Promise(resolve => signal.addEventListener('abort',
+    () => resolve({ data: null, error: { message: 'AbortError: signal is aborted without reason', code: '' } }))));
+  const reported = [];
+  const repository = createSupabaseRepository({ client, storage: memory, requestTimeoutMs: 30,
+    onError: error => reported.push(error.code) });
+  const started = Date.now();
+  await assert.rejects(repository.query('businessOrders', { businessId: 'b1' }),
+    error => error.code === 'NETWORK_TIMEOUT' && /muy lenta/.test(error.message));
+  assert.ok(Date.now() - started < 2000, 'no espera más que el límite');
+  assert.deepEqual(reported, ['NETWORK_TIMEOUT'], 'queda en el registro de errores de la app');
+});
+
+test('una respuesta a tiempo pasa sin cambios', async () => {
+  const client = queryClient(() => Promise.resolve({ data: [], error: null }));
+  const repository = createSupabaseRepository({ client, storage: memory, requestTimeoutMs: 1000 });
+  assert.deepEqual(await repository.query('businessOrders', { businessId: 'b1' }), []);
+});

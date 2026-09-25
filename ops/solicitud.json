@@ -1,8 +1,8 @@
 {
-  "paso": "admin",
-  "aplicar": false,
-  "confirmar": "",
+  "paso": "smoke-previo",
+  "aplicar": true,
+  "confirmar": "ygqbcvxdrewcnzedfcyo",
   "email": "",
   "invitar": false,
-  "motivo": "Fase A · B4: ¿existe ya la cuenta de CAUCE_ADMIN_EMAIL, confirmada y con privilegio? Sólo lectura."
+  "motivo": "Fase B: el build de producción del panel (feat/cauce-business-panel-v1 con main al día) contra el proyecto real, antes de integrar #4 y publicar. Crea y borra datos CAUCE QA."
 }

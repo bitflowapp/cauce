@@ -5,6 +5,23 @@
 let context = null;
 let baseTitle = typeof document === 'undefined' ? 'CAUCE' : document.title;
 
+// Silenciar es una preferencia de este dispositivo: el aviso en pantalla y en
+// el título de la pestaña siguen igual.
+const MUTE_KEY = 'cauce.panel.sonido';
+let muted = (() => {
+  try { return globalThis.localStorage?.getItem(MUTE_KEY) === 'off'; } catch { return false; }
+})();
+
+export const soundMuted = () => muted;
+
+export function setSoundMuted(value) {
+  muted = value === true;
+  try {
+    if (muted) globalThis.localStorage?.setItem(MUTE_KEY, 'off');
+    else globalThis.localStorage?.removeItem(MUTE_KEY);
+  } catch { /* sin almacenamiento: vale para esta sesión */ }
+}
+
 export function unlockSound() {
   try {
     const Context = globalThis.AudioContext || globalThis.webkitAudioContext;
@@ -15,7 +32,7 @@ export function unlockSound() {
   } catch { return false; }
 }
 
-export const soundReady = () => Boolean(context && context.state === 'running');
+export const soundReady = () => !muted && Boolean(context && context.state === 'running');
 
 function chime() {
   if (!soundReady()) return false;
@@ -38,7 +55,9 @@ function chime() {
 export function announceNewOrders(count) {
   if (!count) return;
   chime();
-  try { globalThis.navigator?.vibrate?.([180, 80, 180]); } catch { /* sin vibración */ }
+  if (!muted) {
+    try { globalThis.navigator?.vibrate?.([180, 80, 180]); } catch { /* sin vibración */ }
+  }
   if (typeof document !== 'undefined') {
     document.title = `(${count}) Pedido nuevo · ${baseTitle.replace(/^\(\d+\)\s*Pedido nuevo · /, '')}`;
   }

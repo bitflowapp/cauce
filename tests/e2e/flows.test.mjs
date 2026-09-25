@@ -83,6 +83,9 @@ for (const engine of browsersToRun) {
       const m = merchant.page;
       await m.waitForFunction(() => /^#panel\/[0-9a-f-]{36}$/.test(location.hash), null, { timeout: 20000 });
       await ready(m);
+      // El inicio ya muestra el pedido nuevo; se atiende desde Pedidos.
+      await m.locator(`article[aria-label="Pedido ${code}"]`).waitFor({ timeout: 15000 });
+      await go(m, `${await m.evaluate(() => location.hash)}/pedidos`);
       const card = m.locator(`article[aria-label="Pedido ${code}"]`);
       await card.waitFor({ timeout: 15000 });
       assert.ok(await card.getByText('Vecina de Prueba').isVisible());
@@ -90,7 +93,7 @@ for (const engine of browsersToRun) {
       await panelAction(m, code, 'Aceptar');
       // Sin recargar: el cambio llega por Realtime.
       await c.locator('.timeline-step.current', { hasText: 'Aceptado' }).waitFor({ timeout: 15000 });
-      await panelAction(m, code, 'Informar preparación');
+      await panelAction(m, code, 'Empezar a preparar');
       await panelAction(m, code, 'Listo para retirar');
       await c.locator('.timeline-step.current', { hasText: 'Listo para retirar' }).waitFor({ timeout: 15000 });
       await panelAction(m, code, 'Marcar retirado');
@@ -133,12 +136,12 @@ for (const engine of browsersToRun) {
       await ready(m);
       await m.getByRole('tab', { name: /Pedidos/ }).click();
       await ready(m);
-      for (const label of ['Aceptar', 'Informar preparación', 'Listo para enviar']) await panelAction(m, code, label);
+      for (const label of ['Aceptar', 'Empezar a preparar', 'Listo para enviar']) await panelAction(m, code, label);
       const card = m.locator(`article[aria-label="Pedido ${code}"]`);
       await card.locator('select[name="riderId"]').selectOption({ label: `Reparto ${engine}` });
       await card.getByRole('button', { name: 'Asignar reparto' }).click();
       await ready(m);
-      for (const label of ['Retirado por el reparto', 'Marcar salida']) await panelAction(m, code, label);
+      for (const label of ['Retirado por el reparto', 'Salió a entregar']) await panelAction(m, code, label);
 
       // Otro teléfono, sin sesión: el enlace de seguimiento muestra el estado.
       await other.page.goto(tracking);
@@ -166,7 +169,7 @@ for (const engine of browsersToRun) {
       await signIn(staff.page, people.staffA);
       await go(staff.page, `#panel/${A.id}`);
       const tabs = await staff.page.getByRole('tab').allTextContents();
-      assert.deepEqual(tabs.map(text => text.replace(/\d+/g, '').trim()), ['Pedidos', 'Catálogo']);
+      assert.deepEqual(tabs.map(text => text.replace(/\d+/g, '').trim()), ['Inicio', 'Pedidos', 'Catálogo', 'Reparto']);
       await staff.page.getByRole('tab', { name: 'Catálogo' }).click();
       await ready(staff.page);
       assert.equal(await staff.page.locator('form[data-form="product-create"]').count(), 0);

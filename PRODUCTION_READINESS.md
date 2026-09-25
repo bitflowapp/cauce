@@ -4,13 +4,18 @@
 
 ## Estado
 
-**Publicando.** El SMTP propio quedó cargado el 25/09 y con él pasaron Auth
-(13/13) y el correo real: confirmación, recuperación e invitación llegaron a
-una casilla externa (22/22). Con eso no queda ningún gate crítico abierto antes
-de publicar: este cambio pasa `.github/deploy-target` a `production`, y al
-integrarlo a `main` Pages exige el esquema remoto y publica el build conectado.
-Después siguen, sobre el sitio publicado: `smoke-publicado`, `limpiar-qa`,
-`registros` y la invitación a la administración (§3.2).
+**READY · publicado el 25/09 a las 06:17 UTC** (`main` 2695953, build
+conectado a `ygqbcvxdrewcnzedfcyo` en https://bitflowapp.github.io/cauce/).
+Verificado sobre el sitio publicado:
+
+- smoke completo 7/7 en Chromium y WebKit;
+- residuo QA en 0;
+- registros sin respuestas 5xx.
+
+Queda una sola acción humana: que la persona de `CAUCE_ADMIN_EMAIL` acepte la
+invitación (ya enviada) y elija su contraseña. Recién ahí `admin --aplicar`
+le otorga la administración, y un comercio real puede pedir su publicación y
+ser aprobado.
 
 | # | Gate | Resultado en el proyecto real | Evidencia |
 | --- | --- | --- | --- |
@@ -21,8 +26,10 @@ Después siguen, sobre el sitio publicado: `smoke-publicado`, `limpiar-qa`,
 | P13 | Residuo QA | **PASS.** QA_USERS 0 · QA_BUSINESSES 0 · QA_ORDERS 0 · QA_STORAGE 0. | runs 36081816451 y 36087093631 (después del último smoke) |
 | P14 | Registros (24 h) | **PASS.** Ninguna respuesta 5xx, y cada 4xx y error tiene origen conocido: llamadas anteriores a la migración (`app_status`, `open_now`; la última a las 00:40), las pruebas de seguridad de los smokes (rechazadas como corresponde) y el sondeo de sólo lectura de la auditoría (24/09 16:35–16:42 UTC, rechazado entero). El único defecto real, un canal en vivo abierto sin sesión, se corrigió (N-23) y no volvió a aparecer en el smoke sobre el código final. Un corte de replicación de Realtime (25/09 00:05) se recuperó solo. | runs 36083254425 y 36087184244 |
 | B3 | SMTP, confirmación y recuperación reales | **PASS.** Los nueve secretos cargados (sólo se verifican los nombres). Con entrega real a una casilla externa: alta sin confirmar no entra; la confirmación llega, vuelve al sitio real y confirma desde otro dispositivo; la recuperación llega, fija la contraseña nueva, la anterior deja de valer y el enlace no se reutiliza; la invitación llega y la persona elige su contraseña. Cuentas de prueba borradas. | runs 36101016643 (secretos), 36101193671 · 22/22 |
-| B4 | Administración real | El mecanismo pasó en el proyecto real (P5: sólo `private.platform_admins` da acceso). La cuenta de `CAUCE_ADMIN_EMAIL` todavía no existe (run 36101307803): se invita **después** de publicar, porque el enlace abre el sitio conectado; la persona acepta y elige su contraseña, y `admin --aplicar` otorga el privilegio. | run 36101307803 |
-| B6 | Deploy de producción | En curso: `.github/deploy-target` = `production`; se publica al integrar a `main` (protegida: PR y los tres checks de CI). | — |
+| B4 | Administración real | **Invitación enviada** a la cuenta de `CAUCE_ADMIN_EMAIL` (no existía). Falta que la persona la acepte en el sitio publicado y elija su contraseña; después `admin --aplicar` otorga el privilegio. Si el enlace venció (1 h), sirve "¿Olvidaste tu contraseña?" con ese correo. | runs 36101307803 y 36102590496 |
+| B6 | Deploy de producción | **PASS.** Integrado #3 (`main` 2695953); Pages corrió las compuertas, exigió el esquema remoto, publicó el build conectado y lo verificó. | run 36102110690 |
+| P15 | Smoke sobre el sitio publicado | **PASS 7/7** en Chromium y WebKit. Cubre:<br>• compra sin cuenta con retiro y seguimiento;<br>• cliente con cuenta, envío y reparto a cargo del encargado;<br>• 320–1440 px;<br>• seguridad sobre la API publicada.<br>Limpió 5 pedidos, 2 comercios y 8 cuentas QA. | run 36102265827 |
+| P16 | Residuo QA y registros después del deploy | **PASS.** QA_USERS, QA_BUSINESSES, QA_ORDERS y QA_STORAGE en 0. Ningún 5xx en 24 h; los 4xx y errores son las pruebas de seguridad de los smokes, llamadas previas a la migración y la reconexión de Realtime de las 00:05, que se recuperó sola. | runs 36102522235 y 36102676129 |
 
 Con `.github/deploy-target` en `production`, integrar a `main` publica el
 build conectado; Pages igual se niega a publicar si el esquema remoto no es

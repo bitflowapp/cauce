@@ -189,7 +189,7 @@ async function main() {
     step('Carga un producto con variantes simples');
     await shot(merchant, '02-catalogo');
 
-    await merchant.click('[data-action="set-panel-tab"][data-tab="datos"]');
+    await merchant.click('[data-action="set-panel-tab"][data-tab="configuracion"]');
     await merchant.waitForFunction(`document.querySelector('[data-action="submit-business"]')?.disabled === false`);
     await merchant.click('[data-action="submit-business"]');
     await merchant.waitForFunction(`/pendiente de revisi/i.test(document.body.innerText)`);
@@ -220,7 +220,7 @@ async function main() {
     await merchant.waitForFunction(`document.body.innerText.includes('domingos')`);
     step('El comercio ve el motivo de la devolución');
 
-    await merchant.click('[data-action="set-panel-tab"][data-tab="datos"]');
+    await merchant.click('[data-action="set-panel-tab"][data-tab="configuracion"]');
     await merchant.waitForFunction(`!!document.querySelector('#b-hours')`);
     await merchant.fill('#b-hours', 'Lunes a sábado de 9 a 13 y de 17 a 21. Domingos cerrado.');
     await merchant.click('[data-form="business-update"] button[type="submit"]');
@@ -301,12 +301,12 @@ async function main() {
     step('El doble toque crea un solo pedido', `${ordersInState} pedido registrado`);
     await shot(customer, '08-pedido-cliente');
 
-    await visit(merchant, '#panel/almacen-el-pehuen');
+    await visit(merchant, '#panel/almacen-el-pehuen/pedidos');
     await merchant.waitForFunction(`document.body.innerText.includes('Rosa Vecina')`);
     step('El pedido llega al panel del comercio, en otra sesión');
     await shot(merchant, '09-panel-pedido');
 
-    for (const label of ['Aceptar', 'Informar preparación']) await clickByLabel(merchant, '.order-panel-actions button', label);
+    for (const label of ['Aceptar', 'Empezar a preparar']) await clickByLabel(merchant, '.order-panel-actions button', label);
     await visit(customer, orderHash);
     await customer.waitForFunction(`/en preparaci/i.test(document.querySelector('#main').innerText)`);
     await showcase(customer, 'showcase-04-pedido-preparacion-390');
@@ -327,7 +327,7 @@ async function main() {
     await merchant.waitForFunction(`document.querySelector('#toast')?.textContent.includes('asignado')`);
     step('Asigna el reparto al pedido');
 
-    for (const label of ['Retirado por el reparto', 'Marcar salida']) {
+    for (const label of ['Retirado por el reparto', 'Salió a entregar']) {
       await clickByLabel(merchant, '.order-panel-actions button', label);
     }
     await visit(customer, orderHash);

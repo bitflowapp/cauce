@@ -11,13 +11,22 @@ import { isNetworkError } from './core/network.js';
 import { CauceError } from './core/errors.js';
 import { REQUIRED_SCHEMA } from './core/contract.js';
 import { createTelemetry, classify } from './core/telemetry.js';
-import { nextOpening } from './core/business-hours.js';
+import { nextOpening, MAX_RANGES_PER_DAY } from './core/business-hours.js';
 import { ROLE_LABELS } from './core/accounts.js';
 import { askReason as askReasonDialog, askConfirm as askConfirmDialog } from './ui/dialog.js';
-import { announceNewOrders, clearOrderAlert, unlockSound, soundReady, setBaseTitle } from './ui/order-alert.js';
 import {
-  contactButtons, timesLine, hoursSummary, hoursEditor, readHoursForm, teamTab, ROLE_NAMES,
+  announceNewOrders, clearOrderAlert, unlockSound, soundReady, soundMuted, setSoundMuted, setBaseTitle,
+} from './ui/order-alert.js';
+import {
+  contactButtons, timesLine, hoursSummary, hoursEditor, readHoursForm, allDaysClosed, teamTab, ROLE_NAMES, ROLE_HINTS,
 } from './ui/merchant-tools.js';
+import {
+  panelSections, resolveSection, canManageBusiness, groupOrders, freshOrderIds, panelSummary, openState,
+  isUnavailableProduct, deliveryBoardData, topProducts, recentSales, ORDER_FILTERS,
+} from './core/business-panel.js';
+import {
+  panelNav, openBar, syncBar, newOrdersBanner, ordersBoard, dashboard, deliveryBoard,
+} from './ui/business-panel.js';
 import { renderIcon, renderSticker } from './ui/icons.js';
 import { renderCharacter } from './ui/brand-characters.js';
 import {
@@ -63,7 +72,13 @@ const app = {
   online: typeof navigator === 'undefined' ? true : navigator.onLine !== false,
   search: { query: '', category: 'Todos', onlyOpen: false },
   activityTab: 'pedidos',
-  panelTab: 'pedidos',
+  // Panel del comercio: filtro de pedidos por estado (la sección va en la URL)
+  // y los desplegables abiertos, que un redibujo no tiene que cerrar.
+  orderFilter: 'activos',
+  openDetails: new Set(),
+  // Quién reparte, elegido en una tarjeta y todavía sin confirmar: sobrevive
+  // a los refrescos de fondo para que "Asignar reparto" asigne a esa persona.
+  riderChoice: new Map(),
   formDrafts: new Map(),
   toastTimer: null,
   // Entorno conectado: verticales habilitadas y contrato con la base.
@@ -377,11 +392,12 @@ function applyOfflineState() {
 
 function errorView(error) {
   const offline = isNetworkError(error);
-  const retry = offline || isConnected()
+  const slow = error?.code === 'NETWORK_TIMEOUT';
+  const retry = offline || slow || isConnected()
     ? '<button class="button secondary" type="button" data-action="retry">Reintentar</button>'
     : '';
   return `<section class="notice error" role="alert">
-    <h2>${offline ? 'Sin conexión con CAUCE' : 'No pudimos abrir esta vista'}</h2>
+    <h2>${offline ? 'Sin conexión con CAUCE' : slow ? 'La conexión está lenta' : 'No pudimos abrir esta vista'}</h2>
     <p>${esc(userMessage(error))}</p>
     <div class="modal-actions">${retry}<a class="button secondary" href="#inicio">Volver al inicio</a></div>
   </section>`;
@@ -670,7 +686,13 @@ async function viewBusiness(businessId) {
   ]);
   const lines = new Map(cart.lines.map(line => [line.productId, line.quantity]));
   const purchasable = products.filter(product => !product.archived);
-  const categories = [...new Set(purchasable.map(product => product.category))];
+  // Las secciones siguen el orden que eligió el comercio; lo que no tiene
+  // categoría visible ("Otros") va al final.
+  const rankOf = new Map();
+  for (const product of purchasable) {
+    if (!rankOf.has(product.category)) rankOf.set(product.category, product.categoryPosition ?? Number.MAX_SAFE_INTEGER);
+  }
+  const categories = [...rankOf.keys()].sort((a, b) => rankOf.get(a) - rankOf.get(b));
   const count = cart.lines.reduce((total, line) => total + line.quantity, 0);
 
   const productCard = product => {
@@ -1443,22 +1465,10 @@ async function viewBusinessSignup() {
     </form>`;
 }
 
-const PANEL_TABS = Object.freeze([
-  ['pedidos', 'Pedidos', 'all'], ['catalogo', 'Catálogo', 'all'], ['datos', 'Datos', 'manage'],
-  ['horarios', 'Horarios', 'connected-manage'], ['reparto', 'Reparto', 'manage'], ['equipo', 'Equipo', 'connected-manage'],
-]);
-
-function agoText(value) {
-  const minutes = Math.max(0, Math.round((Date.now() - new Date(value).getTime()) / 60000));
-  if (!Number.isFinite(minutes)) return '';
-  if (minutes < 1) return 'recién';
-  if (minutes < 60) return `hace ${minutes} min`;
-  const hours = Math.floor(minutes / 60);
-  return hours < 24 ? `hace ${hours} h` : shortDate(value);
-}
-
 async function viewMerchantPanel(businessId) {
   if (!isSignedIn()) {
+    // Sesión vencida o cerrada: después de ingresar vuelve a esta misma sección.
+    if (businessId) app.returnTo = location.hash;
     return `${backLink('#inicio', 'Inicio')}
       <section class="page-header"><h1 class="page-title">Panel de comercio</h1></section>
       <div class="notice"><strong>Necesitás iniciar sesión.</strong> El panel muestra únicamente los datos de los comercios de tu cuenta.</div>
@@ -1504,40 +1514,66 @@ async function viewMerchantPanel(businessId) {
       <a class="button secondary" href="#panel">Volver a mis comercios</a></section>`;
   }
   const role = business.membershipRole || 'owner';
-  const canManage = role !== 'staff';
-  const tabs = PANEL_TABS.filter(([, , scope]) => scope === 'all' || (scope === 'manage' && canManage)
-    || (scope === 'connected-manage' && canManage && isConnected()));
-  const tab = tabs.some(([key]) => key === app.panelTab) ? app.panelTab : 'pedidos';
+  const canManage = canManageBusiness(role);
+  const connected = isConnected();
+  const sections = panelSections(role, { connected });
+  const section = resolveSection(route().extra, sections);
 
-  const [orders, products, riders, categories, team, serverRequirements] = await Promise.all([
+  const [orders, products, riders, categories, team, serverRequirements, productCategories] = await Promise.all([
     app.repository.query('businessOrders', { businessId }),
     app.repository.query('products', { businessId }),
-    canManage || tab === 'pedidos' ? app.repository.query('riders', { businessId }) : [],
-    canManage && tab === 'datos' && app.repository.capabilities.media ? app.repository.query('businessCategories') : [],
-    tab === 'equipo' ? app.repository.query('team', { businessId }) : [],
+    ['inicio', 'pedidos', 'reparto'].includes(section) ? app.repository.query('riders', { businessId }) : [],
+    canManage && section === 'configuracion' && app.repository.capabilities.media ? app.repository.query('businessCategories') : [],
+    section === 'equipo' ? app.repository.query('team', { businessId }) : [],
     // En el entorno conectado los requisitos de publicación los decide el servidor.
-    isConnected() && canManage && tab === 'datos' ? app.repository.query('businessRequirements', { businessId }) : null,
+    connected && canManage && section === 'configuracion' ? app.repository.query('businessRequirements', { businessId }) : null,
+    connected && section === 'catalogo' ? app.repository.query('productCategories', { businessId }) : [],
   ]);
   const requirements = serverRequirements || missingPublicationRequirements(business, products);
 
   // Pedidos nuevos desde la última vez que el panel los vio: aviso sonoro y
   // visual. La primera carga sólo registra lo que ya estaba.
-  const pendingIds = orders.filter(order => order.status === 'submitted').map(order => order.id);
   const seen = app.seenOrders.get(businessId);
-  const fresh = seen ? pendingIds.filter(id => !seen.has(id)) : [];
-  app.seenOrders.set(businessId, new Set([...(seen || []), ...pendingIds]));
+  const { pending, fresh } = freshOrderIds(orders, seen);
+  app.seenOrders.set(businessId, new Set([...(seen || []), ...pending]));
   if (fresh.length) announceNewOrders(fresh.length);
-  else if (!pendingIds.length) clearOrderAlert();
+  else if (!pending.length) clearOrderAlert();
+  hideFloatingOrderAlert();
   app.panelSyncedAt = new Date();
-  const newCount = pendingIds.length;
+
+  const context = { businessId: business.id, localityId: business.localityId, connected, riders, fresh,
+    canManage, online: app.online, riderChoice: app.riderChoice };
+  const state = openState(business);
+  const operational = ['inicio', 'pedidos'].includes(section);
+  if (!ORDER_FILTERS.includes(app.orderFilter)) app.orderFilter = 'activos';
+
+  let content = '';
+  if (section === 'inicio') {
+    content = dashboard(business, panelSummary(orders, products), {
+      newOrders: groupOrders(orders).nuevos, unavailable: products.filter(isUnavailableProduct),
+      top: topProducts(orders), sales: recentSales(orders), context, canManage });
+  } else if (section === 'pedidos') {
+    content = ordersBoard(orders, context, { filter: app.orderFilter, businessActive: business.status === 'active' });
+  } else if (section === 'catalogo') {
+    content = merchantCatalogTab(business, products, { canManage, categories: productCategories });
+  } else if (section === 'configuracion') {
+    content = merchantDataTab(business, requirements, categories);
+  } else if (section === 'horarios') {
+    content = hoursEditor(business, { editable: business.status !== 'suspended', state });
+  } else if (section === 'reparto') {
+    content = `${deliveryBoard(deliveryBoardData(orders, riders), context, { deliveryEnabled: business.deliveryEnabled !== false })}
+      ${canManage ? merchantRidersTab(business, riders) : ''}`;
+  } else if (section === 'equipo') {
+    content = teamTab(business, team, { isOwner: role === 'owner', role });
+  }
 
   return `
     ${offlineBanner()}
     ${backLink('#panel', 'Mis comercios')}
-    <section class="page-header">
+    <section class="page-header panel-header">
       <span class="eyebrow">${esc(businessStatusLabel(business.status).toUpperCase())} · ${esc((ROLE_NAMES[role] || '').toUpperCase())}</span>
       <h1 class="page-title">${esc(business.name)}</h1>
-      <p class="quiet">${esc(BUSINESS_STATUS_HINTS[business.status] || '')}</p>
+      ${business.status === 'active' ? '' : `<p class="quiet">${esc(BUSINESS_STATUS_HINTS[business.status] || '')}</p>`}
     </section>
 
     ${['returned', 'suspended'].includes(business.status) && business.reviewNote ? `
@@ -1545,137 +1581,42 @@ async function viewMerchantPanel(businessId) {
         <strong>${business.status === 'suspended' ? 'Administración suspendió el comercio.' : 'Administración devolvió la solicitud.'}</strong> ${esc(business.reviewNote)}
       </div>` : ''}
 
-    ${business.status === 'active' ? `
-      <div class="panel-openbar ${business.acceptingOrders ? 'is-open' : ''}">
-        <span><strong>${business.acceptingOrders ? (business.open ? 'Recibiendo pedidos' : 'Abierto, fuera de horario') : 'Cerrado: no recibe pedidos'}</strong>
-          ${business.acceptingOrders && !business.open && isConnected() ? `<small>${esc(nextOpening(business.hours, new Date(), business.timezone)?.label || 'Revisá los horarios cargados.')}</small>` : ''}</span>
-        ${canManage ? `<button class="button ${business.acceptingOrders ? 'danger' : ''}" type="button" data-action="toggle-open"
-          data-business="${esc(business.id)}" data-open="${business.acceptingOrders ? 'false' : 'true'}">
-          ${business.acceptingOrders ? 'Cerrar atención' : 'Abrir atención'}
-        </button>` : ''}
-      </div>` : ''}
-
-    ${isConnected() ? `<div class="panel-sync" role="status" aria-live="polite">
-      <span class="panel-sync-dot ${app.liveHealthy ? 'ok' : 'warn'}" aria-hidden="true"></span>
-      <span>${app.liveHealthy ? 'En vivo' : 'Reconectando: revisamos cada 30 segundos'} · actualizado ${esc(timeOnly(app.panelSyncedAt))}</span>
-      <button class="link-button" type="button" data-action="refresh-panel">${renderIcon('refresh', 14)} Actualizar</button>
-      ${soundReady() ? '' : '<button class="link-button" type="button" data-action="enable-sound">Activar sonido de pedidos</button>'}
-    </div>` : ''}
-
-    <div class="tabs" role="tablist" aria-label="Secciones del panel">
-      ${tabs.map(([key, label]) => `
-        <button class="tab ${tab === key ? 'active' : ''}" type="button" role="tab" aria-selected="${tab === key}"
-          data-action="set-panel-tab" data-tab="${key}">${label}${key === 'pedidos' && newCount ? ` <span class="tab-badge">${newCount}</span>` : ''}</button>`).join('')}
-    </div>
-
-    ${tab === 'pedidos' ? merchantOrdersTab(business, orders, riders, fresh) : ''}
-    ${tab === 'catalogo' ? merchantCatalogTab(business, products, { canManage }) : ''}
-    ${tab === 'datos' ? merchantDataTab(business, requirements, categories) : ''}
-    ${tab === 'horarios' ? hoursEditor(business, { editable: business.status !== 'suspended' }) : ''}
-    ${tab === 'reparto' ? merchantRidersTab(business, riders) : ''}
-    ${tab === 'equipo' ? teamTab(business, team, { isOwner: role === 'owner' }) : ''}`;
+    ${operational ? '' : newOrdersBanner(business.id, pending.length)}
+    ${panelNav(business.id, sections, section, { newCount: pending.length })}
+    ${operational || ['horarios', 'configuracion'].includes(section) ? openBar(business, state, { canManage, online: app.online }) : ''}
+    ${role === 'staff' && section === 'inicio' ? `<p class="microcopy panel-role">Tu rol: ${esc(ROLE_NAMES.staff)}. ${esc(ROLE_HINTS.staff)}</p>` : ''}
+    ${(operational || section === 'reparto') && connected ? syncBar({ liveHealthy: app.liveHealthy, syncedAt: app.panelSyncedAt, soundOn: soundReady(), muted: soundMuted() }) : ''}
+    ${content}`;
 }
 
-function merchantOrdersTab(business, orders, riders, fresh = []) {
-  const incoming = orders.filter(order => order.status === 'submitted');
-  const running = orders.filter(order => !['submitted', 'delivered', 'canceled'].includes(order.status));
-  const closed = orders.filter(order => ['delivered', 'canceled'].includes(order.status));
-  const merchantActor = { kind: 'merchant', businessId: business.id, localityId: business.localityId };
+// Mientras se edita un formulario del panel la vista no se redibuja (se
+// perdería lo escrito), pero un pedido nuevo igual tiene que sonar y verse:
+// se consulta aparte y se avisa con un cartel fijo, fuera del formulario.
+async function peekNewOrders(businessId) {
+  try {
+    const orders = await app.repository.query('businessOrders', { businessId });
+    const seen = app.seenOrders.get(businessId);
+    const { pending, fresh } = freshOrderIds(orders, seen);
+    app.seenOrders.set(businessId, new Set([...(seen || []), ...pending]));
+    if (!fresh.length) return;
+    announceNewOrders(fresh.length);
+    let alert = /** @type {HTMLAnchorElement|null} */ (document.querySelector('#panel-order-alert'));
+    if (!alert) {
+      alert = document.createElement('a');
+      alert.id = 'panel-order-alert';
+      alert.className = 'new-orders-banner is-floating';
+      alert.setAttribute('role', 'status');
+      document.body.append(alert);
+    }
+    alert.href = `#panel/${businessId}/pedidos`;
+    alert.innerHTML = `${renderIcon('bell', 16)} <span><strong>${pending.length === 1 ? '1 pedido nuevo' : `${pending.length} pedidos nuevos`}</strong> ${pending.length === 1 ? 'espera' : 'esperan'} respuesta</span> <span class="new-orders-banner-cta">Ver pedidos</span>`;
+    alert.hidden = false;
+  } catch { /* sin red: el próximo sondeo vuelve a intentar */ }
+}
 
-  const actionLabel = (order, action) => {
-    if (action === 'canceled') return order.status === 'submitted' ? 'Rechazar' : 'Cancelar';
-    if (action === 'accepted') return 'Aceptar';
-    if (action === 'preparing') return 'Informar preparación';
-    if (action === 'ready') return order.fulfillment === 'pickup' ? 'Listo para retirar' : 'Listo para enviar';
-    if (action === 'assigned') return 'Asignar reparto';
-    if (action === 'picked_up') return 'Retirado por el reparto';
-    if (action === 'on_the_way') return 'Marcar salida';
-    if (action === 'arrived') return 'Llegó a destino';
-    if (action === 'delivered') return order.fulfillment === 'pickup' ? 'Marcar retirado' : 'Marcar entregado';
-    return action;
-  };
-
-  const orderRow = order => {
-    const merchantOptions = allowedActions(order, merchantActor).filter(Boolean);
-    const riderActor = order.riderId
-      ? { kind: 'rider', id: order.riderId, businessId: business.id, localityId: business.localityId }
-      : null;
-    const riderOptions = riderActor ? allowedActions(order, riderActor).filter(Boolean) : [];
-    // Un envío que falla después de salir también se puede cerrar, con motivo.
-    const lateCancel = isConnected() && order.fulfillment === 'delivery'
-      && ['picked_up', 'on_the_way', 'arrived'].includes(order.status) ? ['canceled'] : [];
-    // Quien reparte suele entregar sin avisar antes que llegó: la base permite
-    // pasar de "en camino" a "entregado" y el panel lo ofrece.
-    const directDelivery = isConnected() && order.fulfillment === 'delivery' && order.status === 'on_the_way' ? ['delivered'] : [];
-    const options = [...new Set([...merchantOptions, ...riderOptions, ...directDelivery, ...lateCancel])];
-    const forward = options.filter(action => action !== 'canceled');
-    const riderName = riders.find(rider => rider.id === order.riderId)?.name;
-    const phone = String(order.customer.phone || '').replace(/[^\d+]/g, '');
-
-    return `
-      <article class="order-panel-card ${order.status === 'submitted' ? 'is-new' : ''} ${fresh.includes(order.id) ? 'is-fresh' : ''}"
-        aria-label="Pedido ${esc(order.code)}">
-        <header class="order-panel-head">
-          <div>
-            <strong>${esc(order.code)}</strong>
-            <span class="quiet"> · ${esc(fulfillmentLabel(order.fulfillment))} · ${esc(timeOnly(order.createdAt))} (${esc(agoText(order.createdAt))})</span>
-          </div>
-          <span class="status-chip ${orderStatusTone(order.status)}">${esc(orderStatusLabel(order))}</span>
-        </header>
-        <ul class="order-panel-lines">
-          ${order.lines.map(line => `<li><strong>${line.quantity} ×</strong> ${esc(line.name)}</li>`).join('')}
-        </ul>
-        <p class="order-panel-customer">
-          <span>${renderIcon('user', 14)} ${esc(order.customer.name)}</span>
-          ${phone ? `<a href="tel:${esc(phone)}">${renderIcon('phone', 14)} ${esc(formatArgentinePhone(order.customer.phone))}</a>` : ''}
-        </p>
-        ${order.customer.address ? `<p class="microcopy">${renderIcon('pin', 13)} ${esc(order.customer.address)}</p>` : ''}
-        ${order.customer.notes ? `<p class="order-panel-notes">Notas: ${esc(order.customer.notes)}</p>` : ''}
-        <p class="order-panel-total">${money(order.total)} · ${esc(paymentLabel(order.paymentMethod))}${order.deliveryFee ? ` · envío ${money(order.deliveryFee)}` : ''}</p>
-        ${order.deliveryCode && !['delivered', 'canceled'].includes(order.status) ? `<p class="microcopy">Código de entrega: <strong>${esc(formatDeliveryCode(order.deliveryCode.code))}</strong> · pedíselo a la persona al entregar.</p>` : ''}
-        ${riderName ? `<p class="microcopy">Reparto: ${esc(riderName)}</p>` : ''}
-        ${order.cancellation ? `<p class="microcopy">Motivo: ${esc(order.cancellation.reason || 'sin detalle')}</p>` : ''}
-        ${options.length ? `<div class="order-panel-actions">
-          ${forward.map(action => {
-            if (action === 'assigned') {
-              const active = riders.filter(rider => rider.active !== false);
-              if (!active.length) {
-                return `<button class="button secondary" type="button" data-action="set-panel-tab" data-tab="reparto">Cargar quién reparte</button>`;
-              }
-              return `<form class="inline-form" data-form="assign-rider" data-order="${esc(order.id)}" data-version="${order.version}">
-                <label class="visually-hidden" for="rider-${esc(order.id)}">Quién reparte ${esc(order.code)}</label>
-                <select id="rider-${esc(order.id)}" name="riderId" required>
-                  ${active.map(rider => `<option value="${esc(rider.id)}">${esc(rider.name)}</option>`).join('')}
-                </select>
-                <button class="button" type="submit">Asignar reparto</button>
-              </form>`;
-            }
-            return `<button class="button" type="button" data-action="order-transition"
-              data-order="${esc(order.id)}" data-version="${order.version}" data-next="${esc(action)}">${esc(actionLabel(order, action))}</button>`;
-          }).join('')}
-          ${options.includes('canceled') ? `<button class="button ${order.status === 'submitted' ? 'danger' : 'link-button danger'}" type="button"
-            data-action="order-transition" data-order="${esc(order.id)}" data-version="${order.version}" data-next="canceled"
-            data-reason="required" data-code="${esc(order.code)}">${esc(actionLabel(order, 'canceled'))}</button>` : ''}
-        </div>` : ''}
-      </article>`;
-  };
-
-  return `
-    <section class="panel-section">
-      <h2 class="checkout-section-title">Requieren atención (${incoming.length})</h2>
-      ${incoming.length ? `<div class="stack">${incoming.map(orderRow).join('')}</div>`
-        : `<p class="quiet">${business.status === 'active' ? 'Sin pedidos nuevos. Cuando entre uno, aparece acá y suena un aviso.' : 'El comercio todavía no está publicado.'}</p>`}
-    </section>
-    <section class="panel-section">
-      <h2 class="checkout-section-title">En curso (${running.length})</h2>
-      ${running.length ? `<div class="stack">${running.map(orderRow).join('')}</div>`
-        : '<p class="quiet">No hay pedidos en preparación ni en camino.</p>'}
-    </section>
-    ${closed.length ? `
-      <section class="panel-section">
-        <h2 class="checkout-section-title">Cerrados recientes (${closed.length})</h2>
-        <div class="stack">${closed.slice(0, 15).map(orderRow).join('')}</div>
-      </section>` : ''}`;
+function hideFloatingOrderAlert() {
+  const alert = /** @type {HTMLElement|null} */ (document.querySelector('#panel-order-alert'));
+  if (alert) alert.hidden = true;
 }
 
 function mediaField(id, label, current, hint) {
@@ -1688,110 +1629,180 @@ function mediaField(id, label, current, hint) {
     </div>`;
 }
 
-function merchantCatalogTab(business, products, { canManage = true } = {}) {
+const variantsText = product => (product.variants || []).map(variant => (variant.priceDelta
+  ? `${variant.name} ${variant.priceDelta > 0 ? '+' : '-'}${Math.abs(variant.priceDelta)}` : variant.name)).join(', ');
+
+// Formulario de producto: el mismo para crear y para editar.
+function productFields(prefix, product, { connected }) {
+  const value = field => esc(product?.[field] ?? '');
+  const tracked = product ? product.trackStock : false;
+  return `
+    <div class="field">
+      <label for="${prefix}-name">Nombre</label>
+      <input id="${prefix}-name" name="name" type="text" required minlength="2" maxlength="80" value="${value('name')}">
+    </div>
+    <div class="field">
+      <label for="${prefix}-description">Descripción (opcional)</label>
+      <input id="${prefix}-description" name="description" type="text" maxlength="280" value="${value('description')}">
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label for="${prefix}-price">Precio en pesos</label>
+        <input id="${prefix}-price" name="price" type="number" required min="1" max="10000000" step="1" inputmode="numeric" value="${value('price')}">
+      </div>
+      <div class="field">
+        <label for="${prefix}-stock">Stock</label>
+        <input id="${prefix}-stock" name="stock" type="number" min="0" max="10000" step="1" inputmode="numeric"
+          value="${product ? esc(product.stock ?? '') : (connected ? '' : '10')}" ${connected ? 'placeholder="Sin control"' : 'required'}>
+      </div>
+    </div>
+    ${connected ? `<label class="check-label">
+      <input type="checkbox" name="trackStock" ${tracked ? 'checked' : ''}>
+      <span>Controlar stock: CAUCE descuenta cada venta y deja de vender en cero. Si no lo marcás, el producto se vende mientras esté disponible y lo marcás agotado a mano.</span>
+    </label>` : ''}
+    <div class="field">
+      <label for="${prefix}-category">Categoría</label>
+      <input id="${prefix}-category" name="category" type="text" required maxlength="40" list="categorias" value="${esc(product?.category || 'Otros')}">
+    </div>
+    <div class="field">
+      <label for="${prefix}-variants">Variantes (opcional)</label>
+      <input id="${prefix}-variants" name="variants" type="text" maxlength="200" value="${esc(product ? variantsText(product) : '')}"
+        placeholder="Chica, Grande +2000, Familiar +5000">
+      <p class="microcopy">Separadas por coma. El número suma o resta sobre el precio base. Si cargás variantes, quien compra elige una.</p>
+    </div>`;
+}
+
+function categoryManager(business, categories, products) {
+  const bid = esc(business.id);
+  const counts = new Map();
+  for (const product of products) if (!product.archived && product.categoryId) counts.set(product.categoryId, (counts.get(product.categoryId) || 0) + 1);
+  return `<details class="panel-disclosure" data-keep-open="catalog-categories" ${app.openDetails.has('catalog-categories') ? 'open' : ''}>
+    <summary>Categorías (${categories.length})</summary>
+    <p class="microcopy">El orden de esta lista es el que ve el cliente. Una categoría desactivada deja de mostrarse como sección: sus productos siguen a la venta, dentro de “Otros”. Para dejar de vender un producto, desactivalo a él.</p>
+    ${categories.length ? `<ul class="plain-list category-list">${categories.map((category, index) => `
+      <li class="category-item ${category.active ? '' : 'is-inactive'}">
+        <form class="inline-form" data-form="category-rename" data-business="${bid}" data-category="${esc(category.id)}">
+          <label class="visually-hidden" for="cat-${esc(category.id)}">Nombre de la categoría ${esc(category.name)}</label>
+          <input id="cat-${esc(category.id)}" name="name" type="text" required minlength="2" maxlength="40" value="${esc(category.name)}">
+          <button class="button secondary" type="submit">Guardar</button>
+        </form>
+        <span class="category-meta quiet">${counts.get(category.id) || 0} productos${category.active ? '' : ' · desactivada'}</span>
+        <span class="category-actions">
+          <button class="link-button" type="button" data-action="category-move" data-business="${bid}" data-category="${esc(category.id)}"
+            data-direction="up" ${index === 0 ? 'disabled' : ''} aria-label="Subir ${esc(category.name)}">Subir</button>
+          <button class="link-button" type="button" data-action="category-move" data-business="${bid}" data-category="${esc(category.id)}"
+            data-direction="down" ${index === categories.length - 1 ? 'disabled' : ''} aria-label="Bajar ${esc(category.name)}">Bajar</button>
+          <button class="link-button ${category.active ? 'danger' : ''}" type="button" data-action="category-toggle" data-business="${bid}"
+            data-category="${esc(category.id)}" data-active="${category.active ? 'false' : 'true'}">${category.active ? 'Desactivar' : 'Activar'}</button>
+        </span>
+      </li>`).join('')}</ul>` : '<p class="quiet">Todavía no hay categorías. Se crean solas al cargar un producto, o acá.</p>'}
+    <form class="inline-form category-create" data-form="category-create" data-business="${bid}">
+      <label class="visually-hidden" for="cat-new">Nueva categoría</label>
+      <input id="cat-new" name="name" type="text" required minlength="2" maxlength="40" placeholder="Nueva categoría">
+      <button class="button" type="submit" ${app.online ? '' : 'disabled'}>Agregar categoría</button>
+    </form>
+  </details>`;
+}
+
+/** @param {any} business @param {any[]} products @param {{ canManage?: boolean, categories?: any[] }} [options] */
+function merchantCatalogTab(business, products, { canManage = true, categories = [] } = {}) {
   const media = Boolean(app.repository.capabilities.media);
   const connected = isConnected();
+  const bid = esc(business.id);
+  const disabled = app.online ? '' : 'disabled';
+  const categoryOptions = [...new Set([...categories.map(category => category.name), ...PRODUCT_CATEGORIES_SUGGESTED])];
+  // Mismo orden que ve el cliente: categorías por posición, "Otros" al final.
+  const rank = new Map(categories.map((category, index) => [category.id, index]));
+  const groups = new Map();
+  for (const product of products) {
+    const key = product.categoryId || `sin:${product.category}`;
+    if (!groups.has(key)) groups.set(key, { key, label: product.category || 'Otros', rank: rank.get(product.categoryId) ?? 999, items: [] });
+    groups.get(key).items.push(product);
+  }
+  const ordered = [...groups.values()].sort((a, b) => a.rank - b.rank || a.label.localeCompare(b.label));
+  const live = products.filter(product => !product.archived);
+  const unavailable = live.filter(product => product.available === false || (product.trackStock && product.stock <= 0)).length;
   const stockLabel = product => (!connected || product.trackStock ? `stock ${product.stock}` : 'sin control de stock');
-  const rows = products.map(product => `
-    <article class="catalog-row ${product.archived ? 'is-archived' : ''}">
+  // Precio (y stock, si se controla) sin abrir el formulario completo: lo que
+  // más se toca desde el teléfono.
+  const quickEdit = product => {
+    const pid = esc(product.id);
+    const tracked = !connected || product.trackStock;
+    return `<form class="inline-form catalog-quick" data-form="product-quick" data-business="${bid}" data-product="${pid}"
+      data-tracked="${tracked ? 'true' : 'false'}">
+      <label for="quick-price-${pid}">Precio</label>
+      <input id="quick-price-${pid}" name="price" type="number" required min="1" max="10000000" step="1" inputmode="numeric" value="${esc(product.price)}">
+      ${tracked ? `<label for="quick-stock-${pid}">Stock</label>
+      <input id="quick-stock-${pid}" name="stock" type="number" required min="0" max="10000" step="1" inputmode="numeric" value="${esc(product.stock ?? 0)}">` : ''}
+      <button class="button secondary" type="submit" ${disabled}>Guardar</button>
+    </form>`;
+  };
+
+  const row = product => `
+    <article class="catalog-row ${product.archived ? 'is-archived' : ''}" aria-label="Producto ${esc(product.name)}">
       <div class="catalog-row-head">
-      ${media ? productThumb(product, product.name, 'catalog-row-thumb') : ''}
-      <div class="catalog-row-main">
-        <strong>${esc(product.name)}</strong>
-        <span class="quiet">${esc(product.category)} · ${money(product.price)} · ${esc(stockLabel(product))}</span>
-        ${(product.variants || []).length
-          ? `<span class="quiet">Variantes: ${esc((product.variants || []).map(variant =>
-              variant.priceDelta ? `${variant.name} ${variant.priceDelta > 0 ? '+' : '−'}${Math.abs(variant.priceDelta)}` : variant.name).join(', '))}</span>`
-          : ''}
-        ${product.archived ? '<span class="status-chip cancelled">Dado de baja</span>'
-          : product.available ? '' : '<span class="status-chip received">Agotado</span>'}
+        ${media ? productThumb(product, product.name, 'catalog-row-thumb') : ''}
+        <div class="catalog-row-main">
+          <strong>${esc(product.name)}</strong>
+          <span class="quiet">${money(product.price)} · ${esc(stockLabel(product))}</span>
+          ${(product.variants || []).length ? `<span class="quiet">Variantes: ${esc(variantsText(product))}</span>` : ''}
+          ${product.archived ? '<span class="status-chip cancelled">Desactivado</span>'
+            : product.available === false ? '<span class="status-chip received">No disponible</span>'
+              : connected && product.trackStock && product.stock <= 0 ? '<span class="status-chip received">Sin stock</span>' : ''}
+        </div>
       </div>
+      <div class="catalog-row-actions">
+        ${product.archived ? '' : `<button class="link-button" type="button" data-action="product-toggle" data-business="${bid}"
+          data-product="${esc(product.id)}" data-field="available" data-value="${product.available ? 'false' : 'true'}" ${disabled}>
+          ${product.available ? 'Marcar agotado' : 'Marcar disponible'}</button>`}
+        ${canManage ? `<button class="link-button ${product.archived ? '' : 'danger'}" type="button" data-action="product-toggle" data-business="${bid}"
+          data-product="${esc(product.id)}" data-field="archived" data-value="${product.archived ? 'false' : 'true'}" ${disabled}>
+          ${product.archived ? 'Reactivar' : 'Desactivar'}</button>` : ''}
       </div>
-      ${canManage && !product.archived ? `<form class="inline-form" data-form="product-update" data-business="${esc(business.id)}" data-product="${esc(product.id)}"
-        data-track="${connected && !product.trackStock ? 'false' : 'true'}">
-        <label class="visually-hidden" for="price-${esc(product.id)}">Precio de ${esc(product.name)}</label>
-        <input id="price-${esc(product.id)}" name="price" type="number" min="1" step="1" value="${product.price}" inputmode="numeric">
-        ${!connected || product.trackStock ? `<label class="visually-hidden" for="stock-${esc(product.id)}">Stock de ${esc(product.name)}</label>
-        <input id="stock-${esc(product.id)}" name="stock" type="number" min="0" max="10000" step="1" value="${product.stock}" inputmode="numeric">` : ''}
-        <button class="button secondary" type="submit">Guardar</button>
-      </form>` : ''}
-      ${!canManage && connected && product.trackStock && !product.archived ? `<form class="inline-form" data-form="product-stock" data-business="${esc(business.id)}"
+      ${canManage && !product.archived ? quickEdit(product) : ''}
+      ${!canManage && connected && product.trackStock && !product.archived ? `<form class="inline-form" data-form="product-stock" data-business="${bid}"
         data-product="${esc(product.id)}" data-available="${product.available ? 'true' : 'false'}">
         <label class="visually-hidden" for="stock-${esc(product.id)}">Stock de ${esc(product.name)}</label>
         <input id="stock-${esc(product.id)}" name="stock" type="number" min="0" max="10000" step="1" value="${product.stock}" inputmode="numeric">
-        <button class="button secondary" type="submit">Guardar stock</button>
+        <button class="button secondary" type="submit" ${disabled}>Guardar stock</button>
       </form>` : ''}
-      ${canManage && media && !product.archived ? `<form class="inline-form" data-form="product-image" data-business="${esc(business.id)}" data-product="${esc(product.id)}">
-        <label class="visually-hidden" for="photo-${esc(product.id)}">Foto de ${esc(product.name)}</label>
-        <input id="photo-${esc(product.id)}" name="image" type="file" accept="image/jpeg,image/png,image/webp">
-        <button class="button secondary" type="submit">${product.image ? 'Cambiar foto' : 'Subir foto'}</button>
-        ${product.image ? `<button class="link-button danger" type="button" data-action="product-photo-remove"
-          data-business="${esc(business.id)}" data-product="${esc(product.id)}">Quitar foto</button>` : ''}
-      </form>` : ''}
-      <div class="catalog-row-actions">
-        ${product.archived ? '' : `<button class="link-button" type="button" data-action="product-toggle" data-business="${esc(business.id)}"
-          data-product="${esc(product.id)}" data-field="available" data-value="${product.available ? 'false' : 'true'}">
-          ${product.available ? 'Marcar agotado' : 'Marcar disponible'}
-        </button>`}
-        ${canManage ? `<button class="link-button danger" type="button" data-action="product-toggle" data-business="${esc(business.id)}"
-          data-product="${esc(product.id)}" data-field="archived" data-value="${product.archived ? 'false' : 'true'}">
-          ${product.archived ? 'Reactivar' : 'Dar de baja'}
-        </button>` : ''}
-      </div>
-    </article>`).join('');
+      ${canManage && !product.archived ? `<details class="catalog-edit" data-keep-open="product-${esc(product.id)}" ${app.openDetails.has(`product-${product.id}`) ? 'open' : ''}>
+        <summary>Editar ${esc(product.name)}</summary>
+        <form class="checkout-form" data-form="product-edit" data-business="${bid}" data-product="${esc(product.id)}">
+          ${productFields(`edit-${esc(product.id)}`, product, { connected })}
+          <button class="button full" type="submit" ${disabled}>Guardar cambios</button>
+        </form>
+        ${media ? `<form class="inline-form" data-form="product-image" data-business="${bid}" data-product="${esc(product.id)}">
+          <label class="visually-hidden" for="photo-${esc(product.id)}">Foto de ${esc(product.name)}</label>
+          <input id="photo-${esc(product.id)}" name="image" type="file" accept="image/jpeg,image/png,image/webp">
+          <button class="button secondary" type="submit" ${disabled}>${product.image ? 'Cambiar foto' : 'Subir foto'}</button>
+          ${product.image ? `<button class="link-button danger" type="button" data-action="product-photo-remove"
+            data-business="${bid}" data-product="${esc(product.id)}">Quitar foto</button>` : ''}
+        </form>` : ''}
+      </details>` : ''}
+    </article>`;
 
+  const createOpen = !products.length || app.openDetails.has('catalog-new');
   return `
-    ${canManage ? `<section class="panel-section">
-      <h2 class="checkout-section-title">Nuevo producto</h2>
-      <form class="checkout-form" data-form="product-create" data-business="${esc(business.id)}">
-        <div class="field">
-          <label for="prod-name">Nombre</label>
-          <input id="prod-name" name="name" type="text" required minlength="2" maxlength="80">
-        </div>
-        <div class="field">
-          <label for="prod-description">Descripción (opcional)</label>
-          <input id="prod-description" name="description" type="text" maxlength="280">
-        </div>
-        <div class="field-row">
-          <div class="field">
-            <label for="prod-price">Precio en pesos</label>
-            <input id="prod-price" name="price" type="number" required min="1" step="1" inputmode="numeric">
-          </div>
-          <div class="field">
-            <label for="prod-stock">Stock</label>
-            <input id="prod-stock" name="stock" type="number" min="0" max="10000" step="1" value="${connected ? '' : '10'}" inputmode="numeric"
-              ${connected ? 'placeholder="Sin control"' : 'required'}>
-          </div>
-        </div>
-        ${connected ? `<label class="check-label">
-          <input type="checkbox" name="trackStock">
-          <span>Controlar stock: CAUCE descuenta cada venta y deja de vender en cero. Si no lo marcás, el producto se vende mientras esté disponible y lo marcás agotado a mano.</span>
-        </label>` : ''}
-        <div class="field">
-          <label for="prod-category">Categoría</label>
-          <input id="prod-category" name="category" type="text" required maxlength="40" list="categorias" value="Otros">
-          <datalist id="categorias">
-            ${PRODUCT_CATEGORIES_SUGGESTED.map(category => `<option value="${esc(category)}"></option>`).join('')}
-          </datalist>
-        </div>
-        <div class="field">
-          <label for="prod-variants">Variantes (opcional)</label>
-          <input id="prod-variants" name="variants" type="text" maxlength="200"
-            placeholder="Chica, Grande +2000, Familiar +5000">
-          <p class="microcopy">Separadas por coma. El número suma o resta sobre el precio base.
-            Si cargás variantes, quien compra elige una.</p>
-        </div>
+    <p class="catalog-summary quiet">${live.length} ${live.length === 1 ? 'producto a la venta' : 'productos a la venta'}${unavailable ? ` · ${unavailable} no disponibles` : ''}${products.length - live.length ? ` · ${products.length - live.length} desactivados` : ''}</p>
+    ${canManage ? `<details class="panel-disclosure" data-keep-open="catalog-new" ${createOpen ? 'open' : ''}>
+      <summary>Agregar producto</summary>
+      <form class="checkout-form" data-form="product-create" data-business="${bid}">
+        ${productFields('prod', null, { connected })}
         ${media ? mediaField('prod-image', 'Foto del producto (opcional)', '',
           'JPEG, PNG o WebP, hasta 5 MB. El producto se publica igual si todavía no tenés foto.')
           : '<p class="microcopy">Las fotos se toman de las imágenes incluidas en el proyecto. La carga de fotos propias no está implementada en este entorno.</p>'}
-        <button class="button full" type="submit" ${app.online ? '' : 'disabled'}>Agregar al catálogo</button>
+        <button class="button full" type="submit" ${disabled}>Agregar al catálogo</button>
       </form>
-    </section>` : `<p class="microcopy">Tu rol en el equipo permite marcar productos agotados o disponibles${connected ? ' y actualizar el stock de los que lo controlan' : ''}.</p>`}
-
-    <section class="panel-section">
-      <h2 class="checkout-section-title">Catálogo (${products.filter(product => !product.archived).length})</h2>
-      ${products.length ? `<div class="stack">${rows}</div>` : '<p class="quiet">Todavía no cargaste productos.</p>'}
-    </section>`;
+    </details>` : `<p class="microcopy">Tu rol en el equipo permite marcar productos agotados o disponibles${connected ? ' y actualizar el stock de los que lo controlan' : ''}.</p>`}
+    ${canManage ? `<datalist id="categorias">${categoryOptions.map(name => `<option value="${esc(name)}"></option>`).join('')}</datalist>` : ''}
+    ${canManage && connected ? categoryManager(business, categories, products) : ''}
+    ${products.length ? ordered.map(group => `
+      <section class="panel-section catalog-group" aria-label="Categoría ${esc(group.label)}">
+        <h2 class="checkout-section-title">${esc(group.label)} (${group.items.length})</h2>
+        <div class="stack">${group.items.map(row).join('')}</div>
+      </section>`).join('')
+      : `<p class="quiet">Todavía no cargaste productos.${canManage ? ' Empezá por el formulario de arriba.' : ''}</p>`}`;
 }
 
 function merchantDataTab(business, missing, categories = []) {
@@ -1799,11 +1810,10 @@ function merchantDataTab(business, missing, categories = []) {
   const media = Boolean(app.repository.capabilities.media);
   const connected = isConnected();
   const disabled = editable ? '' : 'disabled';
-  return `
-    <section class="panel-section">
-      ${business.status === 'pending_review'
-        ? '<div class="notice">La solicitud está en revisión. Vas a poder editar cuando administración responda.</div>' : ''}
-      <form class="checkout-form" data-form="business-update" data-business="${esc(business.id)}">
+  // Un comercio que ya opera cambia a diario envío, mínimo y tiempos: van
+  // arriba, con su propio botón. Uno nuevo empieza por sus datos.
+  const operationFirst = ['active', 'paused'].includes(business.status);
+  const details = `
         <h2 class="checkout-section-title">Datos del comercio</h2>
         <div class="field">
           <label for="b-name">Nombre comercial</label>
@@ -1855,9 +1865,9 @@ function merchantDataTab(business, missing, categories = []) {
           <input id="b-hours" name="hoursLabel" type="text" maxlength="80" value="${esc(business.hoursLabel || '')}"
             placeholder="Lunes a sábado de 9 a 13 y de 17 a 21" ${disabled}>
           ${connected ? '<p class="microcopy">Los horarios que controlan cuándo se toman pedidos se cargan en la pestaña Horarios.</p>' : ''}
-        </div>
-
-        <h2 class="checkout-section-title">Modalidades de entrega</h2>
+        </div>`;
+  const operation = `
+        <h2 class="checkout-section-title" id="operacion">Envío, pedidos y tiempos</h2>
         <label class="check-label">
           <input type="checkbox" name="pickupEnabled" ${business.pickupEnabled ? 'checked' : ''} ${disabled}>
           <span>Retiro en el comercio</span>
@@ -1890,7 +1900,15 @@ function merchantDataTab(business, missing, categories = []) {
             <label for="b-delivery-min">Envío estimado (minutos)</label>
             <input id="b-delivery-min" name="deliveryMinutes" type="number" min="5" max="240" step="5" value="${business.deliveryMinutes ?? ''}" inputmode="numeric" ${disabled}>
           </div>
-        </div>` : ''}
+        </div>` : ''}`;
+  return `
+    <section class="panel-section">
+      ${business.status === 'pending_review'
+        ? '<div class="notice">La solicitud está en revisión. Vas a poder editar cuando administración responda.</div>' : ''}
+      <form class="checkout-form" data-form="business-update" data-business="${esc(business.id)}">
+        ${operationFirst ? `${operation}
+        <button class="button full" type="submit" ${editable && app.online ? '' : 'disabled'}>Guardar envío y tiempos</button>
+        ${details}` : `${details}${operation}`}
         <button class="button full" type="submit" ${editable && app.online ? '' : 'disabled'}>Guardar datos</button>
       </form>
     </section>
@@ -2528,8 +2546,9 @@ async function withBusy(element, operation) {
     } else {
       toast(userMessage(error), 'error');
     }
-    // Un conflicto de versión o de estado se resuelve mostrando lo actual.
-    if (['U0001', '42501', 'PRICES_CHANGED', 'U0003'].includes(error?.code) || error?.technical?.code === 'U0001') {
+    // Un conflicto de versión o de estado se resuelve mostrando lo actual; tras
+    // una conexión lenta también: la operación pudo haber llegado.
+    if (['U0001', '42501', 'PRICES_CHANGED', 'U0003', 'NETWORK_TIMEOUT'].includes(error?.code) || error?.technical?.code === 'U0001') {
       render();
     }
   } finally {
@@ -2566,9 +2585,40 @@ const ACTIONS = {
     app.activityTab = element.dataset.tab;
     return render();
   },
+  // Cada sección del panel tiene su dirección: recargar, volver atrás o
+  // compartir el enlace deja a la persona en el mismo lugar.
   'set-panel-tab'(element) {
-    app.panelTab = element.dataset.tab;
+    const businessId = element.dataset.business || route().param;
+    go(`#panel/${businessId}/${element.dataset.tab}`);
+  },
+  // Desde el inicio: ir a Pedidos con un filtro ya elegido (por ejemplo, Completados).
+  'show-orders'(element) {
+    app.orderFilter = ORDER_FILTERS.includes(element.dataset.filter || '') ? element.dataset.filter : 'activos';
+    go(`#panel/${element.dataset.business}/pedidos`);
+  },
+  'order-filter'(element) {
+    app.orderFilter = element.dataset.filter || 'activos';
     return render();
+  },
+  // Cargar la semana en el teléfono son 28 campos: se copia el lunes y se
+  // corrige lo distinto. No guarda nada hasta que se toca "Guardar horarios".
+  'hours-copy-monday'(element) {
+    const form = /** @type {HTMLFormElement|null} */ (element.closest('form'));
+    if (!form) return;
+    const field = (/** @type {string} */ name) => /** @type {HTMLInputElement|null} */ (form.querySelector(`[name="${name}"]`));
+    const closed = field('d1-closed')?.checked === true;
+    for (const day of [0, 2, 3, 4, 5, 6]) {
+      const box = field(`d${day}-closed`);
+      if (box) box.checked = closed;
+      for (let index = 0; index < MAX_RANGES_PER_DAY; index += 1) {
+        for (const edge of ['opens', 'closes']) {
+          const target = field(`d${day}-${index}-${edge}`);
+          if (target) target.value = field(`d1-${index}-${edge}`)?.value || '';
+        }
+      }
+    }
+    form.dataset.dirty = 'true';
+    toast('Copiamos el lunes en toda la semana. Corregí los días distintos y guardá.');
   },
   async 'use-identity'(element) {
     await app.repository.signInAsDemoIdentity(element.dataset.identity);
@@ -2590,7 +2640,17 @@ const ACTIONS = {
     await render();
   },
   async 'business-status'(element) {
+    // Pausar saca el comercio de CAUCE: se confirma. Reactivar, no.
+    if (element.dataset.status === 'paused') {
+      const confirmed = await askConfirm({
+        title: '¿Pausar el comercio?',
+        message: 'No aparece en CAUCE ni recibe pedidos hasta que lo reactives. Para un rato o un día sin atención alcanza con “Cerrar atención”.',
+        confirmLabel: 'Pausar', cancelLabel: 'Volver',
+      });
+      if (!confirmed) return;
+    }
     await runCommand('business.setStatus', { businessId: element.dataset.business, status: element.dataset.status });
+    toast(element.dataset.status === 'paused' ? 'Comercio pausado: no aparece en CAUCE.' : 'Comercio activo otra vez.');
     await render();
   },
   async 'toggle-open'(element) {
@@ -2602,6 +2662,24 @@ const ACTIONS = {
   async 'product-toggle'(element) {
     const { business, product, field, value } = element.dataset;
     await runCommand('product.update', { businessId: business, productId: product, patch: { [field]: value === 'true' } });
+    await render();
+  },
+  async 'category-toggle'(element) {
+    const active = element.dataset.active === 'true';
+    await runCommand('productCategory.update', { businessId: element.dataset.business, categoryId: element.dataset.category,
+      patch: { active } });
+    toast(active ? 'Categoría activada.' : 'Categoría desactivada: sus productos se muestran en “Otros”.');
+    await render();
+  },
+  async 'category-move'(element) {
+    const { business, category, direction } = element.dataset;
+    const categories = await app.repository.query('productCategories', { businessId: business });
+    const ids = categories.map(item => item.id);
+    const from = ids.indexOf(category);
+    const to = direction === 'up' ? from - 1 : from + 1;
+    if (from < 0 || to < 0 || to >= ids.length) return;
+    [ids[from], ids[to]] = [ids[to], ids[from]];
+    await runCommand('productCategory.reorder', { businessId: business, order: ids });
     await render();
   },
   async 'product-photo-remove'(element) {
@@ -2673,9 +2751,15 @@ const ACTIONS = {
     toast('Panel actualizado.');
   },
   'enable-sound'() {
+    setSoundMuted(false);
     unlockSound();
     setTimeout(() => render(), 150);
     toast(soundReady() || unlockSound() ? 'Sonido activado para pedidos nuevos.' : 'Este navegador no permite reproducir sonido.');
+  },
+  'mute-sound'() {
+    setSoundMuted(true);
+    toast('Sonido silenciado en este dispositivo. Los pedidos nuevos se siguen avisando en pantalla.');
+    return render();
   },
   async 'team-role'(element) {
     const { business, user, role } = element.dataset;
@@ -2836,9 +2920,8 @@ const FORMS = {
     const data = Object.fromEntries(new FormData(form));
     const business = await runCommand('business.create', { name: data.name, category: data.category });
     app.session = await app.repository.session();
-    app.panelTab = 'datos';
     toast('Comercio creado como borrador.');
-    go(`#panel/${business.id}`);
+    go(`#panel/${business.id}/configuracion`);
     await render({ focus: true });
   },
 
@@ -2863,6 +2946,11 @@ const FORMS = {
   },
 
   async 'business-hours'(form) {
+    const data = new FormData(form);
+    if (allDaysClosed(name => data.get(name))) {
+      toast('Marcaste todos los días como cerrados. Para dejar de tomar pedidos usá “Cerrar atención”.', 'error');
+      return;
+    }
     await runCommand('business.setHours', { businessId: form.dataset.business, hours: readHoursForm(form) });
     toast('Horarios guardados.');
     await render();
@@ -2876,10 +2964,47 @@ const FORMS = {
     await render();
   },
 
+  async 'product-quick'(form) {
+    const data = new FormData(form);
+    const patch = { price: Number(data.get('price')) };
+    if (form.dataset.tracked === 'true') patch.stock = Number(data.get('stock'));
+    await runCommand('product.update', { businessId: form.dataset.business, productId: form.dataset.product, patch });
+    toast(form.dataset.tracked === 'true' ? 'Precio y stock guardados.' : 'Precio guardado.');
+    await render();
+  },
+
   async 'product-stock'(form) {
     await runCommand('product.update', { businessId: form.dataset.business, productId: form.dataset.product,
       patch: { stock: Number(new FormData(form).get('stock')), available: form.dataset.available === 'true' } });
     toast('Stock actualizado.');
+    await render();
+  },
+
+  async 'product-edit'(form) {
+    const data = Object.fromEntries(new FormData(form));
+    const connected = isConnected();
+    const trackStock = connected ? data.trackStock === 'on' : true;
+    const patch = { name: data.name, description: data.description || '', category: data.category,
+      price: Number(data.price), variants: parseVariants(data.variants) };
+    if (connected) patch.trackStock = trackStock;
+    if (trackStock) patch.stock = Number(data.stock || 0);
+    await runCommand('product.update', { businessId: form.dataset.business, productId: form.dataset.product, patch });
+    app.openDetails.delete(`product-${form.dataset.product}`);
+    toast('Producto actualizado.');
+    await render();
+  },
+
+  async 'category-create'(form) {
+    const name = String(new FormData(form).get('name') || '');
+    await runCommand('productCategory.create', { businessId: form.dataset.business, name });
+    toast('Categoría agregada.');
+    await render();
+  },
+
+  async 'category-rename'(form) {
+    await runCommand('productCategory.update', { businessId: form.dataset.business, categoryId: form.dataset.category,
+      patch: { name: String(new FormData(form).get('name') || '') } });
+    toast('Categoría actualizada.');
     await render();
   },
 
@@ -2897,6 +3022,8 @@ const FORMS = {
       image: image && image.size ? image : null,
     });
     form.reset();
+    // El formulario queda abierto para cargar el siguiente.
+    app.openDetails.add('catalog-new');
     toast(image && image.size ? 'Producto y foto agregados al catálogo.' : 'Producto agregado al catálogo.');
     await render();
   },
@@ -2919,17 +3046,6 @@ const FORMS = {
     await render();
   },
 
-  async 'product-update'(form) {
-    const data = Object.fromEntries(new FormData(form));
-    const patch = { price: Number(data.price) };
-    if (form.dataset.track !== 'false') patch.stock = Number(data.stock);
-    await runCommand('product.update', {
-      businessId: form.dataset.business, productId: form.dataset.product, patch,
-    });
-    toast('Producto actualizado.');
-    await render();
-  },
-
   async 'rider-create'(form) {
     const data = Object.fromEntries(new FormData(form));
     await runCommand('rider.create', { businessId: form.dataset.business, name: data.name, phone: data.phone });
@@ -2944,6 +3060,7 @@ const FORMS = {
       orderId: form.dataset.order, expectedVersion: Number(form.dataset.version),
       nextStatus: 'assigned', riderId: data.riderId,
     });
+    app.riderChoice.delete(form.dataset.order || '');
     toast('Reparto asignado.');
     await render();
   },
@@ -3133,7 +3250,13 @@ function syncLive(page, param) {
   const refresh = () => {
     clearTimeout(live.timer);
     live.timer = setTimeout(function run() {
-      if (route().page !== page || isEditing()) return;
+      if (route().page !== page) return;
+      if (isEditing()) {
+        // Con un formulario a medio escribir no se redibuja, pero un pedido
+        // nuevo igual se avisa.
+        if (page === 'panel' && param) peekNewOrders(param);
+        return;
+      }
       if (Date.now() - app.pointerAt < 600) { live.timer = setTimeout(run, 300); return; }
       render();
     }, 250);
@@ -3160,7 +3283,9 @@ function syncLive(page, param) {
 function isEditing() {
   const active = /** @type {HTMLInputElement|null} */ (document.activeElement);
   return Boolean(active && main?.contains(active) && /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName)
-    && active.type !== 'button' && active.type !== 'submit');
+    && active.type !== 'button' && active.type !== 'submit')
+    // Cambios sin guardar aunque el foco ya esté en otro lado.
+    || Boolean(main?.querySelector('form[data-dirty="true"]'));
 }
 
 // Rutas cuyo contenido depende de los permisos de la cuenta. En el entorno con
@@ -3253,6 +3378,29 @@ function bindEvents() {
     const button = submitter || form.querySelector('button[type="submit"]');
     withBusy(button || form, () => handler(form, submitter));
   });
+
+  // Un formulario con cambios sin guardar queda marcado: los refrescos de
+  // fondo (Realtime, sondeo) no lo pisan hasta que se guarde o se salga.
+  const markDirty = event => {
+    const form = /** @type {HTMLElement} */ (event.target).closest?.('form');
+    if (form && main.contains(form) && form.dataset.form && !['search', 'checkout', 'assign-rider'].includes(form.dataset.form)) {
+      form.dataset.dirty = 'true';
+    }
+  };
+  document.addEventListener('input', markDirty);
+  document.addEventListener('change', markDirty);
+  document.addEventListener('change', event => {
+    const select = /** @type {HTMLSelectElement} */ (event.target);
+    const form = /** @type {HTMLFormElement|null} */ (select.closest?.('form[data-form="assign-rider"]'));
+    if (form?.dataset.order) app.riderChoice.set(form.dataset.order, select.value);
+  });
+  // Los desplegables marcados con data-keep-open siguen abiertos al redibujar.
+  document.addEventListener('toggle', event => {
+    const details = /** @type {HTMLDetailsElement} */ (event.target);
+    const key = details?.dataset?.keepOpen;
+    if (!key) return;
+    if (details.open) app.openDetails.add(key); else app.openDetails.delete(key);
+  }, true);
 
   // La búsqueda se aplica al escribir, sin recargar la vista entera en cada tecla.
   let searchTimer;

@@ -6746,6 +6746,315 @@ main {
 [aria-invalid="true"] { border-color: var(--clay) !important; }
 .hours-range label, .hours-range input { min-width: 0; }
 @media (max-width: 440px) {
-  .hours-range { display: grid; grid-template-columns: 1fr; gap: 4px; }
-  .hours-range > span { display: none; }
+  /* Un turno por renglón ("09:00 a 13:00"): la semana entra en el teléfono. */
+  .hours-range { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 6px; }
+  .hours-range input { padding-inline: 8px; }
+}
+
+/* ==========================================================================
+   Panel remoto del comercio
+   Mismo lenguaje que el resto de CAUCE: tarjetas blancas, bordes suaves y
+   color sólo donde hay algo que hacer (pedido nuevo, algo agotado).
+   ========================================================================== */
+.panel-openbar-state { display: grid; gap: 2px; }
+.panel-openbar .open-flag { font-size: 15px; letter-spacing: 0.06em; }
+.panel-openbar.is-open .open-flag { color: var(--forest); }
+.panel-openbar.is-closed { border-color: var(--clay-soft); background: var(--sand-soft); }
+.panel-openbar.is-closed .open-flag { color: var(--clay); }
+.panel-sound.is-on { display: inline-flex; align-items: center; gap: 4px; color: var(--forest); font-weight: 700; }
+
+.new-orders-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  background: var(--clay);
+  color: var(--white);
+  font-size: 14px;
+  text-decoration: none;
+}
+.new-orders-banner:hover, .new-orders-banner:focus-visible { background: var(--clay-hover); color: var(--white); }
+.new-orders-banner-cta { margin-left: auto; font-weight: 800; text-decoration: underline; white-space: nowrap; }
+.new-orders-banner.is-floating {
+  position: fixed;
+  z-index: 250;
+  left: 50%;
+  top: calc(10px + env(safe-area-inset-top, 0px));
+  transform: translateX(-50%);
+  width: min(520px, calc(100% - 32px));
+  box-shadow: var(--shadow-lg);
+}
+.new-orders-banner[hidden] { display: none; }
+
+.order-filters { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 14px; }
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 42px;
+  padding: 4px 11px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--white);
+  color: var(--ink-light);
+  font-size: 12px;
+  font-weight: 700;
+}
+.filter-chip.is-active { background: var(--forest); border-color: var(--forest); color: var(--white); }
+.filter-chip.is-alert:not(.is-active) { border-color: var(--clay); color: var(--clay); }
+.filter-chip-count { font-variant-numeric: tabular-nums; }
+
+.orders-board { display: grid; gap: 18px; }
+.orders-group-title { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; font-size: 15px; color: var(--forest-deep); }
+.orders-group-count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 7px;
+  border-radius: var(--radius-pill);
+  background: var(--soft);
+  color: var(--mountain-blue);
+  font-size: 12px;
+}
+.orders-group-list { display: grid; gap: 10px; }
+.orders-empty { margin: 0; }
+
+.order-card-id { display: grid; gap: 2px; }
+.order-card-id strong { font-size: 17px; }
+.order-card-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0 0 10px; font-size: 13px; color: var(--muted); }
+.mode-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: var(--radius-pill); font-size: 12px; font-weight: 800; }
+.mode-chip.is-delivery { background: var(--mountain-blue-soft); color: var(--mountain-blue); }
+.mode-chip.is-pickup { background: var(--forest-tint); color: var(--forest); }
+.order-panel-lines li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; align-items: baseline; }
+.order-line-qty { font-weight: 800; color: var(--forest-deep); }
+.order-line-name { overflow-wrap: anywhere; }
+.order-line-total { color: var(--muted); font-variant-numeric: tabular-nums; }
+.order-card-customer { display: flex; flex-wrap: wrap; gap: 0 14px; margin: 10px 0 4px; font-size: 14px; }
+.order-card-customer a, .order-card-person { display: inline-flex; align-items: center; gap: 4px; min-height: 40px; font-weight: 700; }
+.order-card-person { color: var(--ink); }
+.order-card-delivery {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0;
+  padding: 10px 12px;
+  border: 1px dashed var(--mountain-blue-border);
+  border-radius: var(--radius-sm);
+  background: var(--mountain-blue-soft);
+}
+.order-card-address { display: flex; align-items: flex-start; gap: 6px; margin: 0; font-weight: 700; overflow-wrap: anywhere; }
+.order-card-stage { margin: 0; font-size: 13px; color: var(--mountain-blue); }
+.order-card-delivery .microcopy { margin: 0; }
+.order-panel-total { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
+.order-panel-total span { font-size: 13px; font-weight: 700; color: var(--muted); }
+.order-panel-total small { font-size: 12px; font-weight: 600; color: var(--muted); }
+.order-card-reason { overflow-wrap: anywhere; }
+.order-panel-card.is-closed { background: var(--sand-soft); }
+/* La acción que sigue ocupa todo el ancho: se toca con el pulgar. */
+.order-panel-actions > .button:not(.order-cancel):first-child { flex: 1 1 100%; min-height: 50px; font-size: 16px; }
+
+.panel-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 8px 0 0; }
+.panel-metrics .metric { display: grid; align-content: start; gap: 2px; min-height: 84px; color: inherit; text-decoration: none; text-align: left; }
+.panel-metrics .metric-label { font-size: 12px; font-weight: 700; color: var(--muted); letter-spacing: 0; text-transform: none; }
+.panel-metrics .metric-value { margin: 0; font-size: 24px; font-weight: 800; color: var(--forest-deep); font-variant-numeric: tabular-nums; }
+.panel-metrics .metric-hint { font-size: 11px; color: var(--muted); }
+.panel-metrics a.metric:hover, .panel-metrics a.metric:focus-visible { border-color: var(--forest); }
+.panel-metrics .metric.is-alert { border-color: var(--clay); background: var(--clay-soft); }
+.panel-metrics .metric.is-alert .metric-value { color: var(--clay); }
+.panel-metrics .metric.is-warn { border-color: var(--amber); background: var(--amber-soft); }
+
+.unavailable-list li { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 44px; border-bottom: 1px solid var(--line); }
+
+/* Cancelar o rechazar abre un diálogo con motivo: se ve, pero no compite con
+   la acción que sigue. (`.link-button.danger` sobre `.button.danger` dejaba
+   el texto del mismo color que el fondo.) */
+.button.button-outline-danger { background: var(--white); color: var(--clay); border-color: var(--clay); }
+.button.button-outline-danger:hover, .button.button-outline-danger:focus-visible {
+  background: var(--clay-soft); color: var(--clay-hover); border-color: var(--clay-hover);
+}
+.order-panel-actions .order-cancel { flex: 1 1 auto; }
+
+/* Desde tableta, un tablero: una columna por estado, con sus tarjetas
+   apiladas. Un filtro de un solo estado reparte las tarjetas a lo ancho. */
+@media (min-width: 720px) {
+  .orders-board { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); align-items: start; }
+  .orders-board.is-single { grid-template-columns: 1fr; }
+  .orders-board.is-single .orders-group-list,
+  #panel-atender ~ .orders-group-list { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); align-items: start; }
+  .panel-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (min-width: 1100px) {
+  .panel-metrics { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+}
+
+/* Catálogo del panel: alta y categorías plegadas; edición por producto. */
+.panel-disclosure, .catalog-edit {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--white);
+  margin: 0 0 14px;
+}
+.panel-disclosure > summary, .catalog-edit > summary {
+  display: flex;
+  align-items: center;
+  min-height: 48px;
+  padding: 10px 14px;
+  font-weight: 800;
+  color: var(--forest);
+  cursor: pointer;
+  list-style: none;
+}
+.panel-disclosure > summary::-webkit-details-marker, .catalog-edit > summary::-webkit-details-marker { display: none; }
+.panel-disclosure > summary::after, .catalog-edit > summary::after { content: '+'; margin-left: auto; font-size: 20px; line-height: 1; }
+.panel-disclosure[open] > summary::after, .catalog-edit[open] > summary::after { content: '−'; }
+.panel-disclosure[open] > summary, .catalog-edit[open] > summary { border-bottom: 1px solid var(--line); }
+.panel-disclosure > :not(summary), .catalog-edit > :not(summary) { margin: 12px 14px; }
+.catalog-edit { margin: 0; border-style: dashed; }
+.catalog-edit > summary { min-height: 44px; font-size: 13px; }
+.catalog-summary { margin: 0 0 12px; font-weight: 700; }
+.catalog-group .checkout-section-title { margin-bottom: 8px; }
+
+.category-list { display: grid; gap: 8px; margin: 12px 14px; }
+.category-item { display: grid; gap: 4px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.category-item.is-inactive input { color: var(--muted); }
+.category-meta { font-size: 12px; }
+.category-actions { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.category-actions .link-button[disabled] { opacity: 0.4; cursor: default; }
+.category-create { margin-top: 4px; }
+/* Dentro de un desplegable el formulario no dibuja otra tarjeta. */
+.panel-disclosure .checkout-form, .catalog-edit .checkout-form { border: 0; padding: 0; box-shadow: none; background: transparent; }
+
+/* Cargando: una barra fina arriba mientras la vista está ocupada (datos,
+   una acción esperando al servidor o una navegación). Aparece recién a los
+   350 ms: en una red buena no se ve; en una lenta, confirma que el toque
+   llegó y evita el segundo toque. */
+#main[aria-busy="true"]::before {
+  content: '';
+  position: fixed;
+  z-index: 300;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, transparent 0%, var(--teal-accent) 50%, transparent 100%);
+  background-size: 40% 100%;
+  background-repeat: no-repeat;
+  opacity: 0;
+  animation: cauce-busy-in 0s linear 0.35s forwards, cauce-busy-slide 1.1s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes cauce-busy-in { to { opacity: 1; } }
+@keyframes cauce-busy-slide { from { background-position: -40% 0; } to { background-position: 140% 0; } }
+@media (prefers-reduced-motion: reduce) {
+  #main[aria-busy="true"]::before { animation: cauce-busy-in 0s linear 0.35s forwards; background: var(--teal-accent); }
+}
+
+/* Horarios: un día cerrado se ve apagado; el resumen muestra lo que ve el cliente. */
+.hours-closed { margin: 0; }
+.hours-day:has(.hours-closed input:checked) .hours-range { opacity: 0.45; }
+.hours-preview { margin: 0 0 8px; }
+.hours-preview .hours-list { margin: 4px 0 0; }
+.panel-role { margin: 0 0 12px; }
+
+/* Reparto: quién lleva qué ahora, con llamada a un toque. */
+.delivery-counts { margin: 0 0 10px; }
+.rider-load { display: grid; gap: 6px; margin: 0; }
+.rider-load li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+.rider-load li.is-busy { border-color: var(--teal-accent); }
+.rider-load a { display: inline-flex; align-items: center; gap: 4px; min-height: 42px; font-weight: 600; }
+.delivery-board { margin-top: 4px; }
+.delivery-board + .panel-section { margin-top: 28px; }
+
+/* ==========================================================================
+   Panel como control remoto en el teléfono
+   Lo vendido hoy, grande; lo demás en números chicos y acciones a mano.
+   ========================================================================== */
+.panel-sales {
+  display: grid;
+  gap: 2px;
+  margin: 8px 0;
+  padding: 14px 16px;
+  background: var(--forest-deep);
+  color: var(--white);
+  border-radius: var(--radius);
+}
+.panel-sales .metric-label { color: rgba(255, 255, 255, 0.82); font-size: 12px; font-weight: 700; }
+.panel-sales-value { font-size: 34px; line-height: 1.1; font-weight: 800; font-variant-numeric: tabular-nums; }
+.panel-sales .metric-hint { color: rgba(255, 255, 255, 0.86); font-size: 12px; }
+
+.top-products, .recent-sales { display: grid; gap: 6px; margin: 0 0 10px; }
+.top-products li, .recent-sales li {
+  display: grid;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+.top-products li { grid-template-columns: 24px minmax(0, 1fr) auto auto; }
+.top-rank {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--forest-tint);
+  color: var(--forest-deep);
+  font-size: 12px;
+  font-weight: 800;
+}
+.top-name { font-weight: 700; overflow-wrap: anywhere; }
+.top-units { font-weight: 800; font-variant-numeric: tabular-nums; }
+.top-amount { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.recent-sales li { grid-template-columns: minmax(0, 1fr) auto auto; }
+.recent-sale-id { display: grid; }
+.recent-sale-id .quiet { font-size: 12px; }
+.recent-sale-total { font-variant-numeric: tabular-nums; }
+
+/* Abrir, cerrar y pausar, a mano. */
+.panel-openbar-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 4px 12px; }
+.panel-openbar-actions .link-button { min-height: 40px; }
+
+/* Configuración: el bloque siguiente no se pega al botón del primero. */
+.checkout-form > .button + .checkout-section-title { margin-top: 22px; }
+
+/* Precio y stock en la misma fila del producto. */
+.catalog-quick { margin: 8px 0 4px; }
+.catalog-quick label { font-size: 12px; font-weight: 700; color: var(--muted); }
+.catalog-quick input { flex: 1 1 72px; max-width: 120px; }
+
+@media (max-width: 560px) {
+  /* Encabezado corto: el contenido empieza arriba, no a mitad de pantalla. */
+  .panel-header { margin-bottom: 10px; }
+  .panel-header .page-title { font-size: 22px; line-height: 1.2; }
+  /* Dos filas: arriba lo de todos los días, abajo la administración. */
+  #main .tabs.panel-nav {
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    overflow: visible;
+    column-gap: 0;
+  }
+  #main .tabs.panel-nav .tab { grid-column: span 3; padding: 10px 2px; text-align: center; }
+  #main .tabs.panel-nav .tab.is-admin { grid-column: span 4; min-height: 40px; font-size: 12px; }
+  #main .tabs.panel-nav .tab-badge { min-width: 16px; height: 16px; margin-left: 2px; padding: 0 4px; font-size: 10px; line-height: 16px; }
+  .panel-openbar { padding: 10px 12px; }
+  .panel-openbar-actions { width: 100%; justify-content: space-between; }
+  .panel-openbar-actions .button { flex: 1 1 auto; }
+}
+@media (max-width: 360px) {
+  /* En 320 px cada sección tiene ~72 px: el número de pedidos nuevos entra al lado del nombre. */
+  #main .tabs.panel-nav .tab { font-size: 12px; white-space: nowrap; }
 }

@@ -75,7 +75,7 @@ test('el alta de comercio es un circuito propio con revisión, no un enlace exte
   const app = await read('js/app.js');
   // WhatsApp existe como canal de contacto del comercio con sus clientes; el
   // alta del comercio, en cambio, nunca se deriva afuera de la plataforma.
-  const signup = app.slice(app.indexOf('async function viewBusinessSignup'), app.indexOf('const PANEL_TABS'));
+  const signup = app.slice(app.indexOf('async function viewBusinessSignup'), app.indexOf('async function viewMerchantPanel'));
   assert.ok(signup.length > 200, 'No se encontró la vista de alta');
   assert.equal(/wa\.me|whatsapp/i.test(signup), false,
     'El alta no puede derivarse a WhatsApp: tiene que ocurrir dentro de la plataforma');
@@ -93,19 +93,29 @@ test('el catálogo se gestiona desde el panel del propio comercio', async () => 
   }
   const app = await read('js/app.js');
   assert.match(app, /data-form="product-create"/);
+  assert.match(app, /data-form="product-edit"/);
   assert.match(app, /data-action="product-toggle"/);
-  assert.match(app, /Dar de baja/);
+  assert.match(app, /'Reactivar' : 'Desactivar'/);
+  // Categorías: crear, renombrar, ordenar y activar, con los contratos del backend real.
+  const repository = await read('js/repositories/supabase-repository.js');
+  for (const command of ['productCategory.create', 'productCategory.update', 'productCategory.reorder']) {
+    assert.ok(repository.includes(`'${command}'`), `Falta el comando ${command}`);
+  }
+  for (const form of ['category-create', 'category-rename']) assert.match(app, new RegExp(`data-form="${form}"`));
+  for (const action of ['category-move', 'category-toggle']) assert.match(app, new RegExp(`data-action="${action}"`));
 });
 
 test('el panel prioriza los pedidos que requieren atención', async () => {
-  const app = await read('js/app.js');
-  const panel = app.slice(app.indexOf('function merchantOrdersTab'), app.indexOf('function merchantCatalogTab'));
-  assert.match(panel, /Requieren atención/);
+  const core = await read('js/core/business-panel.js');
+  const ui = await read('js/ui/business-panel.js');
+  // Los nuevos van primero en el tablero y en el inicio.
+  assert.ok(core.indexOf("key: 'nuevos'") < core.indexOf("key: 'aceptados'"), 'Nuevos tiene que ser el primer grupo');
+  assert.match(ui, /Esperan respuesta/);
   // Las acciones operativas, no gráficos.
-  for (const label of ['Aceptar', 'Rechazar', 'Informar preparación', 'Asignar reparto', 'Marcar salida']) {
-    assert.ok(panel.includes(label), `Falta la acción "${label}" en el panel`);
+  for (const label of ['Aceptar', 'Rechazar', 'Empezar a preparar', 'Asignar reparto', 'Salió a entregar', 'Marcar entregado']) {
+    assert.ok(core.includes(label), `Falta la acción "${label}" en el panel`);
   }
-  assert.equal(/gráfico|chart|canvas/i.test(panel), false, 'El panel no debe llenarse de gráficos');
+  assert.equal(/gráfico|chart|canvas/i.test(core + ui), false, 'El panel no debe llenarse de gráficos');
 });
 
 test('los paneles internos exigen sesión y rol, no un parámetro de URL', async () => {
