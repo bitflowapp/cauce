@@ -1,8 +1,8 @@
 {
-  "paso": "registros",
+  "paso": "admin",
   "aplicar": false,
   "confirmar": "",
   "email": "",
   "invitar": false,
-  "motivo": "Fase B: registros después de publicar el panel (main 10276df), del smoke publicado y de la limpieza QA. 5xx y errores de cada servicio. Sólo lectura."
+  "motivo": "Estado de la cuenta de administración (CAUCE_ADMIN_EMAIL): ¿aceptó la invitación? Sólo lectura: no otorga nada."
 }
