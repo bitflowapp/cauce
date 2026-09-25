@@ -409,24 +409,29 @@ async function limpiarQa(t, list) {
 // consultarlos) hace fallar el paso.
 const STATUS = "toInt32OrZero(log_attributes['response.status_code'])";
 const SEVERE = "upper(severity_text) in ('ERROR', 'FATAL', 'PANIC', 'CRITICAL')";
+// Última vez que se vio cada grupo (UTC) y quién llamó: separa lo anterior a
+// una migración, las pruebas de seguridad de los smokes y el tráfico ajeno.
+const LAST = 'toString(toStartOfMinute(max(timestamp))) as last';
+const CALLER = `substring(any(log_attributes['request.headers.x_client_info']), 1, 28) as client,
+      substring(any(log_attributes['request.headers.referer']), 1, 40) as referer`;
 const LOG_QUERIES = {
   'API 5xx': `select ${STATUS} as code, log_attributes['request.method'] as method,
-      log_attributes['request.path'] as path, count() as n
+      log_attributes['request.path'] as path, count() as n, ${LAST}, ${CALLER}
     from logs where source = 'edge_logs' and ${STATUS} between 500 and 599
     group by code, method, path order by n desc limit 10`,
   'API por código': `select ${STATUS} as code, count() as n
     from logs where source = 'edge_logs' group by code order by code limit 20`,
   'API 4xx por ruta': `select ${STATUS} as code, log_attributes['request.method'] as method,
-      log_attributes['request.path'] as path, count() as n
+      log_attributes['request.path'] as path, count() as n, ${LAST}, ${CALLER}
     from logs where source = 'edge_logs' and ${STATUS} between 400 and 499
-    group by code, method, path order by n desc limit 12`,
+    group by code, method, path order by n desc limit 30`,
   'Eventos por servicio': `select source, severity_text as severity, count() as n
     from logs where source != 'edge_logs' group by source, severity order by source, n desc limit 40`,
-  'Errores por servicio': `select source, severity_text as severity, substring(event_message, 1, 180) as message, count() as n
+  'Errores por servicio': `select source, severity_text as severity, substring(event_message, 1, 180) as message, count() as n, ${LAST}
     from logs where source != 'edge_logs' and (${SEVERE}
       or log_attributes['parsed.error_severity'] in ('ERROR', 'FATAL', 'PANIC')
       or lower(log_attributes['level']) in ('error', 'fatal'))
-    group by source, severity, message order by n desc limit 25`,
+    group by source, severity, message order by n desc limit 30`,
 };
 // Los registros de Actions pueden ser públicos: ni correos ni IP de nadie.
 const anonymize = text => redact(text)

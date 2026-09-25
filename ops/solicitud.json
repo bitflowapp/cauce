@@ -4,5 +4,5 @@
   "confirmar": "",
   "email": "",
   "invitar": false,
-  "motivo": "P14 con la tabla unificada logs (ClickHouse): 5xx y 4xx de la API y errores de cada servicio en las últimas 24 h, que cubren backup, migración, smoke previo y limpieza. Sólo lectura."
+  "motivo": "P14: registros de las últimas 24 h con la última vez que se vio cada 4xx y error, y el cliente que llamó, para separar lo anterior a la migración, las pruebas de seguridad de los smokes y el tráfico ajeno. Sólo lectura."
 }
