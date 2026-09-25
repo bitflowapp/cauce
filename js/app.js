@@ -1137,6 +1137,7 @@ async function viewTracking(token) {
     </section>
     ${canceled ? cancellationNotice(order) : orderTimeline(order)}
     ${canceled ? '' : renderOrderMoment(order)}
+    ${canceled ? '' : renderDeliveryTracking(order, order.business)}
     ${!canceled && order.status !== 'delivered' && timesLine(order.business, order.fulfillment)
       ? `<p class="microcopy">Tiempo estimado declarado por el comercio: ${esc(timesLine(order.business, order.fulfillment))}.</p>` : ''}
     ${canceled || order.status === 'delivered' ? '' : contactButtons(order.business)}
