@@ -8,6 +8,7 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { PGlite } from '@electric-sql/pglite';
 import { applyMigrations, applyMigration, migrationFiles, versionOf } from './fixture.mjs';
+import { REQUIRED_SCHEMA } from '../../js/core/contract.js';
 
 const RIDER = 20260925120000;
 const db = new PGlite();
@@ -121,7 +122,7 @@ test('desde cero, todas las migraciones construyen el mismo contrato', async () 
   try {
     await applyMigrations(fresh);
     const status = rows(await fresh.query('select private.app_status() as s'))[0].s;
-    assert.equal(Number(status.schema), RIDER);
+    assert.equal(Number(status.schema), REQUIRED_SCHEMA, 'el contrato que exige este frontend');
     const transitions = rows(await fresh.query(`select from_status || '>' || to_status as t from private.order_transitions
       where actor_role = 'rider' order by 1`)).map(row => row.t);
     assert.deepEqual(transitions, ['arrived>delivered', 'assigned>picked_up', 'on_the_way>arrived',

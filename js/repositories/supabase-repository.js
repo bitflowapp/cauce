@@ -5,6 +5,7 @@ import { quoteCart, changeQuantity, emptyCart, MAX_QUANTITY } from '../core/cart
 import { validateTripRequest } from '../core/taxi-dispatch.js';
 import { sanitizeText, validateCustomerName, isValidArgentinePhone } from '../core/validators.js';
 import { validateHours, DEFAULT_TIMEZONE } from '../core/business-hours.js';
+import { mapPilotMetrics } from '../core/pilot-metrics.js';
 
 const MEDIA_BUCKET = 'business-media';
 const LOCALITY = 'alumine';
@@ -684,6 +685,13 @@ export function createSupabaseRepository({ client, redirectTo, storage, onError 
             .filter(([status]) => status !== 'requested' && status !== 'searching' && status !== 'expired')
             .reduce((total, [, count]) => total + count, 0) },
       };
+    },
+    // El día del piloto (hora de la localidad): comercios, pedidos, volumen,
+    // pedidos que necesitan atención y errores. Sin datos de clientes.
+    async adminPilotMetrics() {
+      const row = await read(client.rpc('admin_pilot_metrics'));
+      requireValue(row, 'ROLE_REQUIRED', 'Sección exclusiva de administración.');
+      return mapPilotMetrics(row);
     },
     async adminClientEvents() {
       return (await read(client.rpc('admin_client_events', { max_rows: 30 }))) || [];

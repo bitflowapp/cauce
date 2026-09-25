@@ -28,6 +28,7 @@ import {
   panelNav, openBar, syncBar, newOrdersBanner, ordersBoard, dashboard, deliveryBoard,
 } from './ui/business-panel.js';
 import { riderHome, riderUnlinked } from './ui/rider.js';
+import { pilotToday, pilotIncidents, businessTodayLine } from './ui/admin-metrics.js';
 import { deliveryCodeFeedback } from './core/rider-app.js';
 import { renderIcon, renderSticker } from './ui/icons.js';
 import { renderCharacter } from './ui/brand-characters.js';
@@ -2044,11 +2045,14 @@ async function viewAdmin() {
       <div class="notice error"><strong>Sección restringida.</strong> Requiere una cuenta con rol de administración.</div>
       <a class="button full" href="#cuenta">Ingresar</a>`;
   }
-  const [queue, metrics, events] = await Promise.all([
+  const [queue, metrics, events, pilot] = await Promise.all([
     app.repository.query('adminQueue'),
     app.repository.query('adminMetrics'),
     isConnected() ? app.repository.query('adminClientEvents').catch(() => []) : [],
+    // El día del piloto: si no se puede leer, el resto de la administración sigue.
+    isConnected() ? app.repository.query('adminPilotMetrics').catch(() => null) : null,
   ]);
+  const todayOf = new Map((pilot?.perBusiness || []).map(item => [item.id, item]));
   const published = (queue.allBusinesses || []).filter(item => ['active', 'paused'].includes(item.status));
   const suspended = (queue.allBusinesses || []).filter(item => item.status === 'suspended');
 
@@ -2092,7 +2096,11 @@ async function viewAdmin() {
     <section class="page-header">
       <h1 class="page-title">Administración</h1>
       <p class="quiet">Revisión de altas y supervisión agregada de la operación.</p>
+      ${isConnected() ? `<button class="button secondary" type="button" data-action="retry">${renderIcon('refresh', 16)} Actualizar</button>` : ''}
     </section>
+
+    ${pilot ? `${pilotToday(pilot)}${pilotIncidents(pilot.stuck, pilot.stuckTotal)}` : isConnected()
+      ? '<div class="notice error" role="alert">No se pudieron leer los números de hoy. Actualizá en un momento.</div>' : ''}
 
     <section class="panel-section">
       <h2 class="checkout-section-title">Comercios pendientes (${queue.businesses.length})</h2>
@@ -2109,7 +2117,8 @@ async function viewAdmin() {
     ${isConnected() ? `<section class="panel-section">
       <h2 class="checkout-section-title">Comercios publicados (${published.length})</h2>
       ${published.length ? `<ul class="plain-list admin-business-list">${published.map(item => `
-        <li><span><strong>${esc(item.name)}</strong> · ${esc(businessStatusLabel(item.status))} · ${esc(item.category || 'sin rubro')}</span>
+        <li><span><strong>${esc(item.name)}</strong> · ${esc(businessStatusLabel(item.status))} · ${esc(item.category || 'sin rubro')}
+          ${businessTodayLine(todayOf.get(item.id))}</span>
           <button class="link-button danger" type="button" data-action="admin-business-status" data-business="${esc(item.id)}"
             data-status="suspended" data-name="${esc(item.name)}">Suspender</button></li>`).join('')}</ul>`
         : '<p class="quiet">Todavía no hay comercios publicados.</p>'}
@@ -2121,7 +2130,7 @@ async function viewAdmin() {
     </section>` : ''}
 
     <section class="panel-section">
-      <h2 class="checkout-section-title">Operación registrada</h2>
+      <h2 class="checkout-section-title">Operación registrada desde el inicio</h2>
       <p class="microcopy">Origen: ${esc(metrics.source)} Nada de esto es una proyección ni una estimación.</p>
       <dl class="metrics-grid">
         ${counter('Comercios publicados', metrics.businesses.active || 0)}
