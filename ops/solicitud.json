@@ -4,5 +4,5 @@
   "confirmar": "",
   "email": "",
   "invitar": false,
-  "motivo": "Estado real después de B5 (backup 14/14), B1 (migración aplicada, 20/20) y B2 sin SMTP (11/13): proyecto, plan, migraciones, Auth, backups y smoke público. Sólo lectura."
+  "motivo": "Retomar el cierre del piloto: qué secretos hay cargados (SMTP incluido) y estado real del proyecto después del trabajo posterior. Sólo lectura."
 }
