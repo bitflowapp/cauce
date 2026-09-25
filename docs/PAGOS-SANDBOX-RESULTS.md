@@ -19,6 +19,7 @@ Nunca hubo dinero real: el interruptor global `payments_online` sigue en `false`
 | Sin secretos de Mercado Pago cierran: webhook `503 not_configured`, OAuth `503`, checkout sin sesión `401` | PASS | run `36201814141` |
 | El navegador del sitio puede llamarlas: preflight CORS por el gateway real (`204`, `allow-origin *`), también con verify_jwt | PASS | run `36201814141` |
 | Pagos globales apagados antes y después | PASS | runs anteriores |
+| Estado después de migrar y desplegar: funciones activas, `PAYMENTS_TOKEN_KEYS` presente, faltan los secretos de Mercado Pago y de las cuentas de prueba, sin pilotos, sin cuentas, sin avisos, ninguna orden real | PASS (5/5) | run `36203009248` |
 
 ## 2. Lo verificado contra la documentación oficial de Mercado Pago
 
@@ -44,7 +45,9 @@ El doble (`tests/edge/fake-mercadopago.mjs`) reproduce las respuestas documentad
 | Integración de pagos contra el stack local | 7/7 |
 | Funciones en **Deno** contra el stack (`npm run test:edge`) | 18/18 |
 | Funciones en **Supabase Edge Runtime** detrás del gateway (Kong) | 18/18 |
-| UI de pagos en el navegador (Edge Runtime + build local) | Chromium 3/3 local; Chromium y WebKit en el CI |
+| UI de pagos en el navegador (Edge Runtime + build local) | Chromium 3/3 local |
+| Conductor de las páginas de Mercado Pago contra páginas simuladas (`tests/e2e/mp-navegador.test.mjs`) | 5/5 |
+| CI en `e805804` (run `36203009210`) | integración 68/68 · Deno 18/18 · E2E Chromium y WebKit 62/62 (incluye el conductor) · Edge Runtime + UI de pagos en Chromium y WebKit 24/24 |
 
 Cubren: OAuth con PKCE (state incorrecto, vencido, reutilizado, cancelado; cuenta real en sandbox y cuenta de prueba en un comercio real), CORS, checkout (importe del pedido, pagador de prueba, clave de idempotencia, doble toque, reintento tras un corte con el mismo cuerpo, reenvío verificado), fallas del proveedor (timeout, 429, 500, sin `checkout_url`, 401, orden real), webhook (firmado, falso, sin firma, repetido, fuera de orden, vendedor ajeno, intento desconocido, importe distinto, doble pago, rechazado, pendiente), reconexión, renovación de tokens (en uso y programada), aislamiento y efectivo como respaldo. En el navegador: el retorno a `#/pago/exito` antes del webhook muestra "Estamos confirmando tu pago" y recién el webhook firmado lo pasa a "Pago aprobado".
 
