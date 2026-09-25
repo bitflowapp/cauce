@@ -1,8 +1,8 @@
 {
-  "paso": "admin",
-  "aplicar": true,
-  "confirmar": "ygqbcvxdrewcnzedfcyo",
+  "paso": "registros",
+  "aplicar": false,
+  "confirmar": "",
   "email": "",
-  "invitar": true,
-  "motivo": "Fase A · B4: invitar a la administración (correo del secreto CAUCE_ADMIN_EMAIL; no queda en el repo). La persona acepta en el sitio publicado y elige su contraseña; después admin --aplicar otorga el privilegio."
+  "invitar": false,
+  "motivo": "Fase A · P14 después del deploy y del smoke publicado: 5xx (falla el paso) y errores de cada servicio. Sólo lectura."
 }
