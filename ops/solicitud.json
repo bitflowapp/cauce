@@ -1,8 +1,8 @@
 {
-  "paso": "smoke-publicado",
+  "paso": "limpiar-qa",
   "aplicar": true,
   "confirmar": "ygqbcvxdrewcnzedfcyo",
   "email": "",
   "invitar": false,
-  "motivo": "Verificación final de la plataforma piloto: smoke obligatorio sobre el sitio publicado desde main b56beec (#7): el mismo pedido de punta a punta con reparto, administración con el día del piloto, anchos y seguridad sobre la API publicada. Crea y borra datos CAUCE QA."
+  "motivo": "Verificación final: residuo QA en cero después del smoke final del sitio publicado (run 36115710350)."
 }
