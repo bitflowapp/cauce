@@ -20,3 +20,5 @@ dist-production/
 
 # Respaldos de la base: contienen datos personales y nunca se versionan.
 /backup/
+# Temporales de tests/edge/run-local.mjs --vendor (nunca se versionan).
+supabase/functions/*/deno.json

@@ -64,6 +64,12 @@ jobs:
         run: npm run db:start
       - name: Integración y seguridad (RLS, multi-comercio, pedidos, auth, storage, realtime)
         run: npm run test:integration
+      - name: Deno para las Edge Functions de pagos
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Edge Functions de pagos en Deno contra el stack (OAuth, checkout, webhook, fallas del proveedor)
+        run: npm run test:edge
       - name: Navegadores Chromium y WebKit
         run: npx playwright install --with-deps chromium webkit
       - name: E2E en Chromium y WebKit
