@@ -1,8 +1,8 @@
 {
   "paso": "migrar",
-  "aplicar": false,
-  "confirmar": "",
+  "aplicar": true,
+  "confirmar": "ygqbcvxdrewcnzedfcyo",
   "email": "",
   "invitar": false,
-  "motivo": "B1, dry-run: historial remoto y `db push --dry-run`; tiene que listar únicamente 20260924120000 (si aparece cualquier otra, STOP). No aplica nada. Backup previo: run 36078082544 (RESTORE_TEST PASS)."
+  "motivo": "B1, aplicar 20260924120000. Dry-run previo (run 36078604627): historial 8/8 igual al repo y el dry-run lista únicamente 20260924120000. El paso vuelve a verificar ambas cosas, ensaya la migración sobre una copia de los datos reales y recién ahí aplica; después comprueba la sincronización y corre el smoke público. Backup verificado: run 36078082544."
 }
