@@ -1,8 +1,8 @@
 {
-  "paso": "migrar",
+  "paso": "pagos-funciones",
   "aplicar": true,
   "confirmar": "ygqbcvxdrewcnzedfcyo",
   "email": "",
   "invitar": false,
-  "motivo": "Sandbox de Mercado Pago: aplicar 20260927120000. El ensayo anterior frenó sin tocar el proyecto porque las 3 transiciones de pago nuevas (datos de referencia) contaban como filas cambiadas; ahora son datos de referencia que pueden crecer. Backup + restauración en verde (run 36200528198) y dry-run exacto en verde (run 36200839816)."
+  "motivo": "Sandbox de Mercado Pago: desplegar payments-oauth, payments-checkout y payments-webhook con los pagos globales apagados y el código sin credenciales; crear PAYMENTS_TOKEN_KEYS si falta (nunca se muestra) y verificar que sin secretos de Mercado Pago cierran (503/401) y que el navegador puede llamarlas (preflight CORS)."
 }
