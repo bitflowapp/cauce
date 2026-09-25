@@ -93,8 +93,16 @@ test('el catálogo se gestiona desde el panel del propio comercio', async () => 
   }
   const app = await read('js/app.js');
   assert.match(app, /data-form="product-create"/);
+  assert.match(app, /data-form="product-edit"/);
   assert.match(app, /data-action="product-toggle"/);
-  assert.match(app, /Dar de baja/);
+  assert.match(app, /'Reactivar' : 'Desactivar'/);
+  // Categorías: crear, renombrar, ordenar y activar, con los contratos del backend real.
+  const repository = await read('js/repositories/supabase-repository.js');
+  for (const command of ['productCategory.create', 'productCategory.update', 'productCategory.reorder']) {
+    assert.ok(repository.includes(`'${command}'`), `Falta el comando ${command}`);
+  }
+  for (const form of ['category-create', 'category-rename']) assert.match(app, new RegExp(`data-form="${form}"`));
+  for (const action of ['category-move', 'category-toggle']) assert.match(app, new RegExp(`data-action="${action}"`));
 });
 
 test('el panel prioriza los pedidos que requieren atención', async () => {

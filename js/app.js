@@ -678,7 +678,13 @@ async function viewBusiness(businessId) {
   ]);
   const lines = new Map(cart.lines.map(line => [line.productId, line.quantity]));
   const purchasable = products.filter(product => !product.archived);
-  const categories = [...new Set(purchasable.map(product => product.category))];
+  // Las secciones siguen el orden que eligió el comercio; lo que no tiene
+  // categoría visible ("Otros") va al final.
+  const rankOf = new Map();
+  for (const product of purchasable) {
+    if (!rankOf.has(product.category)) rankOf.set(product.category, product.categoryPosition ?? Number.MAX_SAFE_INTEGER);
+  }
+  const categories = [...rankOf.keys()].sort((a, b) => rankOf.get(a) - rankOf.get(b));
   const count = cart.lines.reduce((total, line) => total + line.quantity, 0);
 
   const productCard = product => {
@@ -1612,111 +1618,165 @@ function mediaField(id, label, current, hint) {
     </div>`;
 }
 
+const variantsText = product => (product.variants || []).map(variant => (variant.priceDelta
+  ? `${variant.name} ${variant.priceDelta > 0 ? '+' : '-'}${Math.abs(variant.priceDelta)}` : variant.name)).join(', ');
+
+// Formulario de producto: el mismo para crear y para editar.
+function productFields(prefix, product, { connected }) {
+  const value = field => esc(product?.[field] ?? '');
+  const tracked = product ? product.trackStock : false;
+  return `
+    <div class="field">
+      <label for="${prefix}-name">Nombre</label>
+      <input id="${prefix}-name" name="name" type="text" required minlength="2" maxlength="80" value="${value('name')}">
+    </div>
+    <div class="field">
+      <label for="${prefix}-description">Descripción (opcional)</label>
+      <input id="${prefix}-description" name="description" type="text" maxlength="280" value="${value('description')}">
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label for="${prefix}-price">Precio en pesos</label>
+        <input id="${prefix}-price" name="price" type="number" required min="1" max="10000000" step="1" inputmode="numeric" value="${value('price')}">
+      </div>
+      <div class="field">
+        <label for="${prefix}-stock">Stock</label>
+        <input id="${prefix}-stock" name="stock" type="number" min="0" max="10000" step="1" inputmode="numeric"
+          value="${product ? esc(product.stock ?? '') : (connected ? '' : '10')}" ${connected ? 'placeholder="Sin control"' : 'required'}>
+      </div>
+    </div>
+    ${connected ? `<label class="check-label">
+      <input type="checkbox" name="trackStock" ${tracked ? 'checked' : ''}>
+      <span>Controlar stock: CAUCE descuenta cada venta y deja de vender en cero. Si no lo marcás, el producto se vende mientras esté disponible y lo marcás agotado a mano.</span>
+    </label>` : ''}
+    <div class="field">
+      <label for="${prefix}-category">Categoría</label>
+      <input id="${prefix}-category" name="category" type="text" required maxlength="40" list="categorias" value="${esc(product?.category || 'Otros')}">
+    </div>
+    <div class="field">
+      <label for="${prefix}-variants">Variantes (opcional)</label>
+      <input id="${prefix}-variants" name="variants" type="text" maxlength="200" value="${esc(product ? variantsText(product) : '')}"
+        placeholder="Chica, Grande +2000, Familiar +5000">
+      <p class="microcopy">Separadas por coma. El número suma o resta sobre el precio base. Si cargás variantes, quien compra elige una.</p>
+    </div>`;
+}
+
+function categoryManager(business, categories, products) {
+  const bid = esc(business.id);
+  const counts = new Map();
+  for (const product of products) if (!product.archived && product.categoryId) counts.set(product.categoryId, (counts.get(product.categoryId) || 0) + 1);
+  return `<details class="panel-disclosure" data-keep-open="catalog-categories" ${app.openDetails.has('catalog-categories') ? 'open' : ''}>
+    <summary>Categorías (${categories.length})</summary>
+    <p class="microcopy">El orden de esta lista es el que ve el cliente. Una categoría desactivada deja de mostrarse como sección: sus productos siguen a la venta, dentro de “Otros”. Para dejar de vender un producto, desactivalo a él.</p>
+    ${categories.length ? `<ul class="plain-list category-list">${categories.map((category, index) => `
+      <li class="category-item ${category.active ? '' : 'is-inactive'}">
+        <form class="inline-form" data-form="category-rename" data-business="${bid}" data-category="${esc(category.id)}">
+          <label class="visually-hidden" for="cat-${esc(category.id)}">Nombre de la categoría ${esc(category.name)}</label>
+          <input id="cat-${esc(category.id)}" name="name" type="text" required minlength="2" maxlength="40" value="${esc(category.name)}">
+          <button class="button secondary" type="submit">Guardar</button>
+        </form>
+        <span class="category-meta quiet">${counts.get(category.id) || 0} productos${category.active ? '' : ' · desactivada'}</span>
+        <span class="category-actions">
+          <button class="link-button" type="button" data-action="category-move" data-business="${bid}" data-category="${esc(category.id)}"
+            data-direction="up" ${index === 0 ? 'disabled' : ''} aria-label="Subir ${esc(category.name)}">Subir</button>
+          <button class="link-button" type="button" data-action="category-move" data-business="${bid}" data-category="${esc(category.id)}"
+            data-direction="down" ${index === categories.length - 1 ? 'disabled' : ''} aria-label="Bajar ${esc(category.name)}">Bajar</button>
+          <button class="link-button ${category.active ? 'danger' : ''}" type="button" data-action="category-toggle" data-business="${bid}"
+            data-category="${esc(category.id)}" data-active="${category.active ? 'false' : 'true'}">${category.active ? 'Desactivar' : 'Activar'}</button>
+        </span>
+      </li>`).join('')}</ul>` : '<p class="quiet">Todavía no hay categorías. Se crean solas al cargar un producto, o acá.</p>'}
+    <form class="inline-form category-create" data-form="category-create" data-business="${bid}">
+      <label class="visually-hidden" for="cat-new">Nueva categoría</label>
+      <input id="cat-new" name="name" type="text" required minlength="2" maxlength="40" placeholder="Nueva categoría">
+      <button class="button" type="submit" ${app.online ? '' : 'disabled'}>Agregar categoría</button>
+    </form>
+  </details>`;
+}
+
 /** @param {any} business @param {any[]} products @param {{ canManage?: boolean, categories?: any[] }} [options] */
-function merchantCatalogTab(business, products, { canManage = true } = {}) {
+function merchantCatalogTab(business, products, { canManage = true, categories = [] } = {}) {
   const media = Boolean(app.repository.capabilities.media);
   const connected = isConnected();
+  const bid = esc(business.id);
+  const disabled = app.online ? '' : 'disabled';
+  const categoryOptions = [...new Set([...categories.map(category => category.name), ...PRODUCT_CATEGORIES_SUGGESTED])];
+  // Mismo orden que ve el cliente: categorías por posición, "Otros" al final.
+  const rank = new Map(categories.map((category, index) => [category.id, index]));
+  const groups = new Map();
+  for (const product of products) {
+    const key = product.categoryId || `sin:${product.category}`;
+    if (!groups.has(key)) groups.set(key, { key, label: product.category || 'Otros', rank: rank.get(product.categoryId) ?? 999, items: [] });
+    groups.get(key).items.push(product);
+  }
+  const ordered = [...groups.values()].sort((a, b) => a.rank - b.rank || a.label.localeCompare(b.label));
+  const live = products.filter(product => !product.archived);
+  const unavailable = live.filter(product => product.available === false || (product.trackStock && product.stock <= 0)).length;
   const stockLabel = product => (!connected || product.trackStock ? `stock ${product.stock}` : 'sin control de stock');
-  const rows = products.map(product => `
-    <article class="catalog-row ${product.archived ? 'is-archived' : ''}">
+
+  const row = product => `
+    <article class="catalog-row ${product.archived ? 'is-archived' : ''}" aria-label="Producto ${esc(product.name)}">
       <div class="catalog-row-head">
-      ${media ? productThumb(product, product.name, 'catalog-row-thumb') : ''}
-      <div class="catalog-row-main">
-        <strong>${esc(product.name)}</strong>
-        <span class="quiet">${esc(product.category)} · ${money(product.price)} · ${esc(stockLabel(product))}</span>
-        ${(product.variants || []).length
-          ? `<span class="quiet">Variantes: ${esc((product.variants || []).map(variant =>
-              variant.priceDelta ? `${variant.name} ${variant.priceDelta > 0 ? '+' : '−'}${Math.abs(variant.priceDelta)}` : variant.name).join(', '))}</span>`
-          : ''}
-        ${product.archived ? '<span class="status-chip cancelled">Dado de baja</span>'
-          : product.available ? '' : '<span class="status-chip received">Agotado</span>'}
+        ${media ? productThumb(product, product.name, 'catalog-row-thumb') : ''}
+        <div class="catalog-row-main">
+          <strong>${esc(product.name)}</strong>
+          <span class="quiet">${money(product.price)} · ${esc(stockLabel(product))}</span>
+          ${(product.variants || []).length ? `<span class="quiet">Variantes: ${esc(variantsText(product))}</span>` : ''}
+          ${product.archived ? '<span class="status-chip cancelled">Desactivado</span>'
+            : product.available === false ? '<span class="status-chip received">No disponible</span>'
+              : connected && product.trackStock && product.stock <= 0 ? '<span class="status-chip received">Sin stock</span>' : ''}
+        </div>
       </div>
+      <div class="catalog-row-actions">
+        ${product.archived ? '' : `<button class="link-button" type="button" data-action="product-toggle" data-business="${bid}"
+          data-product="${esc(product.id)}" data-field="available" data-value="${product.available ? 'false' : 'true'}" ${disabled}>
+          ${product.available ? 'Marcar agotado' : 'Marcar disponible'}</button>`}
+        ${canManage ? `<button class="link-button ${product.archived ? '' : 'danger'}" type="button" data-action="product-toggle" data-business="${bid}"
+          data-product="${esc(product.id)}" data-field="archived" data-value="${product.archived ? 'false' : 'true'}" ${disabled}>
+          ${product.archived ? 'Reactivar' : 'Desactivar'}</button>` : ''}
       </div>
-      ${canManage && !product.archived ? `<form class="inline-form" data-form="product-update" data-business="${esc(business.id)}" data-product="${esc(product.id)}"
-        data-track="${connected && !product.trackStock ? 'false' : 'true'}">
-        <label class="visually-hidden" for="price-${esc(product.id)}">Precio de ${esc(product.name)}</label>
-        <input id="price-${esc(product.id)}" name="price" type="number" min="1" step="1" value="${product.price}" inputmode="numeric">
-        ${!connected || product.trackStock ? `<label class="visually-hidden" for="stock-${esc(product.id)}">Stock de ${esc(product.name)}</label>
-        <input id="stock-${esc(product.id)}" name="stock" type="number" min="0" max="10000" step="1" value="${product.stock}" inputmode="numeric">` : ''}
-        <button class="button secondary" type="submit">Guardar</button>
-      </form>` : ''}
-      ${!canManage && connected && product.trackStock && !product.archived ? `<form class="inline-form" data-form="product-stock" data-business="${esc(business.id)}"
+      ${!canManage && connected && product.trackStock && !product.archived ? `<form class="inline-form" data-form="product-stock" data-business="${bid}"
         data-product="${esc(product.id)}" data-available="${product.available ? 'true' : 'false'}">
         <label class="visually-hidden" for="stock-${esc(product.id)}">Stock de ${esc(product.name)}</label>
         <input id="stock-${esc(product.id)}" name="stock" type="number" min="0" max="10000" step="1" value="${product.stock}" inputmode="numeric">
-        <button class="button secondary" type="submit">Guardar stock</button>
+        <button class="button secondary" type="submit" ${disabled}>Guardar stock</button>
       </form>` : ''}
-      ${canManage && media && !product.archived ? `<form class="inline-form" data-form="product-image" data-business="${esc(business.id)}" data-product="${esc(product.id)}">
-        <label class="visually-hidden" for="photo-${esc(product.id)}">Foto de ${esc(product.name)}</label>
-        <input id="photo-${esc(product.id)}" name="image" type="file" accept="image/jpeg,image/png,image/webp">
-        <button class="button secondary" type="submit">${product.image ? 'Cambiar foto' : 'Subir foto'}</button>
-        ${product.image ? `<button class="link-button danger" type="button" data-action="product-photo-remove"
-          data-business="${esc(business.id)}" data-product="${esc(product.id)}">Quitar foto</button>` : ''}
-      </form>` : ''}
-      <div class="catalog-row-actions">
-        ${product.archived ? '' : `<button class="link-button" type="button" data-action="product-toggle" data-business="${esc(business.id)}"
-          data-product="${esc(product.id)}" data-field="available" data-value="${product.available ? 'false' : 'true'}">
-          ${product.available ? 'Marcar agotado' : 'Marcar disponible'}
-        </button>`}
-        ${canManage ? `<button class="link-button danger" type="button" data-action="product-toggle" data-business="${esc(business.id)}"
-          data-product="${esc(product.id)}" data-field="archived" data-value="${product.archived ? 'false' : 'true'}">
-          ${product.archived ? 'Reactivar' : 'Dar de baja'}
-        </button>` : ''}
-      </div>
-    </article>`).join('');
+      ${canManage && !product.archived ? `<details class="catalog-edit" data-keep-open="product-${esc(product.id)}" ${app.openDetails.has(`product-${product.id}`) ? 'open' : ''}>
+        <summary>Editar ${esc(product.name)}</summary>
+        <form class="checkout-form" data-form="product-edit" data-business="${bid}" data-product="${esc(product.id)}">
+          ${productFields(`edit-${esc(product.id)}`, product, { connected })}
+          <button class="button full" type="submit" ${disabled}>Guardar cambios</button>
+        </form>
+        ${media ? `<form class="inline-form" data-form="product-image" data-business="${bid}" data-product="${esc(product.id)}">
+          <label class="visually-hidden" for="photo-${esc(product.id)}">Foto de ${esc(product.name)}</label>
+          <input id="photo-${esc(product.id)}" name="image" type="file" accept="image/jpeg,image/png,image/webp">
+          <button class="button secondary" type="submit" ${disabled}>${product.image ? 'Cambiar foto' : 'Subir foto'}</button>
+          ${product.image ? `<button class="link-button danger" type="button" data-action="product-photo-remove"
+            data-business="${bid}" data-product="${esc(product.id)}">Quitar foto</button>` : ''}
+        </form>` : ''}
+      </details>` : ''}
+    </article>`;
 
+  const createOpen = !products.length || app.openDetails.has('catalog-new');
   return `
-    ${canManage ? `<section class="panel-section">
-      <h2 class="checkout-section-title">Nuevo producto</h2>
-      <form class="checkout-form" data-form="product-create" data-business="${esc(business.id)}">
-        <div class="field">
-          <label for="prod-name">Nombre</label>
-          <input id="prod-name" name="name" type="text" required minlength="2" maxlength="80">
-        </div>
-        <div class="field">
-          <label for="prod-description">Descripción (opcional)</label>
-          <input id="prod-description" name="description" type="text" maxlength="280">
-        </div>
-        <div class="field-row">
-          <div class="field">
-            <label for="prod-price">Precio en pesos</label>
-            <input id="prod-price" name="price" type="number" required min="1" step="1" inputmode="numeric">
-          </div>
-          <div class="field">
-            <label for="prod-stock">Stock</label>
-            <input id="prod-stock" name="stock" type="number" min="0" max="10000" step="1" value="${connected ? '' : '10'}" inputmode="numeric"
-              ${connected ? 'placeholder="Sin control"' : 'required'}>
-          </div>
-        </div>
-        ${connected ? `<label class="check-label">
-          <input type="checkbox" name="trackStock">
-          <span>Controlar stock: CAUCE descuenta cada venta y deja de vender en cero. Si no lo marcás, el producto se vende mientras esté disponible y lo marcás agotado a mano.</span>
-        </label>` : ''}
-        <div class="field">
-          <label for="prod-category">Categoría</label>
-          <input id="prod-category" name="category" type="text" required maxlength="40" list="categorias" value="Otros">
-          <datalist id="categorias">
-            ${PRODUCT_CATEGORIES_SUGGESTED.map(category => `<option value="${esc(category)}"></option>`).join('')}
-          </datalist>
-        </div>
-        <div class="field">
-          <label for="prod-variants">Variantes (opcional)</label>
-          <input id="prod-variants" name="variants" type="text" maxlength="200"
-            placeholder="Chica, Grande +2000, Familiar +5000">
-          <p class="microcopy">Separadas por coma. El número suma o resta sobre el precio base.
-            Si cargás variantes, quien compra elige una.</p>
-        </div>
+    <p class="catalog-summary quiet">${live.length} ${live.length === 1 ? 'producto a la venta' : 'productos a la venta'}${unavailable ? ` · ${unavailable} no disponibles` : ''}${products.length - live.length ? ` · ${products.length - live.length} desactivados` : ''}</p>
+    ${canManage ? `<details class="panel-disclosure" data-keep-open="catalog-new" ${createOpen ? 'open' : ''}>
+      <summary>Agregar producto</summary>
+      <form class="checkout-form" data-form="product-create" data-business="${bid}">
+        ${productFields('prod', null, { connected })}
         ${media ? mediaField('prod-image', 'Foto del producto (opcional)', '',
           'JPEG, PNG o WebP, hasta 5 MB. El producto se publica igual si todavía no tenés foto.')
           : '<p class="microcopy">Las fotos se toman de las imágenes incluidas en el proyecto. La carga de fotos propias no está implementada en este entorno.</p>'}
-        <button class="button full" type="submit" ${app.online ? '' : 'disabled'}>Agregar al catálogo</button>
+        <button class="button full" type="submit" ${disabled}>Agregar al catálogo</button>
       </form>
-    </section>` : `<p class="microcopy">Tu rol en el equipo permite marcar productos agotados o disponibles${connected ? ' y actualizar el stock de los que lo controlan' : ''}.</p>`}
-
-    <section class="panel-section">
-      <h2 class="checkout-section-title">Catálogo (${products.filter(product => !product.archived).length})</h2>
-      ${products.length ? `<div class="stack">${rows}</div>` : '<p class="quiet">Todavía no cargaste productos.</p>'}
-    </section>`;
+    </details>` : `<p class="microcopy">Tu rol en el equipo permite marcar productos agotados o disponibles${connected ? ' y actualizar el stock de los que lo controlan' : ''}.</p>`}
+    ${canManage ? `<datalist id="categorias">${categoryOptions.map(name => `<option value="${esc(name)}"></option>`).join('')}</datalist>` : ''}
+    ${canManage && connected ? categoryManager(business, categories, products) : ''}
+    ${products.length ? ordered.map(group => `
+      <section class="panel-section catalog-group" aria-label="Categoría ${esc(group.label)}">
+        <h2 class="checkout-section-title">${esc(group.label)} (${group.items.length})</h2>
+        <div class="stack">${group.items.map(row).join('')}</div>
+      </section>`).join('')
+      : `<p class="quiet">Todavía no cargaste productos.${canManage ? ' Empezá por el formulario de arriba.' : ''}</p>`}`;
 }
 
 function merchantDataTab(business, missing, categories = []) {
@@ -2535,6 +2595,24 @@ const ACTIONS = {
     await runCommand('product.update', { businessId: business, productId: product, patch: { [field]: value === 'true' } });
     await render();
   },
+  async 'category-toggle'(element) {
+    const active = element.dataset.active === 'true';
+    await runCommand('productCategory.update', { businessId: element.dataset.business, categoryId: element.dataset.category,
+      patch: { active } });
+    toast(active ? 'Categoría activada.' : 'Categoría desactivada: sus productos se muestran en “Otros”.');
+    await render();
+  },
+  async 'category-move'(element) {
+    const { business, category, direction } = element.dataset;
+    const categories = await app.repository.query('productCategories', { businessId: business });
+    const ids = categories.map(item => item.id);
+    const from = ids.indexOf(category);
+    const to = direction === 'up' ? from - 1 : from + 1;
+    if (from < 0 || to < 0 || to >= ids.length) return;
+    [ids[from], ids[to]] = [ids[to], ids[from]];
+    await runCommand('productCategory.reorder', { businessId: business, order: ids });
+    await render();
+  },
   async 'product-photo-remove'(element) {
     const { business, product } = element.dataset;
     await runCommand('product.setImage', { businessId: business, productId: product, file: null });
@@ -2813,6 +2891,34 @@ const FORMS = {
     await render();
   },
 
+  async 'product-edit'(form) {
+    const data = Object.fromEntries(new FormData(form));
+    const connected = isConnected();
+    const trackStock = connected ? data.trackStock === 'on' : true;
+    const patch = { name: data.name, description: data.description || '', category: data.category,
+      price: Number(data.price), variants: parseVariants(data.variants) };
+    if (connected) patch.trackStock = trackStock;
+    if (trackStock) patch.stock = Number(data.stock || 0);
+    await runCommand('product.update', { businessId: form.dataset.business, productId: form.dataset.product, patch });
+    app.openDetails.delete(`product-${form.dataset.product}`);
+    toast('Producto actualizado.');
+    await render();
+  },
+
+  async 'category-create'(form) {
+    const name = String(new FormData(form).get('name') || '');
+    await runCommand('productCategory.create', { businessId: form.dataset.business, name });
+    toast('Categoría agregada.');
+    await render();
+  },
+
+  async 'category-rename'(form) {
+    await runCommand('productCategory.update', { businessId: form.dataset.business, categoryId: form.dataset.category,
+      patch: { name: String(new FormData(form).get('name') || '') } });
+    toast('Categoría actualizada.');
+    await render();
+  },
+
   async 'product-create'(form) {
     const data = Object.fromEntries(new FormData(form));
     const image = form.querySelector('input[type="file"][name="image"]')?.files?.[0] || null;
@@ -2827,6 +2933,8 @@ const FORMS = {
       image: image && image.size ? image : null,
     });
     form.reset();
+    // El formulario queda abierto para cargar el siguiente.
+    app.openDetails.add('catalog-new');
     toast(image && image.size ? 'Producto y foto agregados al catálogo.' : 'Producto agregado al catálogo.');
     await render();
   },
@@ -2846,17 +2954,6 @@ const FORMS = {
     if (!file || !file.size) { toast('Elegí una imagen para subir.', 'error'); return; }
     await runCommand('business.setMedia', { businessId: form.dataset.business, slot: form.dataset.slot, file });
     toast(form.dataset.slot === 'cover' ? 'Portada actualizada.' : 'Logo actualizado.');
-    await render();
-  },
-
-  async 'product-update'(form) {
-    const data = Object.fromEntries(new FormData(form));
-    const patch = { price: Number(data.price) };
-    if (form.dataset.track !== 'false') patch.stock = Number(data.stock);
-    await runCommand('product.update', {
-      businessId: form.dataset.business, productId: form.dataset.product, patch,
-    });
-    toast('Producto actualizado.');
     await render();
   },
 

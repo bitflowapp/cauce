@@ -6888,3 +6888,40 @@ main {
 @media (min-width: 1100px) {
   .panel-metrics { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 }
+
+/* Catálogo del panel: alta y categorías plegadas; edición por producto. */
+.panel-disclosure, .catalog-edit {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--white);
+  margin: 0 0 14px;
+}
+.panel-disclosure > summary, .catalog-edit > summary {
+  display: flex;
+  align-items: center;
+  min-height: 48px;
+  padding: 10px 14px;
+  font-weight: 800;
+  color: var(--forest);
+  cursor: pointer;
+  list-style: none;
+}
+.panel-disclosure > summary::-webkit-details-marker, .catalog-edit > summary::-webkit-details-marker { display: none; }
+.panel-disclosure > summary::after, .catalog-edit > summary::after { content: '+'; margin-left: auto; font-size: 20px; line-height: 1; }
+.panel-disclosure[open] > summary::after, .catalog-edit[open] > summary::after { content: '−'; }
+.panel-disclosure[open] > summary, .catalog-edit[open] > summary { border-bottom: 1px solid var(--line); }
+.panel-disclosure > :not(summary), .catalog-edit > :not(summary) { margin: 12px 14px; }
+.catalog-edit { margin: 0; border-style: dashed; }
+.catalog-edit > summary { min-height: 44px; font-size: 13px; }
+.catalog-summary { margin: 0 0 12px; font-weight: 700; }
+.catalog-group .checkout-section-title { margin-bottom: 8px; }
+
+.category-list { display: grid; gap: 8px; margin: 12px 14px; }
+.category-item { display: grid; gap: 4px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.category-item.is-inactive input { color: var(--muted); }
+.category-meta { font-size: 12px; }
+.category-actions { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.category-actions .link-button[disabled] { opacity: 0.4; cursor: default; }
+.category-create { margin-top: 4px; }
+/* Dentro de un desplegable el formulario no dibuja otra tarjeta. */
+.panel-disclosure .checkout-form, .catalog-edit .checkout-form { border: 0; padding: 0; box-shadow: none; background: transparent; }

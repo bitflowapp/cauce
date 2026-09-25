@@ -277,11 +277,13 @@ export function createSupabaseRepository({ client, redirectTo, storage, onError 
       createdAt: row.created_at, updatedAt: row.updated_at,
     };
   };
-  const productColumns = '*,product_categories(name),product_variants(id,name,price_delta_ars,position,active)';
+  const productColumns = '*,product_categories(name,position),product_variants(id,name,price_delta_ars,position,active)';
   const mapProduct = row => ({
     id: row.id, businessId: row.business_id, localityId: LOCALITY,
     name: row.name, description: row.description || '',
     categoryId: row.category_id || '', category: row.product_categories?.name || 'Otros',
+    // Orden de la categoría que definió el comercio (null: sin categoría visible).
+    categoryPosition: row.product_categories?.position ?? null,
     price: Number(row.price_ars), stock: row.stock, trackStock: row.track_stock === true,
     available: row.available === true,
     archived: row.archived === true, imagePath: row.image_path || '', image: publicUrl(row.image_path),
@@ -456,7 +458,7 @@ export function createSupabaseRepository({ client, redirectTo, storage, onError 
     },
     async productCategories(payload) {
       return read(client.from('product_categories').select('id,name,position,active')
-        .eq('business_id', payload?.businessId).order('position'));
+        .eq('business_id', payload?.businessId).order('position').order('name'));
     },
     async myBusinesses() {
       const user = await requireAccount('Ingresá para ver tus comercios.');
@@ -786,6 +788,32 @@ export function createSupabaseRepository({ client, redirectTo, storage, onError 
         .insert({ business_id: payload?.businessId, name }).select().maybeSingle());
       requireValue(row, 'BUSINESS_FORBIDDEN', 'Tu cuenta no puede editar este catálogo.');
       return row;
+    },
+    // Categorías del catálogo: nombre, visibilidad y orden. RLS limita todo a
+    // titular y encargado/a del propio comercio; el filtro por comercio acá
+    // sólo evita tocar una fila ajena por un id equivocado.
+    async 'productCategory.update'(payload) {
+      const patch = payload?.patch || {};
+      const columns = {};
+      if ('name' in patch) {
+        columns.name = text(patch.name, 40);
+        requireValue(columns.name.length >= 2, 'INVALID_CATEGORY', 'El nombre de la categoría necesita al menos 2 caracteres.');
+      }
+      if ('active' in patch) columns.active = patch.active === true;
+      requireValue(Object.keys(columns).length > 0, 'EMPTY_PATCH', 'No hay cambios para guardar.');
+      const row = await read(client.from('product_categories').update(columns)
+        .eq('id', payload?.categoryId).eq('business_id', payload?.businessId).select().maybeSingle());
+      requireValue(row, 'BUSINESS_FORBIDDEN', 'Tu cuenta no puede editar este catálogo.');
+      return row;
+    },
+    async 'productCategory.reorder'(payload) {
+      const ids = (Array.isArray(payload?.order) ? payload.order : []).slice(0, 100);
+      for (const [index, id] of ids.entries()) {
+        const row = await read(client.from('product_categories').update({ position: (index + 1) * 10 })
+          .eq('id', id).eq('business_id', payload?.businessId).select('id').maybeSingle());
+        requireValue(row, 'BUSINESS_FORBIDDEN', 'Tu cuenta no puede editar este catálogo.');
+      }
+      return true;
     },
     async 'product.create'(payload) {
       const trackStock = payload?.product?.trackStock === true;
