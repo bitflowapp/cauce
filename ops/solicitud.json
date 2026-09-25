@@ -1,8 +1,8 @@
 {
-  "paso": "correo",
+  "paso": "admin",
   "aplicar": false,
   "confirmar": "",
   "email": "",
   "invitar": false,
-  "motivo": "Fase A · B3: confirmación de cuenta, recuperación (el enlace anterior deja de valer) e invitación con entrega real a una casilla externa. Borra las cuentas QA que crea."
+  "motivo": "Fase A · B4: ¿existe ya la cuenta de CAUCE_ADMIN_EMAIL, confirmada y con privilegio? Sólo lectura."
 }
