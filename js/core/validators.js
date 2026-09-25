@@ -1,6 +1,7 @@
 // Portado de js/core/validators.js de La Taba.
 // Protecciones contra caracteres de control, formato de teléfonos argentinos y nombres de clientes.
 
+// eslint-disable-next-line no-control-regex -- se eliminan caracteres de control a propósito
 const CONTROL_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g;
 const PAYMENT_METHODS = new Set(['coordinate', 'cash', 'transfer', 'mercado_pago_future', 'cash_demo', 'transfer_demo', 'mercadopago_demo']);
 

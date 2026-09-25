@@ -1,5 +1,6 @@
 node_modules/
 dist/
+dist-production/
 .env
 .env.*
 !.env.example
@@ -16,3 +17,6 @@ dist/
 
 # Datos y credenciales del entorno local de pruebas: nunca se versionan.
 .local/
+
+# Respaldos de la base: contienen datos personales y nunca se versionan.
+/backup/

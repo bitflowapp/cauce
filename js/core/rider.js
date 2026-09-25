@@ -2,9 +2,7 @@
 // Lógica de selección de pedidos, cola y estados de acción del repartidor.
 
 import {
-  ASSIGNABLE_DELIVERY_STATUSES,
-  canTransitionOrderStatus,
-  isTerminalOrderStatus,
+  ASSIGNABLE_DELIVERY_STATUSES, isTerminalOrderStatus,
 } from './order-status.js';
 
 function normalizeDeliveryMode(value) {

@@ -3,7 +3,7 @@ import { CONFIG } from '../config.js';
 import { STATUS_LABELS } from '../core/workflow-policy.js';
 import { BUSINESS_STATUS_LABELS } from '../core/merchant-status.js';
 import { TAXI_STATUS_LABELS } from '../core/taxi-workflow.js';
-import { PAYMENT_METHOD_LABELS } from '../domain/commands.js';
+import { PAYMENT_METHOD_LABELS } from '../core/payment.js';
 
 const ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 

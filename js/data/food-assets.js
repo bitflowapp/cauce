@@ -291,7 +291,6 @@ export function getAlumineTaxiMapSvg({
   const isOnWay = status === 'driver_on_way';
   const isArrived = status === 'driver_arrived';
   const isBoarded = status === 'passenger_on_board';
-  const isAccepted = status === 'accepted';
 
   // Progreso del taxi visualmente en el mapa
   let taxiProgress = 5;

@@ -4,7 +4,8 @@
 // el transporte ni el navegador. El entorno de demostración los ejecuta contra
 // localStorage y el backend local de pruebas los ejecuta dentro de una transacción.
 // El "actor" siempre lo resuelve quien ejecuta a partir de su sesión, nunca el cliente.
-import { CauceError, requireValue, clone } from '../core/errors.js';
+import { requireValue, clone } from '../core/errors.js';
+import { PAYMENT_METHOD_LABELS as PAYMENT_LABELS } from '../core/payment.js';
 import { scopeOf, scopeKey, assertScope } from '../core/scope.js';
 import { emptyCart, changeQuantity, quoteCart } from '../core/cart.js';
 import { requireTransition, allowedActions } from '../core/workflow-policy.js';
@@ -13,26 +14,23 @@ import { sanitizeText, sanitizeNotes, validateCustomerName, isValidArgentinePhon
 import { validateProductInput, slugify, validateImageReference } from '../core/catalog-rules.js';
 import {
   assertCanSubmitForReview, canTransitionBusiness, normalizeReviewNote,
-  missingPublicationRequirements,
 } from '../core/merchant-status.js';
 import {
-  requireAccount, requireRole, requireBusinessOwnership, hasRole, validateSignUp, normalizeEmail,
+  requireAccount, requireRole, requireBusinessOwnership, validateSignUp,
 } from '../core/accounts.js';
 import {
   DISPATCH_POLICY, assertDriverCanAccept, expiresAt, isExpired, validateTripRequest,
 } from '../core/taxi-dispatch.js';
 import {
-  isTaxiOpenForOffers, isTaxiActive, isTaxiCancelable, validateTaxiTransition,
-  getDriverNextAction, TAXI_STATUS_LABELS,
+  isTaxiActive, isTaxiCancelable, validateTaxiTransition, getDriverNextAction, TAXI_STATUS_LABELS,
 } from '../core/taxi-workflow.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const DEMO_PAYMENT_METHODS = Object.freeze(['cash_demo', 'transfer_demo']);
 
-export const PAYMENT_METHOD_LABELS = Object.freeze({
-  cash_demo: 'Efectivo al recibir (prueba)',
-  transfer_demo: 'Transferencia al comercio (prueba)',
-});
+// Las etiquetas viven en core: la interfaz conectada no depende del dominio demo.
+// (Se reexpone como constante: es la forma que admite el empaquetador sin conexión.)
+export const PAYMENT_METHOD_LABELS = PAYMENT_LABELS;
 
 // ───────────────────────── utilidades internas ─────────────────────────
 
@@ -538,7 +536,7 @@ const orderCommands = {
     }
     if (nextStatus === 'delivered' && order.deliveryCode) {
       order.deliveryCode = buildDeliveryCode(order.deliveryCode.code, {
-        confirmedAt: context.now(), confirmedBy: actor.id || actor.kind,
+        confirmedAt: context.now(), confirmedBy: /** @type {any} */ (actor).id || actor.kind,
       });
     }
     if (nextStatus === 'canceled') {

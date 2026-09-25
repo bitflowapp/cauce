@@ -1,168 +1,184 @@
 # CAUCE · Aluminé
 
-Plataforma local de LUNA para comercio y movilidad en Aluminé (Neuquén).
+Plataforma local de LUNA para que los comercios de Aluminé (Neuquén) vendan con
+retiro o con envío propio, y los vecinos compren sin intermediarios de pago.
 
-Permite que un comercio se dé de alta y publique su catálogo, que una persona
-compre con retiro o con envío del propio comercio, que el comercio gestione sus
-pedidos y su reparto, que una persona solicite un taxi y un conductor lo acepte,
-y que administración revise las altas y supervise la operación.
+- Un comercio se da de alta, carga su catálogo, sus horarios y su contacto, y
+  pide la publicación; administración la revisa.
+- Una persona compra **sin crear cuenta** (sesión anónima real), sigue su
+  pedido en vivo o por un enlace, y paga en efectivo al retirar o al recibir.
+- El comercio atiende desde su panel: aviso sonoro de pedidos nuevos, estados
+  con reglas del servidor, reparto propio y equipo con roles.
 
-**Estado: versión demostrable, no operativa.** No hay pagos reales, ni prestadores
-incorporados, ni convenio municipal. El detalle está en
-[docs/ESTADO-PILOTO.md](docs/ESTADO-PILOTO.md).
-
----
-
-## Dos entornos, una sola aplicación
-
-Las reglas de negocio viven en `js/domain/` y `js/core/`, y son **las mismas** en
-los dos entornos. Lo único que cambia es dónde se ejecutan y dónde se guardan los
-datos. El entorno se resuelve en tiempo de compilación (`js/runtime-env.js`): no
-hay detección automática ni degradación silenciosa de backend a simulación.
-
-| | Demostración (la que se publica) | Entorno local de pruebas |
-|---|---|---|
-| Persistencia | Navegador de cada persona (`localStorage`) | SQLite compartida (`.local/cauce-dev.sqlite`) |
-| Sesiones | Identidades de ejemplo, sin contraseña | Correo y contraseña, cookie `HttpOnly` |
-| Validación | En el navegador | En el servidor, dentro de una transacción |
-| Entre personas | No se comparte nada | Sí: varias sesiones sobre los mismos datos |
-| Red | `connect-src 'none'`: no puede abrir conexiones | Sólo el mismo origen |
-
-GitHub Pages **no aloja ningún backend**: sirve archivos estáticos. La operación
-compartida sólo existe en el entorno local.
+**Estado: NOT_READY para operar con comercios reales.** El código, el esquema y
+las pruebas están listos; faltan pasos de operación sobre el proyecto real
+(aplicar la migración, SMTP propio, habilitar la compra sin cuenta, verificar
+la recuperación de contraseña con una casilla real y publicar). El detalle, con
+comandos, está en [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md).
 
 ---
 
-## Cómo ejecutar
+## Entornos
 
-Requiere Node.js 22 o posterior. No hace falta instalar dependencias.
+La misma aplicación (`js/`) corre sobre tres repositorios con la misma
+interfaz. Cuál se usa se decide **al compilar** (`js/runtime-env.js` se
+reemplaza en el build): no hay detección automática ni caída silenciosa de un
+backend a datos de demostración.
 
-### Demostración (lo que se publica)
+| | Producción (Supabase) | Demostración | Backend de desarrollo |
+| --- | --- | --- | --- |
+| Build | `npm run build:production` → `dist-production/` | `npm run build` → `dist/` | `npm run dev` |
+| Datos | Supabase: Postgres con RLS, Auth, Storage, Realtime | `localStorage` del navegador | SQLite local (`.local/`) |
+| Identidad | Correo + contraseña; sesión anónima para comprar | Identidades de ejemplo | Correo + contraseña, cookie HttpOnly |
+| Autoridad | Funciones SQL del servidor | El navegador | El servidor local |
+| Red | Sólo el proyecto Supabase (CSP) | `connect-src 'none'` | Mismo origen |
 
-```powershell
-npm start
+GitHub Pages publica **la demostración** hasta que la variable del
+repositorio `CAUCE_DEPLOY_TARGET` valga `production` (ver
+[PRODUCTION_READINESS.md §3.6](PRODUCTION_READINESS.md#36-publicar-b4)).
+
+---
+
+## Desarrollo
+
+### Requisitos
+
+- Node.js 22 o posterior.
+- Docker, para el stack Supabase local (Postgres, Auth, REST, Storage,
+  Realtime y Mailpit). La CLI de Supabase viene como dependencia.
+
+### Instalación
+
+```bash
+npm ci
 ```
 
-Abre <http://127.0.0.1:4173>. Todo queda en tu navegador.
+### Variables de entorno
 
-### Entorno local de pruebas, con backend
+Ninguna es obligatoria para desarrollar. Están documentadas en
+[`.env.example`](.env.example) (sin secretos). Los scripts leen el entorno del
+proceso; `.env` no se carga solo y nunca se versiona.
 
-```powershell
-npm run dev:seed
+### Stack Supabase local
+
+```bash
+npm run db:start      # levanta el stack y aplica supabase/migrations (sin datos de ejemplo)
+npm run db:reset      # vuelve a crear la base desde las migraciones
+npm run db:stop
 ```
 
-Abre <http://127.0.0.1:4180>. La primera vez, `--seed` crea cuatro cuentas
-sintéticas (clienta, comercio, administración, taxista) con contraseñas
-generadas al azar y las escribe en `.local/dev-credentials.json`, que **no se
-versiona**. Para volver a empezar de cero, borrá la carpeta `.local/`.
+Los correos (confirmación, recuperación) llegan a Mailpit:
+<http://127.0.0.1:54324>. Las claves que muestra `npx supabase status` son
+las de demostración del stack local.
 
-Después del primer arranque alcanza con `npm run dev`.
+### Correr la app conectada, en local
 
-Para demostrar operaciones entre personas distintas, abrí cada rol en un
-**navegador o perfil separado**: varias pestañas del mismo navegador comparten
-la misma cookie de sesión y no demuestran aislamiento.
+```bash
+npm run dev:supabase  # build de producción contra el stack local + http://127.0.0.1:4174
+```
 
----
+Para crear un administrador local, después de registrarte y confirmar el
+correo en Mailpit:
 
-## Recorridos de la presentación
+```bash
+docker exec supabase_db_cauce psql -U postgres -c \
+  "insert into private.platform_admins (user_id) select id from auth.users where email = 'vos@ejemplo.com';"
+```
 
-Los cuatro se ejecutan automáticamente con `npm run e2e`. A mano, en el entorno
-local con backend:
+### Demostración y backend de desarrollo
 
-**1. Alta y publicación de un comercio**
-Ingresar → *Sumar mi comercio* → crear cuenta → crear el comercio (queda en
-borrador) → completar datos y modalidades de entrega → *Catálogo* → cargar un
-producto → *Datos* → **Solicitar publicación**. Con la cuenta de administración,
-en otro navegador: *Administración* → devolver con observaciones o aprobar. Al
-aprobar, el comercio aparece en el listado público.
-
-**2. Compra con retiro y con envío**
-*Comercios* → elegir uno → agregar productos → *Carrito* → elegir retiro o
-envío → completar datos → confirmar. El comercio, en su sesión: *Aceptar* →
-*Informar preparación* → *Listo* → (envío) *Asignar reparto* → *Marcar salida* →
-*Marcar entregado*. El reparto se da de alta en la pestaña *Reparto*.
-
-**3. Solicitud y aceptación de taxi**
-Con una cuenta: *Registrarme como taxista* → completar el alta → administración
-la aprueba → el taxista se marca **disponible**. Desde otra sesión: *Taxi* →
-origen, destino, referencia y pasajeros → *Solicitar taxi*. El taxista ve la
-solicitud sin nombre ni teléfono, la acepta, y recién ahí recibe el contacto.
-
-**4. Revisión administrativa y supervisión**
-*Administración*: cola de altas pendientes y totales agregados de lo que
-efectivamente ocurrió en el entorno. Sin direcciones ni recorridos individuales.
-
----
-
-## Qué usa persistencia remota y qué sigue siendo simulación
-
-| Capacidad | Demostración publicada | Entorno local con backend |
-|---|---|---|
-| Alta de comercios con revisión | Local al navegador | **Compartida y autenticada** |
-| Catálogo, carritos, pedidos | Local al navegador | **Compartida y autenticada** |
-| Estados de pedido y reparto | Local al navegador | **Compartida y autenticada** |
-| Taxis: alta, despacho, estados | Local al navegador | **Compartida y autenticada** |
-| Autenticación con contraseña | No: identidades de ejemplo | **Sí** (scrypt + cookie HttpOnly) |
-| Validación de importes y permisos | En el navegador | **En el servidor** |
-| Pagos en línea | **Deshabilitados** | **Deshabilitados** |
-| Ubicación GPS de móviles | **No existe** | **No existe** |
-| Notificaciones a prestadores | **No existen** | **No existen** |
-| Carga de fotos propias | **No implementada** | **No implementada** |
+```bash
+npm start             # demostración: http://127.0.0.1:4173 (todo en tu navegador)
+npm run dev:seed      # backend SQLite: http://127.0.0.1:4180, cuentas sintéticas en .local/
+```
 
 ---
 
 ## Pruebas
 
-```powershell
-npm run verify       # sintaxis, imports, compuertas, 158 pruebas Node, builds
-npm run verify:full  # lo anterior + recorridos de navegador + auditoría visual
-```
+| Comando | Qué prueba | Necesita |
+| --- | --- | --- |
+| `npm run lint` | ESLint sobre todo el repositorio | — |
+| `npm run typecheck` | TypeScript `checkJs` sobre `js/` | — |
+| `npm run check` | Sintaxis, imports, copy, orígenes y CSP | — |
+| `npm test` | Unitarias: dominio, horarios, telemetría, repositorio, service worker | — |
+| `npm run test:db` | Migraciones y RLS en Postgres embebido (PGlite), incluida la actualización con datos legados | — |
+| `npm run test:integration` | Seguridad multi-comercio, pedidos, auth con correo real, storage y realtime | `npm run db:start` |
+| `npm run e2e:local` | Recorridos en Chromium y WebKit sobre el build de producción | stack local + navegadores de Playwright |
+| `npm run smoke:production` | Sólo lectura contra el proyecto y el sitio reales | red |
+| `npm run verify` | lint + tipos + check + unitarias + SQL + los tres builds | — |
 
-Por separado:
+Las pruebas de integración y E2E **se niegan a correr contra un host que no sea
+local**. La E2E usa los navegadores de Playwright (`npx playwright install
+chromium webkit`); las suites heredadas de la demostración (`npm run e2e`,
+`e2e:demo`, `audit:visual`) usan Chrome vía DevTools (`CAUCE_CHROME_PATH`).
 
-| Comando | Qué hace |
-|---|---|
-| `npm test` | Pruebas de dominio, repositorio, backend y copy |
-| `npm run e2e` | Los tres recorridos en navegadores separados, contra el backend |
-| `npm run e2e:demo` | Recorrido sobre la demostración publicada |
-| `npm run audit:visual` | 360, 390, 430 y escritorio: desbordes, área táctil, contraste |
-| `npm run audit:visual:backend` | Lo mismo sobre el entorno con backend |
-
-Las pruebas de navegador usan el Chrome o Edge ya instalado mediante el
-protocolo DevTools (`tests/lib/cdp.mjs`): no descargan navegadores. Si hace
-falta, se indica la ruta con `CAUCE_CHROME_PATH`.
-
-**Son mediciones con emulación móvil en un navegador de escritorio, no pruebas
-en un teléfono físico.**
-
-Los resultados quedan en `evidence/`: `e2e-results.json`, `demo-results.json`,
-`audit-results.json` y las capturas correspondientes.
+CI (`.github/workflows/ci.yml`) corre todo esto en cada push y pull request,
+con un stack Supabase efímero en el runner y sin secretos.
 
 ---
 
-## Estructura
+## Producción
+
+- **Build:** `npm run build:production` valida la URL (https,
+  `<ref>.supabase.co`) y la clave (rechaza secret/service_role), minifica,
+  nombra los archivos por contenido, genera la CSP, el service worker
+  versionado, OpenGraph, canonical, `robots.txt` y `404.html`, y falla si el
+  bundle trae credenciales o código de la demostración.
+- **Migraciones:** `supabase/migrations/`, hacia adelante, aplicadas con
+  `npx supabase db push`. La app exige una versión mínima de esquema
+  (`js/core/contract.js`) y el deploy se niega a publicar si el proyecto no la
+  tiene.
+- **Deploy:** `.github/workflows/pages.yml`, condicionado a
+  `CAUCE_DEPLOY_TARGET`; verifica el esquema antes y el sitio después.
+- **Rollback, backups, secretos, primer comercio y límites conocidos:**
+  [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md).
+
+---
+
+## Arquitectura
 
 ```
-js/core/         reglas puras (carrito, estados, validación, altas, despacho)
-js/domain/       estado, comandos y consultas: el dominio compartido
-js/repositories/ local (navegador) y http (backend), misma interfaz
-js/ui/           formato e iconografía
-js/app.js        shell: enrutador por hash, vistas y acciones
-scripts/         servidor estático, backend local, build, íconos, comprobaciones
-tests/           pruebas Node, recorridos de navegador y auditoría visual
-docs/            arquitectura, procedencia, estado del piloto
+js/core/          reglas puras: carrito, estados, horarios, validación, telemetría
+js/domain/        comandos y consultas del dominio (demo y backend de desarrollo)
+js/repositories/  local (demo), http (desarrollo) y supabase (producción)
+js/ui/            formato, íconos, diálogos, avisos de pedido, herramientas del panel
+js/app.js         shell: enrutador por hash, vistas, acciones y arranque
+supabase/         migraciones, plantillas de correo, config local y remota, tipos
+scripts/          builds, servidores, configuración de Auth, comprobaciones
+tests/            unitarias, db (PGlite), integration y e2e (Supabase local)
 ```
 
-## Seguridad y límites que no se apagan
+- **Frontend.** SPA estática en JS sin framework, enrutador por hash (sirve
+  en GitHub Pages bajo `/cauce/`). Cada vista vuelve a consultar por la vía
+  normal; los eventos de Realtime sólo disparan esa consulta, nunca se pintan
+  directamente. Si Realtime se corta, el panel consulta cada 30 s.
+- **Auth.** Supabase Auth con correo y contraseña (mínimo 10 caracteres,
+  letras y números; en el proyecto real, además, se rechazan contraseñas
+  filtradas), confirmación
+  obligatoria, enlaces `token_hash` que funcionan en otro dispositivo, refresh
+  rotativo. Para comprar sin cuenta, una sesión anónima real: RLS la limita a
+  pedir, ver y cancelar sus propios pedidos; todo lo demás exige cuenta
+  permanente (claim `is_anonymous` verificado en SQL).
+- **Base de datos.** Dinero en enteros (pesos), total = subtotal + envío por
+  `check`, snapshot de cada línea, claves compuestas que impiden mover un
+  producto a otro comercio, horarios por día en la zona horaria de la
+  localidad.
+- **RLS y permisos.** RLS en todas las tablas; grants por columna; ninguna
+  escritura directa sobre pedidos: todo pasa por funciones `SECURITY DEFINER`
+  en el esquema `private` con envoltorios `SECURITY INVOKER` en `public`.
+  Roles por comercio: owner, manager, staff. Administración en
+  `private.platform_admins`, nunca en `user_metadata`.
+- **Pedidos.** `create_order` resuelve precios, envío, total y stock en el
+  servidor, con idempotencia durable, total confirmado (si el precio cambió,
+  no crea el pedido) y límites contra abuso. `transition_order` aplica la
+  máquina de estados de `private.order_transitions` por rol y modalidad, con
+  control de versión, motivo obligatorio al rechazar o cancelar e historial.
+- **Observabilidad.** Errores de interfaz, de Supabase, de sesión y pedidos
+  fallidos van a `private.client_events` sin datos personales, con tope por
+  minuto; administración los ve en su pantalla.
 
-- `mode: 'demo'` con `liveOrders` y `livePayments` en `false`: la fábrica de
-  repositorios se niega a construir nada si eso cambia.
-- El documento publicado bloquea toda conexión saliente (`connect-src 'none'`).
-- El actor de cada operación se deriva de la sesión, nunca de lo que envía el
-  navegador; los importes se recalculan contra el catálogo guardado.
-- Sin acceso administrativo por parámetro de URL.
-- Sin credenciales en el repositorio, en el frontend ni en las capturas.
-
-Más detalle en [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md),
-[docs/ESTADO-PILOTO.md](docs/ESTADO-PILOTO.md) y
-[docs/PROVENANCE.md](docs/PROVENANCE.md).
+Más detalle: [docs/AUDITORIA-PRODUCCION.md](docs/AUDITORIA-PRODUCCION.md)
+(hallazgos y su resolución), [docs/CAUCE-CONECTADO.md](docs/CAUCE-CONECTADO.md)
+(decisiones de seguridad del modelo), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+(demostración y backend de desarrollo).

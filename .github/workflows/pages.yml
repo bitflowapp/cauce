@@ -1,5 +1,13 @@
-name: Deploy CAUCE to GitHub Pages
+name: Deploy CAUCE a GitHub Pages
 
+# Qué se publica lo decide el archivo versionado .github/deploy-target
+# ("demo" o "production"); la variable del repositorio CAUCE_DEPLOY_TARGET, si
+# existe, tiene prioridad (sirve para volver a la demo sin commit).
+#   - "demo": la demostración sin red (comportamiento anterior).
+#   - "production": el build conectado a Supabase. Antes de publicar se exige
+#     que el proyecto remoto tenga el esquema que este frontend necesita; si
+#     faltan migraciones, no se publica nada.
+# Pasar a producción es un commit revisable (ver PRODUCTION_READINESS.md).
 on:
   push:
     branches:
@@ -15,35 +23,59 @@ concurrency:
   group: pages
   cancel-in-progress: false
 
+env:
+  CAUCE_SITE_URL: ${{ vars.CAUCE_SITE_URL || 'https://bitflowapp.github.io/cauce' }}
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      folder: ${{ steps.pick.outputs.folder }}
+      target: ${{ steps.target.outputs.target }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js 22
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - name: Destino
+        id: target
+        env:
+          VAR_TARGET: ${{ vars.CAUCE_DEPLOY_TARGET }}
+        run: |
+          target="${VAR_TARGET:-$(tr -d '[:space:]' < .github/deploy-target 2>/dev/null)}"
+          case "$target" in demo|production) ;; *) target=demo ;; esac
+          echo "target=$target" >> "$GITHUB_OUTPUT"
+          echo "TARGET=$target" >> "$GITHUB_ENV"
+          echo "Destino: $target"
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
-
-      - name: Verify checks & tests
+          cache: npm
+      - name: Instalación limpia desde el lockfile
+        run: npm ci
+      - name: Compuertas rápidas
         run: |
+          npm run lint
+          npm run typecheck
           npm run check
           npm test
-
-      - name: Build static distribution & offline bundle
+          npm run test:db
+      - name: Esquema remoto compatible (sólo producción)
+        if: env.TARGET == 'production'
+        run: node tests/production-smoke.mjs --predeploy
+      - name: Build
+        id: pick
         run: |
-          npm run build
-          npm run build:offline
-
-      - name: Setup GitHub Pages
-        uses: actions/configure-pages@v5
-
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
+          if [ "$TARGET" = "production" ]; then
+            CAUCE_RELEASE="${GITHUB_SHA::7}" npm run build:production
+            echo "folder=dist-production" >> "$GITHUB_OUTPUT"
+          else
+            npm run build
+            npm run build:offline
+            echo "folder=dist" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
         with:
-          path: dist/
+          path: ${{ steps.pick.outputs.folder }}/
 
   deploy:
     environment:
@@ -55,3 +87,16 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+  verificar-publicado:
+    name: Verificación del sitio publicado
+    runs-on: ubuntu-latest
+    needs: [build, deploy]
+    if: needs.build.outputs.target == 'production'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Smoke de sólo lectura contra producción
+        run: node tests/production-smoke.mjs

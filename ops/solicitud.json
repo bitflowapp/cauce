@@ -1,0 +1,8 @@
+{
+  "paso": "admin",
+  "aplicar": false,
+  "confirmar": "",
+  "email": "",
+  "invitar": false,
+  "motivo": "Fase A · B4: ¿existe ya la cuenta de CAUCE_ADMIN_EMAIL, confirmada y con privilegio? Sólo lectura."
+}

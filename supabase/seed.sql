@@ -1,0 +1,3 @@
+-- No demo identities or business data in the Supabase foundation.
+-- Aluminé is reference data created by the migration.
+-- Synthetic identities are confined to tests/db, never deployed as a seed.

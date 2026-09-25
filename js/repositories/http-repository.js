@@ -25,7 +25,7 @@ export function createHttpRepository({ apiBase = '/api', fetchImpl = globalThis.
       throw new CauceError(OFFLINE_CODE,
         'No hay conexión con el servidor de CAUCE. La operación no se envió: revisá la conexión y reintentá.');
     }
-    let payload = null;
+    let payload;
     try { payload = await response.json(); }
     catch {
       throw new CauceError('INVALID_RESPONSE', 'El servidor respondió de forma inesperada.');

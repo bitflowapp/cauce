@@ -1,0 +1,27 @@
+# Ajustes intencionales del proyecto remoto CAUCE. Nunca empujar el template
+# local completo (supabase/config.toml) a producción: sus valores son de prueba.
+# Plantillas de correo, SMTP y URLs se aplican con scripts/configure-auth.mjs.
+project_id = "cauce-production"
+
+[api]
+schemas = ["public"]
+
+[auth]
+# URL pública donde se sirve CAUCE (GitHub Pages). Cambiarla aquí y en
+# CAUCE_SITE_URL si el dominio cambia.
+site_url = "https://bitflowapp.github.io/cauce"
+additional_redirect_urls = ["https://bitflowapp.github.io/cauce/index.html", "https://bitflowapp.github.io/cauce/"]
+minimum_password_length = 10
+password_requirements = "letters_digits"
+# Compra sin cuenta: sesión anónima real, limitada por RLS a sus propios pedidos.
+enable_anonymous_sign_ins = true
+enable_refresh_token_rotation = true
+
+[auth.rate_limit]
+# Muchas personas comparten IP detrás de la red móvil.
+anonymous_users = 150
+
+[auth.email]
+enable_confirmations = true
+double_confirm_changes = true
+secure_password_change = true

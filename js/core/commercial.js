@@ -59,7 +59,12 @@ export function isStockPending(product) {
   return !Number.isFinite(Number(value));
 }
 
+// Un producto sin control de stock (gastronomía, hecho al momento) se vende
+// mientras esté disponible: su tope es el de cantidad por línea, no existencias.
+export const UNTRACKED_STOCK = 9999;
+
 export function knownStock(product) {
+  if (product && typeof product === 'object' && product.trackStock === false) return UNTRACKED_STOCK;
   if (isStockPending(product)) return null;
   return Math.max(0, Math.floor(Number(product.stock)));
 }

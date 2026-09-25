@@ -20,6 +20,7 @@ export function isDeliveryLocationSource(value) {
 }
 
 export function normalizeDeliveryLocation(input = {}) {
+  /** @type {Record<string, any>} */
   const source = input && typeof input === 'object' ? input : {};
   const latitude = finiteCoordinate(source.latitude ?? source.lat, 90);
   const longitude = finiteCoordinate(source.longitude ?? source.lng, 180);
@@ -50,6 +51,7 @@ export function normalizeDeliveryLocation(input = {}) {
 }
 
 export function deliveryLocationAddressFingerprint(address = {}) {
+  /** @type {Record<string, any>} */
   const source = address && typeof address === 'object' ? address : {};
   return normalizeFingerprintText([
     source.street ?? source.deliveryStreet,

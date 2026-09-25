@@ -4,7 +4,7 @@
 // carguen rápido. NO guarda operaciones para enviarlas después: si no hay
 // conexión, la aplicación lo dice y no confirma nada. Una confirmación en
 // diferido daría por recibido un pedido que ningún comercio vio.
-const CACHE = 'cauce-shell-v2';
+const CACHE = 'cauce-shell-v3';
 
 const SHELL = [
   './',
@@ -35,15 +35,34 @@ self.addEventListener('activate', event => {
   })());
 });
 
+// Sólo se guarda la cáscara estática de la aplicación. Cualquier otra ruta va a
+// la red sin pasar por acá: nada privado —sesión, pedidos, imágenes de un
+// comercio, mensajes en vivo— puede quedar guardado en este dispositivo ni
+// servirse después a otra sesión del mismo navegador.
+const CACHEABLE = /\.(css|js|mjs|svg|png|jpe?g|webp|avif|ico|woff2?|webmanifest)$/i;
+
+function isPrivateRequest(request) {
+  return request.headers.has('Authorization')
+    || request.headers.has('apikey')
+    || request.headers.has('Range')
+    || request.credentials === 'include';
+}
+
 self.addEventListener('fetch', event => {
   const request = event.request;
   if (request.method !== 'GET') return;
+  if (isPrivateRequest(request)) return;
 
   const url = new URL(request.url);
+  // Supabase (Auth, REST, Storage y Realtime) es otro origen: no se intercepta.
   if (url.origin !== self.location.origin) return;
   // Las llamadas al backend local nunca se cachean ni se responden desde caché:
   // una respuesta vieja aparentaría una operación que no ocurrió.
   if (url.pathname.includes('/api/')) return;
+  // Un enlace de confirmación o de recuperación llega con el token en la
+  // consulta. Nada con consulta se intercepta ni se guarda: ni el token ni la
+  // respuesta que produce pueden quedar en este dispositivo.
+  if (url.search) return;
 
   // El documento va primero a la red, para no servir una versión vieja de la app.
   if (request.mode === 'navigate') {
@@ -63,6 +82,8 @@ self.addEventListener('fetch', event => {
     })());
     return;
   }
+
+  if (!CACHEABLE.test(url.pathname)) return;
 
   event.respondWith((async () => {
     const cached = await caches.match(request);

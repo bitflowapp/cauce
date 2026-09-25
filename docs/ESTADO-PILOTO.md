@@ -6,6 +6,11 @@ comercio.
 
 Fecha de esta revisión: 21 de septiembre de 2026.
 
+> **Revisión posterior (24/09/2026):** este documento describe la
+> demostración. La versión conectada a Supabase, lo que ya está verificado y
+> lo que falta para operar con comercios reales están en
+> [PRODUCTION_READINESS.md](../PRODUCTION_READINESS.md).
+
 ---
 
 ## 1. Qué está implementado y verificado

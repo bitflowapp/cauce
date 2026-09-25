@@ -1,3 +1,6 @@
+/* Un elemento oculto queda oculto aunque su clase declare otro display. */
+[hidden] { display: none !important; }
+
 /* ==========================================================================
    CAUCE · ALUMINÉ — DESIGN SYSTEM v0.3.2
    Gastronomía Local Cordillerana · Patagonia Norte
@@ -68,7 +71,15 @@ html, body {
   margin: 0;
   padding: 0;
   max-width: 100%;
-  overflow-x: hidden;
+}
+
+/* Sin desplazamiento lateral. `hidden` en body lo convertía en contenedor de
+   scroll y anulaba todo `position: sticky` (la barra del carrito quedaba bajo
+   el borde de la pantalla). `clip` recorta sin crear contenedor; donde no
+   existe, recorta sólo html, que se propaga a la ventana. */
+html { overflow-x: hidden; }
+@supports (overflow-x: clip) {
+  html, body { overflow-x: clip; }
 }
 
 body {
@@ -3696,6 +3707,9 @@ main:empty {
   font-weight: 600;
   animation: toastIn 0.2s ease;
   border: 1px solid rgba(255, 255, 255, 0.15);
+  /* Es sólo un aviso: el toque pasa al botón que quede debajo durante los
+     segundos en que está visible (antes se perdía). */
+  pointer-events: none;
 }
 
 .toast[hidden] {
@@ -6027,11 +6041,31 @@ footer.footer, footer {
 }
 
 .catalog-row.is-archived { opacity: 0.62; }
+/* Con foto propia, la miniatura va al lado del nombre y la fila sigue
+   entrando a 360 px sin desbordar. */
+.catalog-row-head { display: flex; align-items: flex-start; gap: 10px; }
+.catalog-row-head .catalog-row-main { flex: 1; min-width: 0; }
+.catalog-row-thumb { width: 44px; height: 44px; flex-basis: 44px; }
 .catalog-row-main { display: grid; gap: 3px; }
 .catalog-row-main strong { font-size: 14px; color: var(--forest-deep); }
 .catalog-row-main .quiet { font-size: 12px; }
 .catalog-row-main .status-chip { justify-self: start; margin-top: 4px; }
 .catalog-row-actions { display: flex; flex-wrap: wrap; gap: 14px; }
+
+/* Carga de imágenes del comercio: vista previa acotada y control legible. */
+.media-preview {
+  display: block;
+  width: 96px;
+  height: 96px;
+  margin-bottom: 8px;
+  object-fit: cover;
+  background: var(--soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xs);
+}
+
+.field input[type="file"] { font-size: 13px; max-width: 100%; }
+.inline-form input[type="file"] { flex: 1 1 140px; min-width: 0; font-size: 12px; }
 
 .plain-list { list-style: none; margin: 8px 0; padding: 0; font-size: 13px; line-height: 1.6; color: var(--ink-light); }
 .plain-list li { padding: 3px 0; }
@@ -6465,4 +6499,253 @@ main {
   .route-visual.is-moving .brand-wheel,
   .taxi-search-visual span,
   .taxi-search-visual span::before { animation: none !important; }
+}
+/* Connected account/onboarding views share the existing visual system. */
+main.foundation-layout {
+  padding-inline: clamp(16px, 4vw, 32px);
+}
+main.foundation-layout ~ .footer a[hidden] {
+  display: none;
+}
+
+/* ─────────────── Producción conectada ─────────────── */
+
+/* El margen lateral de seguridad reemplazaba el padding de main por cero en
+   todos los anchos: el texto quedaba pegado al borde del teléfono. */
+main {
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+@media (min-width: 769px) {
+  main {
+    padding-left: max(24px, env(safe-area-inset-left, 0px));
+    padding-right: max(24px, env(safe-area-inset-right, 0px));
+  }
+}
+
+.home-hero-lead {
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 15px;
+  line-height: 1.5;
+  margin: -8px 0 20px;
+  max-width: 460px;
+}
+
+/* Pasos de "cómo funciona". */
+.how-steps {
+  list-style: none;
+  counter-reset: paso;
+  display: grid;
+  gap: 12px;
+  padding: 0;
+  margin: 0;
+}
+.how-steps li {
+  counter-increment: paso;
+  display: grid;
+  grid-template-columns: 36px 1fr;
+  column-gap: 12px;
+  align-items: start;
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+}
+.how-steps li::before {
+  content: counter(paso);
+  grid-row: span 2;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-pill);
+  background: var(--forest-tint);
+  color: var(--forest);
+  font-weight: 800;
+  display: grid;
+  place-items: center;
+}
+.how-steps span { color: var(--muted); font-size: 14px; line-height: 1.45; }
+@media (min-width: 769px) {
+  .how-steps { grid-template-columns: repeat(3, 1fr); }
+}
+
+/* Contacto con el comercio. */
+.contact-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 4px; }
+.contact-actions .button { flex: 1 1 140px; }
+.contact-actions.is-compact .button { flex: 0 1 auto; }
+
+.hours-details { margin: 0 0 16px; }
+.hours-details summary {
+  cursor: pointer;
+  font-weight: 700;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  list-style: none;
+}
+/* `display: flex` borra el triángulo nativo: sin una señal, parece un título
+   y nadie sabe que se despliega. */
+.hours-details summary::-webkit-details-marker { display: none; }
+.hours-details summary::after {
+  content: '';
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg);
+  transition: transform 0.15s ease;
+}
+.hours-details[open] summary::after { transform: rotate(-135deg); }
+.hours-list { list-style: none; padding: 0; margin: 4px 0 0; display: grid; gap: 6px; }
+.hours-list li { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; }
+
+/* Carrito: línea que ya no se puede comprar. */
+.cart-line.is-unavailable { opacity: 0.82; }
+.cart-line.is-unavailable .cart-line-unit-price { color: var(--clay); font-weight: 700; }
+
+.tracking-share .modal-actions { flex-wrap: wrap; }
+
+/* Panel: estado en vivo, pedidos nuevos y pestañas. */
+.panel-sync {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  font-size: 13px;
+  color: var(--muted);
+  margin: -4px 0 14px;
+}
+.panel-sync-dot { width: 9px; height: 9px; border-radius: var(--radius-pill); background: var(--line-strong); }
+.panel-sync-dot.ok { background: var(--teal-accent); }
+.panel-sync-dot.warn { background: var(--amber); }
+.panel-sync .link-button { min-height: 40px; display: inline-flex; align-items: center; gap: 4px; }
+.panel-openbar small { display: block; font-weight: 500; color: var(--muted); }
+.panel-openbar.is-open { border-color: var(--forest-tint); }
+
+.tab-badge {
+  display: inline-grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  margin-left: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--clay);
+  color: var(--white);
+  font-size: 11px;
+}
+
+/* Con muchas pestañas, en el teléfono se ordenan en filas: ninguna queda
+   escondida fuera de la pantalla. */
+@media (max-width: 560px) {
+  .tabs:has(> .tab:nth-child(5)) {
+    flex-wrap: wrap;
+    overflow: visible;
+    row-gap: 0;
+  }
+  .tabs:has(> .tab:nth-child(5)) .tab {
+    flex: 1 1 30%;
+    padding: 10px 6px;
+    text-align: center;
+  }
+}
+
+.order-panel-card.is-new { border-color: var(--clay); box-shadow: 0 0 0 1px var(--clay), var(--shadow-sm); }
+.order-panel-card.is-fresh { animation: cauce-fresh 1.2s ease-out 2; }
+@keyframes cauce-fresh {
+  0% { background: var(--clay-soft); }
+  100% { background: var(--white); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .order-panel-card.is-fresh { animation: none; }
+}
+.order-panel-customer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  font-size: 14px;
+  margin: 8px 0 4px;
+}
+.order-panel-customer a { display: inline-flex; align-items: center; gap: 4px; min-height: 40px; font-weight: 700; }
+.order-panel-notes {
+  background: var(--amber-soft);
+  border-radius: var(--radius-xs);
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+/* Horarios. */
+.hours-grid { display: grid; gap: 10px; margin: 8px 0 16px; }
+.hours-day {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+.hours-day legend { font-weight: 700; padding: 0 4px; }
+.hours-range { display: flex; align-items: center; gap: 8px; }
+.hours-range label { flex: 1; }
+.hours-range input { width: 100%; min-height: 44px; }
+@media (min-width: 769px) {
+  .hours-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* Equipo y listas administrativas. */
+.team-list { display: grid; gap: 8px; }
+.team-member {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px 12px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  background: var(--white);
+}
+.team-member-main { display: grid; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
+.team-member-actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.team-member-actions .link-button, .rider-list .link-button, .admin-business-list .link-button {
+  min-height: 40px;
+}
+.role-legend { display: grid; gap: 6px; margin: 14px 0 0; font-size: 13px; }
+.role-legend div { display: grid; grid-template-columns: 110px 1fr; gap: 8px; }
+.role-legend dt { font-weight: 700; }
+.role-legend dd { margin: 0; color: var(--muted); }
+.rider-list li, .admin-business-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.rider-list li.is-inactive { opacity: 0.7; }
+.event-list li { font-size: 13px; overflow-wrap: anywhere; }
+
+/* Diálogo de confirmación con motivo. */
+.cauce-dialog {
+  width: min(460px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+  border: none;
+  border-radius: var(--radius);
+  padding: 20px;
+  box-shadow: var(--shadow-lg);
+  color: var(--ink);
+}
+.cauce-dialog::backdrop { background: rgba(11, 37, 31, 0.55); }
+.cauce-dialog-form { display: grid; gap: 12px; }
+.cauce-dialog textarea { width: 100%; min-height: 88px; }
+.cauce-dialog .modal-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+.cauce-dialog .modal-actions .button { flex: 1 1 140px; }
+.field-error { color: var(--clay); font-size: 13px; font-weight: 700; margin: 6px 0 0; }
+[aria-invalid="true"] { border-color: var(--clay) !important; }
+.hours-range label, .hours-range input { min-width: 0; }
+@media (max-width: 440px) {
+  .hours-range { display: grid; grid-template-columns: 1fr; gap: 4px; }
+  .hours-range > span { display: none; }
 }

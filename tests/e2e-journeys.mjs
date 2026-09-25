@@ -70,13 +70,21 @@ async function main() {
     await page.waitForFunction('document.querySelector("#main")?.getAttribute("aria-busy") === "false"');
   };
 
-  // Hace clic en el botón cuyo texto coincide exactamente, esperando a que la
-  // vista termine de redibujarse en vez de suponer que ya ocurrió.
+  // Hace clic en el botón cuyo texto coincide exactamente y espera a que la
+  // acción termine: que la vista se haya redibujado (el botón ya no está) o que
+  // el botón deje de estar ocupado. Mirar sólo aria-busy no alcanza: la acción
+  // todavía espera al servidor y el redibujo empieza después, justo cuando el
+  // paso siguiente hace clic por coordenadas (el clic se perdía).
   const clickByLabel = async (page, selector, label) => {
     const query = `[...document.querySelectorAll(${JSON.stringify(selector)})]`
       + `.find(node => node.textContent.trim() === ${JSON.stringify(label)})`;
     await page.waitForFunction(`!!${query}`);
-    await page.evaluate(`(() => { ${query}.click(); return true; })()`);
+    await page.evaluate(`(() => {
+      for (const old of document.querySelectorAll('[data-qa-clicked]')) old.removeAttribute('data-qa-clicked');
+      const node = ${query}; node.setAttribute('data-qa-clicked', ''); node.click(); return true;
+    })()`);
+    await page.waitForFunction(`(() => { const node = document.querySelector('[data-qa-clicked]');
+      return !node || node.dataset.busy !== 'true'; })()`);
     await page.waitForFunction('document.querySelector("#main")?.getAttribute("aria-busy") === "false"');
   };
 
@@ -116,7 +124,7 @@ async function main() {
     step('El comercio crea su cuenta');
 
     await merchant.evaluate(`(() => { location.hash = '#alta-comercio'; return true; })()`);
-    await merchant.waitForFunction('document.querySelector(\"#main\")?.getAttribute(\"aria-busy\") === \"false\"');
+    await merchant.waitForFunction('document.querySelector("#main")?.getAttribute("aria-busy") === "false"');
     await merchant.waitForFunction(`!!document.querySelector('[data-form="business-create"]')`);
     await merchant.fill('#biz-name', 'Almacén El Pehuén');
     await merchant.fill('#biz-category', 'Almacén');
@@ -263,7 +271,7 @@ async function main() {
     step('El carrito aparece en la barra inferior al tener contenido');
 
     await customer.evaluate(`(() => { location.hash = '#carrito/almacen-el-pehuen'; return true; })()`);
-    await customer.waitForFunction('document.querySelector(\"#main\")?.getAttribute(\"aria-busy\") === \"false\"');
+    await customer.waitForFunction('document.querySelector("#main")?.getAttribute("aria-busy") === "false"');
     await customer.waitForFunction(`!!document.querySelector('[data-form="checkout"]')`);
     await customer.evaluate(`(() => { document.querySelector('[name="fulfillment"][value="delivery"]').click(); return true; })()`);
     await customer.waitForFunction(`!!document.querySelector('#checkout-address')`);
@@ -345,7 +353,7 @@ async function main() {
     const driver = await open('taxista', '#inicio');
     await signUp(driver, { name: 'Luis Conductor', email: 'taxista@cauce.test', phone: '2942555555' });
     await driver.evaluate(`(() => { location.hash = '#taxista'; return true; })()`);
-    await driver.waitForFunction('document.querySelector(\"#main\")?.getAttribute(\"aria-busy\") === \"false\"');
+    await driver.waitForFunction('document.querySelector("#main")?.getAttribute("aria-busy") === "false"');
     await driver.waitForFunction(`!!document.querySelector('#d-vehicle')`);
     await driver.fill('#d-vehicle', 'Renault Logan');
     await driver.fill('#d-plate', 'AB 123 CD');
@@ -419,11 +427,11 @@ async function main() {
     // ───────── pérdida de conexión ─────────
     console.log('\nComportamiento sin conexión');
     await customer.evaluate(`(() => { location.hash = '#comercio/almacen-el-pehuen'; return true; })()`);
-    await customer.waitForFunction('document.querySelector(\"#main\")?.getAttribute(\"aria-busy\") === \"false\"');
+    await customer.waitForFunction('document.querySelector("#main")?.getAttribute("aria-busy") === "false"');
     await customer.waitForFunction(`document.body.innerText.includes('Pan casero')`);
     await customer.click('[data-action="set-quantity"][data-quantity="1"]');
     await customer.evaluate(`(() => { location.hash = '#carrito/almacen-el-pehuen'; return true; })()`);
-    await customer.waitForFunction('document.querySelector(\"#main\")?.getAttribute(\"aria-busy\") === \"false\"');
+    await customer.waitForFunction('document.querySelector("#main")?.getAttribute("aria-busy") === "false"');
     await customer.waitForFunction(`!!document.querySelector('[data-form="checkout"]')`);
     await customer.setOffline(true);
     await customer.evaluate(`(() => { window.dispatchEvent(new Event('offline')); return true; })()`);

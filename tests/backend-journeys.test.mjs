@@ -421,7 +421,7 @@ describe('recorrido 3 · solicitud y aceptación de taxi', () => {
     const mine = expectOk(await passenger.query('myTrips'));
     assert.equal(mine[0].driver.plate, 'TEST 00');
 
-    let current = accepted;
+    let current;
     for (const next of ['driver_on_way', 'driver_arrived', 'passenger_on_board', 'in_trip', 'completed']) {
       current = expectOk(await drivers[0].client.command('trip.advance', { tripId: trip.id, nextStatus: next }), `avanzar a ${next}`);
       assert.equal(current.status, next);

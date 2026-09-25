@@ -36,13 +36,6 @@ async function main() {
     await page.goto(`${base}/index.html${hash}`);
     await page.waitForFunction('document.querySelector("#main")?.getAttribute("aria-busy") === "false"');
   };
-  const clickByLabel = async (selector, label) => {
-    const query = `[...document.querySelectorAll(${JSON.stringify(selector)})]`
-      + `.find(node => node.textContent.trim() === ${JSON.stringify(label)})`;
-    await page.waitForFunction(`!!${query}`);
-    await page.evaluate(`(() => { ${query}.click(); return true; })()`);
-    await page.waitForFunction('document.querySelector("#main")?.getAttribute("aria-busy") === "false"');
-  };
 
   try {
     await visit('#inicio');

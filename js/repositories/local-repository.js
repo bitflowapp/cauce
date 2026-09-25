@@ -14,6 +14,7 @@ export const STORAGE_KEY = 'cauce:demo:database:v2';
 export const SESSION_KEY = 'cauce:demo:session:v2';
 export const GUEST_KEY = 'cauce:demo:guest:v2';
 
+/** @param {Record<string, any>} [options] */
 export function createLocalRepository({
   storage,
   locks = globalThis.navigator?.locks,

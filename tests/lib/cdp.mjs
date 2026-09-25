@@ -2,7 +2,7 @@
 // Usa el WebSocket incorporado de Node 22+ y un Chrome/Edge ya instalado en la máquina.
 // No descarga navegadores ni contacta servicios externos.
 import { spawn } from 'node:child_process';
-import { mkdtemp, rm, mkdir, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
@@ -23,23 +23,41 @@ export function findChrome() {
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
-async function fetchJson(url, attempts = 80) {
+async function fetchJson(url, attempts = 40) {
   for (let i = 0; i < attempts; i += 1) {
     try {
-      const response = await fetch(url);
+      const response = await fetch(url, { signal: AbortSignal.timeout(2000) });
       if (response.ok) return await response.json();
-    } catch { /* el navegador todavía no abrió el puerto de depuración */ }
+    } catch { /* el navegador todavía no atiende el puerto de depuración */ }
     await sleep(250);
   }
   throw new Error(`No respondió el endpoint de depuración: ${url}`);
 }
 
-export async function launchBrowser({ port = 9300 + Math.floor(Math.random() * 400), headless = true } = {}) {
+// Chrome elige un puerto libre (--remote-debugging-port=0) y lo anota en
+// DevToolsActivePort dentro del perfil. Un puerto sorteado por nosotros podía
+// repetirse entre los navegadores de un mismo recorrido: un rol terminaba
+// manejando el Chrome de otro, con otra sesión abierta.
+async function activePort(profile, child, startError, timeout = 60000) {
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    if (startError()) throw new Error(`No arrancó Chrome: ${startError().message}`);
+    if (child.exitCode !== null || child.signalCode !== null) {
+      throw new Error(`Chrome terminó al arrancar (${child.exitCode ?? child.signalCode}).`);
+    }
+    const [port, path = ''] = (await readFile(join(profile, 'DevToolsActivePort'), 'utf8').catch(() => '')).split('\n');
+    if (/^\d+$/.test(port) && path.startsWith('/devtools/browser/')) return Number(port);
+    await sleep(250);
+  }
+  throw new Error('Chrome no abrió el puerto de depuración.');
+}
+
+export async function launchBrowser({ headless = true } = {}) {
   const binary = findChrome();
   if (!binary) throw new Error('No se encontró Chrome ni Edge. Definí CAUCE_CHROME_PATH.');
   const profile = await mkdtemp(join(tmpdir(), 'cauce-cdp-'));
   const args = [
-    `--remote-debugging-port=${port}`,
+    '--remote-debugging-port=0',
     `--user-data-dir=${profile}`,
     '--no-first-run', '--no-default-browser-check', '--disable-extensions',
     '--disable-background-networking', '--disable-sync', '--disable-gpu',
@@ -48,39 +66,61 @@ export async function launchBrowser({ port = 9300 + Math.floor(Math.random() * 4
     'about:blank',
   ];
   if (headless) args.unshift('--headless=new');
+  // Chrome no arranca como root sin desactivar su sandbox (contenedores de CI).
+  if (typeof process.getuid === 'function' && process.getuid() === 0) args.unshift('--no-sandbox');
   const child = spawn(binary, args, { stdio: 'ignore' });
-  const version = await fetchJson(`http://127.0.0.1:${port}/json/version`);
+  const exited = new Promise(resolve => child.once('exit', resolve));
+  let spawnError = null;
+  child.once('error', error => { spawnError = error; });
+  // Un Chrome que queda vivo mantiene a Node esperando: el recorrido termina
+  // pero el proceso no, y el job de CI se cuelga hasta su tope. Se cierra
+  // siempre, también cuando falla el arranque.
+  const stop = async () => {
+    if (child.pid !== undefined && child.exitCode === null && child.signalCode === null) {
+      child.kill();
+      const force = setTimeout(() => child.kill('SIGKILL'), 5000);
+      await exited;
+      clearTimeout(force);
+    }
+    await rm(profile, { recursive: true, force: true }).catch(() => {});
+  };
+  let port;
+  let version;
+  try {
+    port = await activePort(profile, child, () => spawnError);
+    version = await fetchJson(`http://127.0.0.1:${port}/json/version`);
+  } catch (error) {
+    await stop();
+    throw error;
+  }
   return {
     port,
     binary,
     product: version.Browser,
     async newPage(options) { return openPage(port, options); },
-    async close() {
-      await fetch(`http://127.0.0.1:${port}/json/close`).catch(() => {});
-      child.kill();
-      await sleep(400);
-      await rm(profile, { recursive: true, force: true }).catch(() => {});
-    },
+    close: stop,
   };
 }
 
 async function openPage(port, { width = 390, height = 844, mobile = true } = {}) {
-  const target = await fetchJson(`http://127.0.0.1:${port}/json/new?about:blank`).catch(async () => {
-    const response = await fetch(`http://127.0.0.1:${port}/json/new?about:blank`, { method: 'PUT' });
-    if (!response.ok) throw new Error('No se pudo abrir una pestaña nueva.');
-    return response.json();
-  });
+  // Modern Chrome requires PUT here. Retrying GET 80 times only delays every test.
+  const response = await fetch(`http://127.0.0.1:${port}/json/new?about:blank`,
+    { method: 'PUT', signal: AbortSignal.timeout(15000) });
+  if (!response.ok) throw new Error('No se pudo abrir una pestaña nueva.');
+  const target = await response.json();
   const socket = new WebSocket(target.webSocketDebuggerUrl);
   const pending = new Map();
   const listeners = new Set();
   await new Promise((resolve, reject) => {
-    socket.addEventListener('open', resolve, { once: true });
-    socket.addEventListener('error', () => reject(new Error('No se pudo abrir el canal CDP')), { once: true });
+    const timer = setTimeout(() => { socket.close(); reject(new Error('Timeout abriendo el canal CDP')); }, 15000);
+    socket.addEventListener('open', () => { clearTimeout(timer); resolve(); }, { once: true });
+    socket.addEventListener('error', () => { clearTimeout(timer); reject(new Error('No se pudo abrir el canal CDP')); }, { once: true });
   });
   socket.addEventListener('message', event => {
     const message = JSON.parse(event.data);
     if (message.id && pending.has(message.id)) {
-      const { resolve, reject } = pending.get(message.id);
+      const { resolve, reject, timer } = pending.get(message.id);
+      clearTimeout(timer);
       pending.delete(message.id);
       if (message.error) reject(new Error(message.error.message));
       else resolve(message.result);
@@ -91,11 +131,11 @@ async function openPage(port, { width = 390, height = 844, mobile = true } = {})
   let nextId = 0;
   const send = (method, params = {}) => new Promise((resolve, reject) => {
     const id = ++nextId;
-    pending.set(id, { resolve, reject });
-    socket.send(JSON.stringify({ id, method, params }));
-    setTimeout(() => {
+    const timer = setTimeout(() => {
       if (pending.has(id)) { pending.delete(id); reject(new Error(`Timeout CDP en ${method}`)); }
     }, 30000);
+    pending.set(id, { resolve, reject, timer });
+    socket.send(JSON.stringify({ id, method, params }));
   });
 
   const consoleErrors = [];
@@ -231,7 +271,7 @@ async function openPage(port, { width = 390, height = 844, mobile = true } = {})
       });
     },
     async close() {
-      await fetch(`http://127.0.0.1:${port}/json/close/${target.id}`).catch(() => {});
+      await fetch(`http://127.0.0.1:${port}/json/close/${target.id}`, { signal: AbortSignal.timeout(5000) }).catch(() => {});
       socket.close();
     },
   };

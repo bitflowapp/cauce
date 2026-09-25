@@ -35,5 +35,5 @@ html=html.replace(/<link[^>]+rel="(?:stylesheet|icon|modulepreload|preload)"[^>]
   .replace('</head>',`<style>${css}</style></head>`)
   .replace('</body>',`<script>${bundle}</script></body>`);
 await writeFile(resolve(root,'CAUCE-demo.html'),html);
-try { await writeFile(resolve(root,'dist/CAUCE-demo.html'),html); } catch (_) {}
+try { await writeFile(resolve(root,'dist/CAUCE-demo.html'),html); } catch (_) { /* sin dist/ no se copia */ }
 console.log(`OFFLINE BUILD PASS · ${modules.size} módulos empaquetados · CSP con hashes · sin acceso a red`);

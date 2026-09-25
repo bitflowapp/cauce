@@ -73,7 +73,11 @@ test('la información institucional vive en una ruta aparte', async () => {
 
 test('el alta de comercio es un circuito propio con revisión, no un enlace externo', async () => {
   const app = await read('js/app.js');
-  assert.equal(/wa\.me|whatsapp/i.test(app), false,
+  // WhatsApp existe como canal de contacto del comercio con sus clientes; el
+  // alta del comercio, en cambio, nunca se deriva afuera de la plataforma.
+  const signup = app.slice(app.indexOf('async function viewBusinessSignup'), app.indexOf('const PANEL_TABS'));
+  assert.ok(signup.length > 200, 'No se encontró la vista de alta');
+  assert.equal(/wa\.me|whatsapp/i.test(signup), false,
     'El alta no puede derivarse a WhatsApp: tiene que ocurrir dentro de la plataforma');
   for (const command of ['business.create', 'business.update', 'business.submit', 'admin.reviewBusiness']) {
     assert.ok(Object.hasOwn(COMMANDS, command), `Falta el comando ${command}`);

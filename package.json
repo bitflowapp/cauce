@@ -10,8 +10,22 @@
     "start": "node scripts/server.mjs",
     "dev": "node scripts/dev-server.mjs",
     "dev:seed": "node scripts/dev-server.mjs --seed",
+    "build:production": "node scripts/build-production.mjs",
+    "build:local": "node scripts/build-production.mjs --local",
+    "build:supabase": "node scripts/build-production.mjs",
+    "preview": "node scripts/preview-server.mjs",
+    "dev:supabase": "npm run build:local && npm run preview",
+    "lint": "eslint .",
+    "typecheck": "tsc -p jsconfig.json",
     "check": "node scripts/check.mjs",
     "test": "node --test tests/*.test.mjs",
+    "test:db": "node --test tests/db/*.test.mjs",
+    "db:start": "supabase start -x imgproxy,studio,edge-runtime,logflare,vector,supavisor,postgres-meta",
+    "db:reset": "supabase db reset",
+    "db:stop": "supabase stop",
+    "test:integration": "node --test --test-concurrency=1 --test-timeout=180000 tests/integration/*.test.mjs",
+    "smoke:production": "node tests/production-smoke.mjs",
+    "e2e:local": "npm run build:local && node --test --test-concurrency=1 --test-timeout=1200000 tests/e2e/*.test.mjs",
     "build": "node scripts/build.mjs",
     "build:icons": "node scripts/build-icons.mjs",
     "build:offline": "node scripts/offline-bundle.mjs",
@@ -19,7 +33,22 @@
     "e2e:demo": "node tests/e2e-demo.mjs",
     "audit:visual": "node tests/visual-audit.mjs",
     "audit:visual:backend": "node tests/visual-audit.mjs --backend",
-    "verify": "npm run check && npm test && npm run build && npm run build:offline",
-    "verify:full": "npm run verify && npm run e2e && npm run e2e:demo && npm run audit:visual && npm run audit:visual:backend"
+    "verify": "npm run lint && npm run typecheck && npm run check && npm test && npm run test:db && npm run build && npm run build:offline && npm run build:production",
+    "verify:full": "npm run verify && npm run e2e && npm run e2e:demo && npm run audit:visual && npm run audit:visual:backend",
+    "smoke:publicado": "node --test --test-concurrency=1 --test-timeout=900000 tests/produccion/*.test.mjs"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.8",
+    "@eslint/js": "10.0.1",
+    "esbuild": "0.28.2",
+    "eslint": "10.11.0",
+    "globals": "17.12.0",
+    "playwright": "1.56.1",
+    "postgres": "3.4.9",
+    "supabase": "2.117.0",
+    "typescript": "7.0.2"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "2.116.0"
   }
 }
