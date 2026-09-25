@@ -1,8 +1,8 @@
 {
-  "paso": "smoke-previo",
+  "paso": "smoke-publicado",
   "aplicar": true,
   "confirmar": "ygqbcvxdrewcnzedfcyo",
   "email": "",
   "invitar": false,
-  "motivo": "Fase B: el build de producción del panel (feat/cauce-business-panel-v1 con main al día) contra el proyecto real, antes de integrar #4 y publicar. Crea y borra datos CAUCE QA."
+  "motivo": "Fase B: smoke del sitio publicado después de integrar #4 (panel remoto del comercio), con el build desplegado desde main 10276df. Crea y borra datos CAUCE QA."
 }
