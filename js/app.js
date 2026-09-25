@@ -11,12 +11,12 @@ import { isNetworkError } from './core/network.js';
 import { CauceError } from './core/errors.js';
 import { REQUIRED_SCHEMA } from './core/contract.js';
 import { createTelemetry, classify } from './core/telemetry.js';
-import { nextOpening } from './core/business-hours.js';
+import { nextOpening, MAX_RANGES_PER_DAY } from './core/business-hours.js';
 import { ROLE_LABELS } from './core/accounts.js';
 import { askReason as askReasonDialog, askConfirm as askConfirmDialog } from './ui/dialog.js';
 import { announceNewOrders, clearOrderAlert, unlockSound, soundReady, setBaseTitle } from './ui/order-alert.js';
 import {
-  contactButtons, timesLine, hoursSummary, hoursEditor, readHoursForm, teamTab, ROLE_NAMES,
+  contactButtons, timesLine, hoursSummary, hoursEditor, readHoursForm, allDaysClosed, teamTab, ROLE_NAMES, ROLE_HINTS,
 } from './ui/merchant-tools.js';
 import {
   panelSections, resolveSection, canManageBusiness, groupOrders, freshOrderIds, panelSummary, openState,
@@ -1555,7 +1555,7 @@ async function viewMerchantPanel(businessId) {
   } else if (section === 'reparto') {
     content = merchantRidersTab(business, riders);
   } else if (section === 'equipo') {
-    content = teamTab(business, team, { isOwner: role === 'owner' });
+    content = teamTab(business, team, { isOwner: role === 'owner', role });
   }
 
   return `
@@ -1574,7 +1574,8 @@ async function viewMerchantPanel(businessId) {
 
     ${operational ? '' : newOrdersBanner(business.id, pending.length)}
     ${panelNav(business.id, sections, section, { newCount: pending.length })}
-    ${operational || section === 'horarios' ? openBar(business, state, { canManage, online: app.online }) : ''}
+    ${operational || ['horarios', 'configuracion'].includes(section) ? openBar(business, state, { canManage, online: app.online }) : ''}
+    ${role === 'staff' && section === 'inicio' ? `<p class="microcopy panel-role">Tu rol: ${esc(ROLE_NAMES.staff)}. ${esc(ROLE_HINTS.staff)}</p>` : ''}
     ${operational && connected ? syncBar({ liveHealthy: app.liveHealthy, syncedAt: app.panelSyncedAt, soundOn: soundReady() }) : ''}
     ${content}`;
 }
@@ -2563,6 +2564,26 @@ const ACTIONS = {
     app.orderFilter = element.dataset.filter || 'activos';
     return render();
   },
+  // Cargar la semana en el teléfono son 28 campos: se copia el lunes y se
+  // corrige lo distinto. No guarda nada hasta que se toca "Guardar horarios".
+  'hours-copy-monday'(element) {
+    const form = /** @type {HTMLFormElement|null} */ (element.closest('form'));
+    if (!form) return;
+    const field = (/** @type {string} */ name) => /** @type {HTMLInputElement|null} */ (form.querySelector(`[name="${name}"]`));
+    const closed = field('d1-closed')?.checked === true;
+    for (const day of [0, 2, 3, 4, 5, 6]) {
+      const box = field(`d${day}-closed`);
+      if (box) box.checked = closed;
+      for (let index = 0; index < MAX_RANGES_PER_DAY; index += 1) {
+        for (const edge of ['opens', 'closes']) {
+          const target = field(`d${day}-${index}-${edge}`);
+          if (target) target.value = field(`d1-${index}-${edge}`)?.value || '';
+        }
+      }
+    }
+    form.dataset.dirty = 'true';
+    toast('Copiamos el lunes en toda la semana. Corregí los días distintos y guardá.');
+  },
   async 'use-identity'(element) {
     await app.repository.signInAsDemoIdentity(element.dataset.identity);
     app.session = await app.repository.session();
@@ -2873,6 +2894,11 @@ const FORMS = {
   },
 
   async 'business-hours'(form) {
+    const data = new FormData(form);
+    if (allDaysClosed(name => data.get(name))) {
+      toast('Marcaste todos los días como cerrados. Para dejar de tomar pedidos usá “Cerrar atención”.', 'error');
+      return;
+    }
     await runCommand('business.setHours', { businessId: form.dataset.business, hours: readHoursForm(form) });
     toast('Horarios guardados.');
     await render();

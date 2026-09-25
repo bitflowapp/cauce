@@ -6746,8 +6746,9 @@ main {
 [aria-invalid="true"] { border-color: var(--clay) !important; }
 .hours-range label, .hours-range input { min-width: 0; }
 @media (max-width: 440px) {
-  .hours-range { display: grid; grid-template-columns: 1fr; gap: 4px; }
-  .hours-range > span { display: none; }
+  /* Un turno por renglón ("09:00 a 13:00"): la semana entra en el teléfono. */
+  .hours-range { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 6px; }
+  .hours-range input { padding-inline: 8px; }
 }
 
 /* ==========================================================================
@@ -6950,3 +6951,10 @@ main {
 @media (prefers-reduced-motion: reduce) {
   #main[aria-busy="true"]::before { animation: cauce-busy-in 0s linear 0.35s forwards; background: var(--teal-accent); }
 }
+
+/* Horarios: un día cerrado se ve apagado; el resumen muestra lo que ve el cliente. */
+.hours-closed { margin: 0; }
+.hours-day:has(.hours-closed input:checked) .hours-range { opacity: 0.45; }
+.hours-preview { margin: 0 0 8px; }
+.hours-preview .hours-list { margin: 4px 0 0; }
+.panel-role { margin: 0 0 12px; }
