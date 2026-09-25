@@ -1,8 +1,8 @@
 {
   "paso": "migrar",
-  "aplicar": false,
-  "confirmar": "",
+  "aplicar": true,
+  "confirmar": "ygqbcvxdrewcnzedfcyo",
   "email": "",
   "invitar": false,
-  "motivo": "Fase D: dry-run exacto de la migración de métricas del piloto (20260925150000) contra el proyecto real, después del backup con restauración. Sólo muestra qué aplicaría."
+  "motivo": "Fase D: aplicar la migración de métricas del piloto (20260925150000; sólo agrega funciones) en el proyecto real, después del backup con restauración, el dry-run exacto y CI verde. El paso ensaya otra vez sobre una copia de los datos antes de aplicar."
 }
