@@ -4,5 +4,5 @@
   "confirmar": "ygqbcvxdrewcnzedfcyo",
   "email": "",
   "invitar": false,
-  "motivo": "Fase C: el build de producción de feat/cauce-rider-v1 contra el proyecto real ya migrado, antes de integrar y publicar. Incluye el circuito completo de un envío con la persona de reparto QA. Crea y borra datos CAUCE QA."
+  "motivo": "Fase D: el build de producción de feat/cauce-pilot-metrics contra el proyecto real ya migrado, antes de integrar y publicar: circuito completo con reparto y la administración con el día del piloto. Crea y borra datos CAUCE QA."
 }

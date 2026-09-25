@@ -6,7 +6,7 @@ repositorio. Cada pedido queda en el historial de git.
 
 Se pide desde la rama de operación (`claude/cauce-production-hardening-km1t5s`)
 o desde la rama de una entrega por integrar (`feat/cauce-business-panel-v1`,
-`feat/cauce-rider-v1`). En ese caso el paso corre con el código de esa rama:
+`feat/cauce-rider-v1`, `feat/cauce-pilot-metrics`). En ese caso el paso corre con el código de esa rama:
 así el smoke previo y una migración nueva se prueban contra el proyecto real
 antes de integrar y publicar.
 

@@ -7131,3 +7131,17 @@ main {
 .rider-account { display: block; font-size: 12px; color: var(--muted); }
 .rider-row-actions { display: flex; gap: 12px; flex-wrap: wrap; }
 .rider-list .rider-link { flex-basis: 100%; }
+
+/* Administración: el día del piloto y lo que necesita atención. */
+.metric-detail { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
+.admin-business-today { display: block; font-size: 12px; color: var(--muted); }
+.admin-incident-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+.admin-incident-list .button { min-height: 40px; }
