@@ -13,7 +13,7 @@
 // lo quema y no canjea nada. Ningún token pasa por el navegador, por la URL
 // final ni por un registro.
 import { createClient } from 'jsr:@supabase/supabase-js@2';
-import { paymentsConfig, json } from '../_shared/payments/config.js';
+import { paymentsConfig, json, preflight } from '../_shared/payments/config.js';
 import { randomToken, pkcePair, authorizationUrl, tokenRequest, parseTokenResponse, accountRequest, isTestAccount }
   from '../_shared/payments/oauth.js';
 import { sealToken } from '../_shared/payments/vault.js';
@@ -35,6 +35,7 @@ function sameText(a, b) {
 }
 
 Deno.serve(async request => {
+  if (request.method === 'OPTIONS') return preflight();
   const config = paymentsConfig(env);
   if (config.missing().length) return json(503, { error: 'not_configured' });
   const service = createClient(env('SUPABASE_URL'), env('SUPABASE_SERVICE_ROLE_KEY'),

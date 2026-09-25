@@ -11,7 +11,7 @@
 // compra. Si el proveedor tarda, limita (429) o falla, no se guarda nada y el
 // reintento usa la misma clave: nunca una segunda orden.
 import { createClient } from 'jsr:@supabase/supabase-js@2';
-import { paymentsConfig, json } from '../_shared/payments/config.js';
+import { paymentsConfig, json, preflight } from '../_shared/payments/config.js';
 import { freshAccessToken, ReconnectRequired } from '../_shared/payments/tokens.js';
 import { buildCheckoutProOrderRequest, buildOrderRequest, readOrder, isTestOrderId, PROVIDER, SANDBOX_PAYER_EMAIL }
   from '../_shared/payments/mercadopago.js';
@@ -82,6 +82,7 @@ async function replayOrder(body, { config, service }) {
 }
 
 Deno.serve(async request => {
+  if (request.method === 'OPTIONS') return preflight();
   if (request.method !== 'POST') return json(405, { error: 'method_not_allowed' });
   const config = paymentsConfig(env);
   if (config.missing().length) return json(503, { error: 'not_configured' });

@@ -132,6 +132,22 @@ test('con todo apagado (sin interruptor ni piloto) las tres funciones responden 
     (${A.id}, true, 'CAUCE QA · Mercado Pago'), (${B.id}, true, 'CAUCE QA · Mercado Pago')`;
 });
 
+test('el navegador puede llamarlas: preflight y cabecera CORS (el sitio usa functions.invoke)', async () => {
+  for (const fn of ['payments-checkout', 'payments-oauth']) {
+    const pre = await fetch(URLS[fn], { method: 'OPTIONS', headers: { Origin: 'https://bitflowapp.github.io',
+      'Access-Control-Request-Method': 'POST', 'Access-Control-Request-Headers': 'authorization, x-client-info, apikey, content-type' } });
+    await pre.body?.cancel();
+    assert.ok(pre.status === 200 || pre.status === 204, `${fn}: preflight ${pre.status}`);
+    assert.equal(pre.headers.get('access-control-allow-origin'), '*', fn);
+    assert.match(pre.headers.get('access-control-allow-headers') || '', /authorization.*apikey|apikey.*authorization/, fn);
+    assert.match(pre.headers.get('access-control-allow-methods') || '', /POST/, fn);
+  }
+  // Las respuestas, también las de error, llevan la cabecera: el sitio puede leer el motivo.
+  const response = await call('payments-oauth', { token: await tokenOf(people.ownerA), body: { business: 'no-es-un-id' } });
+  await response.body?.cancel();
+  assert.equal(response.headers.get('access-control-allow-origin'), '*');
+});
+
 test('OAuth: PKCE S256, state impredecible y URL de retorno fija; el token no pasa por la URL ni se guarda en claro', async () => {
   const flow = await beginOAuth(people.ownerA, A.id);
   assert.equal(flow.url.origin + flow.url.pathname, 'https://auth.mercadopago.com/authorization');

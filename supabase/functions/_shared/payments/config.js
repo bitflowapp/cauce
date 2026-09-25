@@ -55,6 +55,19 @@ export function paymentsConfig(getEnv) {
   });
 }
 
+// El sitio llama a checkout y a OAuth desde el navegador (functions.invoke):
+// sin el preflight y la cabecera en cada respuesta, el navegador corta el
+// pedido. Sin cookies: la autorización es el JWT de la sesión en
+// Authorization, así que el origen no otorga ningún permiso (igual que la API
+// REST del proyecto).
+export const CORS = Object.freeze({
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-region',
+  'Access-Control-Max-Age': '600',
+});
+export const preflight = () => new Response(null, { status: 204, headers: CORS });
+
 export const json = (status, body, headers = {}) => new Response(JSON.stringify(body), {
-  status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...headers },
+  status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...CORS, ...headers },
 });
