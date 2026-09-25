@@ -4,5 +4,5 @@
   "confirmar": "",
   "email": "",
   "invitar": false,
-  "motivo": "B5 antes de migrar: backups de Supabase, dump sin sesiones ni tokens, copia cifrada y restauración de prueba en la versión del origen (8 migraciones). Sólo lectura sobre el proyecto."
+  "motivo": "B5 antes de migrar (segundo intento): el run 36077799356 pasó todo salvo la comparación de esquema, cuyas 15 diferencias son privilegios por defecto que fija Supabase. Sólo lectura sobre el proyecto."
 }
