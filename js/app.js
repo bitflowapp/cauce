@@ -22,7 +22,7 @@ import {
 } from './ui/merchant-tools.js';
 import {
   panelSections, resolveSection, canManageBusiness, groupOrders, freshOrderIds, panelSummary, openState,
-  isUnavailableProduct, deliveryBoardData, ORDER_FILTERS,
+  isUnavailableProduct, deliveryBoardData, topProducts, recentSales, ORDER_FILTERS,
 } from './core/business-panel.js';
 import {
   panelNav, openBar, syncBar, newOrdersBanner, ordersBoard, dashboard, deliveryBoard,
@@ -1550,7 +1550,8 @@ async function viewMerchantPanel(businessId) {
   let content = '';
   if (section === 'inicio') {
     content = dashboard(business, panelSummary(orders, products), {
-      newOrders: groupOrders(orders).nuevos, unavailable: products.filter(isUnavailableProduct), context, canManage });
+      newOrders: groupOrders(orders).nuevos, unavailable: products.filter(isUnavailableProduct),
+      top: topProducts(orders), sales: recentSales(orders), context, canManage });
   } else if (section === 'pedidos') {
     content = ordersBoard(orders, context, { filter: app.orderFilter, businessActive: business.status === 'active' });
   } else if (section === 'catalogo') {
@@ -2567,6 +2568,11 @@ const ACTIONS = {
   'set-panel-tab'(element) {
     const businessId = element.dataset.business || route().param;
     go(`#panel/${businessId}/${element.dataset.tab}`);
+  },
+  // Desde el inicio: ir a Pedidos con un filtro ya elegido (por ejemplo, Completados).
+  'show-orders'(element) {
+    app.orderFilter = ORDER_FILTERS.includes(element.dataset.filter || '') ? element.dataset.filter : 'activos';
+    go(`#panel/${element.dataset.business}/pedidos`);
   },
   'order-filter'(element) {
     app.orderFilter = element.dataset.filter || 'activos';

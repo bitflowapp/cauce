@@ -7,7 +7,7 @@ import { readFile, readdir } from 'node:fs/promises';
 import {
   panelSections, resolveSection, groupOrders, orderGroupOf, merchantOrderActions, orderActionLabel,
   deliveryStage, freshOrderIds, localDayKey, panelSummary, openState, closingTime, isUnavailableProduct,
-  deliveryBoardData, ORDER_GROUPS, canManageBusiness,
+  deliveryBoardData, topProducts, recentSales, ORDER_GROUPS, canManageBusiness,
 } from '../js/core/business-panel.js';
 
 const BUSINESS = 'b1';
@@ -185,11 +185,42 @@ test('el resumen del día cuenta lo accionable y suma lo cobrado hoy', () => {
     { id: 'p4', available: false, archived: true },
   ];
   assert.deepEqual(panelSummary(orders, products, { now }), {
-    newOrders: 1, activeOrders: 2, completedToday: 2, salesToday: 9500, canceledToday: 1,
-    pickupToday: 2, deliveryToday: 3, unavailableProducts: 2, liveProducts: 3,
+    newOrders: 1, activeOrders: 2, inProgressAmount: 2000, completedToday: 2, salesToday: 9500, averageTicket: 4750,
+    canceledToday: 1, pickupToday: 2, deliveryToday: 3, unavailableProducts: 2, liveProducts: 3,
   });
+  assert.equal(panelSummary([], products, { now }).averageTicket, 0, 'sin ventas no hay ticket promedio');
   assert.equal(isUnavailableProduct(products[0]), false, 'sin control de stock, stock 0 no es agotado');
   assert.equal(isUnavailableProduct(products[3]), false, 'lo dado de baja no cuenta como agotado');
+});
+
+test('más vendidos hoy: unidades de los pedidos de hoy, sin cancelados, producto y variante aparte', () => {
+  const now = new Date('2026-09-24T20:00:00Z');
+  const line = (productId, name, quantity, total, variantId = null) => ({ productId, variantId, name, quantity, total });
+  const orders = [
+    order('delivered', { createdAt: '2026-09-24T15:00:00Z', lines: [line('p1', 'Empanada', 6, 7200), line('p2', 'Pizza · Grande', 1, 9500, 'v2')] }),
+    order('preparing', { createdAt: '2026-09-24T19:00:00Z', lines: [line('p1', 'Empanada', 3, 3600), line('p2', 'Pizza · Chica', 2, 12000, 'v1')] }),
+    order('canceled', { createdAt: '2026-09-24T19:30:00Z', lines: [line('p3', 'Torta', 50, 50000)] }),
+    order('delivered', { createdAt: '2026-09-23T15:00:00Z', lines: [line('p3', 'Torta', 40, 40000)] }),
+  ];
+  assert.deepEqual(topProducts(orders, { now }), [
+    { name: 'Empanada', units: 9, amount: 10800 },
+    { name: 'Pizza · Chica', units: 2, amount: 12000 },
+    { name: 'Pizza · Grande', units: 1, amount: 9500 },
+  ]);
+  assert.equal(topProducts(orders, { now, limit: 1 }).length, 1);
+  assert.deepEqual(topProducts([], { now }), []);
+});
+
+test('últimas ventas: lo entregado, lo más reciente primero', () => {
+  const orders = [
+    order('delivered', { id: 'vieja', history: [{ status: 'delivered', at: '2026-09-24T12:00:00Z' }] }),
+    order('delivered', { id: 'nueva', history: [{ status: 'delivered', at: '2026-09-24T18:00:00Z' }] }),
+    order('on_the_way', { id: 'en-camino' }),
+    order('canceled', { id: 'cancelada' }),
+  ];
+  assert.deepEqual(recentSales(orders).map(item => [item.order.id, item.soldAt]),
+    [['nueva', '2026-09-24T18:00:00Z'], ['vieja', '2026-09-24T12:00:00Z']]);
+  assert.equal(recentSales(orders, { limit: 1 }).length, 1);
 });
 
 test('ABIERTO o CERRADO, y por qué', () => {

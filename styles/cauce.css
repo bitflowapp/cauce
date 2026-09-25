@@ -6976,3 +6976,50 @@ main {
 .rider-load a { display: inline-flex; align-items: center; gap: 4px; min-height: 42px; font-weight: 600; }
 .delivery-board { margin-top: 4px; }
 .delivery-board + .panel-section { margin-top: 28px; }
+
+/* ==========================================================================
+   Panel como control remoto en el teléfono
+   Lo vendido hoy, grande; lo demás en números chicos y acciones a mano.
+   ========================================================================== */
+.panel-sales {
+  display: grid;
+  gap: 2px;
+  margin: 8px 0;
+  padding: 14px 16px;
+  background: var(--forest-deep);
+  color: var(--white);
+  border-radius: var(--radius);
+}
+.panel-sales .metric-label { color: rgba(255, 255, 255, 0.82); font-size: 12px; font-weight: 700; }
+.panel-sales-value { font-size: 34px; line-height: 1.1; font-weight: 800; font-variant-numeric: tabular-nums; }
+.panel-sales .metric-hint { color: rgba(255, 255, 255, 0.86); font-size: 12px; }
+
+.top-products, .recent-sales { display: grid; gap: 6px; margin: 0 0 10px; }
+.top-products li, .recent-sales li {
+  display: grid;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+.top-products li { grid-template-columns: 24px minmax(0, 1fr) auto auto; }
+.top-rank {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--forest-tint);
+  color: var(--forest-deep);
+  font-size: 12px;
+  font-weight: 800;
+}
+.top-name { font-weight: 700; overflow-wrap: anywhere; }
+.top-units { font-weight: 800; font-variant-numeric: tabular-nums; }
+.top-amount { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.recent-sales li { grid-template-columns: minmax(0, 1fr) auto auto; }
+.recent-sale-id { display: grid; }
+.recent-sale-id .quiet { font-size: 12px; }
+.recent-sale-total { font-variant-numeric: tabular-nums; }

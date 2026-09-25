@@ -72,16 +72,30 @@ test('el tablero muestra primero lo nuevo y los contadores de cada estado', () =
   assert.ok(closed.includes('grupo-completados') && !closed.includes('grupo-preparando'));
 });
 
-test('el inicio: números accionables y los productos sin disponibilidad', () => {
-  const summary = { newOrders: 2, activeOrders: 3, completedToday: 4, salesToday: 15000, canceledToday: 0,
-    pickupToday: 5, deliveryToday: 1, unavailableProducts: 1, liveProducts: 12 };
+test('el inicio: lo vendido hoy, números accionables, más vendidos, últimas ventas y sin disponibilidad', () => {
+  const summary = { newOrders: 2, activeOrders: 3, inProgressAmount: 8200, completedToday: 4, salesToday: 15000,
+    averageTicket: 3750, canceledToday: 0, pickupToday: 5, deliveryToday: 1, unavailableProducts: 1, liveProducts: 12 };
   const html = dashboard({ id: 'b1', status: 'active' }, summary, { newOrders: [], context,
-    unavailable: [{ id: 'p1', name: 'Torta', available: false }] });
-  for (const text of ['Pedidos nuevos', 'En curso', 'Completados hoy', 'Vendido hoy', '15.000', 'Retiro · Envío', '5 · 1', 'No disponibles', 'de 12 productos']) {
+    unavailable: [{ id: 'p1', name: 'Torta', available: false }],
+    top: [{ name: 'Empanada <b>', units: 9, amount: 10800 }],
+    sales: [{ order: order({ status: 'delivered', code: 'CA-0099', total: 3600, fulfillment: 'pickup' }), soldAt: '2026-09-24T15:05:00Z' }] });
+  for (const text of ['Vendido hoy', '15.000', '+ $\u00a08.200 en curso', 'Pedidos nuevos', 'Pedidos activos', 'Completados hoy',
+    'Ticket promedio', '3.750', 'Retiro · Envío', '5 · 1', 'Sin disponibilidad', 'de 12 productos',
+    'Más vendidos hoy', '9 u.', '10.800', 'Últimas ventas', 'CA-0099', 'hace 5 min']) {
     assert.ok(html.includes(text), `falta "${text}"`);
   }
+  assert.ok(html.includes('Empanada &lt;b&gt;'), 'el nombre del producto se escapa');
   assert.match(html, /class="metric is-alert" href="#panel\/b1\/pedidos"/);
   assert.match(html, /data-product="p1" data-field="available" data-value="true">Marcar disponible</);
+  assert.match(html, /data-action="show-orders"[^>]*data-filter="completados"/);
+  // Sin pedidos esperando, primero los números; con pedidos, primero atenderlos.
+  assert.ok(html.indexOf('Vendido hoy') < html.indexOf('Esperan respuesta'));
+  const busy = dashboard({ id: 'b1', status: 'active' }, summary, { newOrders: [order({ status: 'submitted' })], context });
+  assert.ok(busy.indexOf('Esperan respuesta') < busy.indexOf('Vendido hoy'));
+  // Sin ventas: guion en el ticket y textos de vacío.
+  const empty = dashboard({ id: 'b1', status: 'active' }, { ...summary, completedToday: 0, averageTicket: 0 }, { context });
+  assert.match(empty, /Ticket promedio<\/span><strong class="metric-value">—/);
+  assert.ok(empty.includes('Todavía no hay ventas hoy.') && empty.includes('Todavía no hay ventas entregadas.'));
 });
 
 test('navegación por secciones y aviso de pedidos nuevos', () => {

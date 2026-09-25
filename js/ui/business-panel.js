@@ -226,30 +226,45 @@ const metric = (label, value, { href = '', tone = '', hint = '' } = {}) => {
   return href ? `<a class="metric ${tone}" href="${href}">${inner}</a>` : `<div class="metric ${tone}">${inner}</div>`;
 };
 
-export function dashboard(business, summary, { newOrders = [], unavailable = [], context, canManage = false }) {
+/**
+ * Inicio: lo que hay que atender primero y los números de hoy; sólo números y acciones.
+ * @param {any} business
+ * @param {Record<string, number>} summary  Lo que arma panelSummary.
+ * @param {{ newOrders?: any[], unavailable?: any[], top?: { name: string, units: number, amount: number }[],
+ *   sales?: { order: any, soldAt: string }[], context: any, canManage?: boolean }} options
+ */
+export function dashboard(business, summary, { newOrders = [], unavailable = [], top = [], sales = [], context, canManage = false }) {
   const id = business.id;
-  return `
-    <section class="panel-section" aria-labelledby="panel-hoy">
+  const now = context?.now ?? Date.now();
+  const today = `
+    <section class="panel-section panel-today" aria-labelledby="panel-hoy">
       <h2 class="checkout-section-title" id="panel-hoy">Hoy</h2>
+      <div class="panel-sales">
+        <span class="metric-label">Vendido hoy</span>
+        <strong class="panel-sales-value">${esc(money(summary.salesToday))}</strong>
+        <span class="metric-hint">Lo entregado hoy${summary.inProgressAmount ? ` · + ${esc(money(summary.inProgressAmount))} en curso` : ''}</span>
+      </div>
       <div class="metrics-grid panel-metrics">
         ${metric('Pedidos nuevos', String(summary.newOrders), { href: panelHref(id, 'pedidos'), tone: summary.newOrders ? 'is-alert' : '' })}
-        ${metric('En curso', String(summary.activeOrders), { href: panelHref(id, 'pedidos') })}
+        ${metric('Pedidos activos', String(summary.activeOrders), { href: panelHref(id, 'pedidos') })}
         ${metric('Completados hoy', String(summary.completedToday))}
-        ${metric('Vendido hoy', esc(money(summary.salesToday)), { hint: 'Suma de lo entregado hoy' })}
+        ${metric('Ticket promedio', summary.completedToday ? esc(money(summary.averageTicket)) : '—', { hint: 'Por pedido entregado hoy' })}
         ${metric('Retiro · Envío', `${summary.pickupToday} · ${summary.deliveryToday}`, { hint: 'Pedidos de hoy' })}
-        ${metric('No disponibles', String(summary.unavailableProducts), { href: panelHref(id, 'catalogo'),
+        ${metric('Sin disponibilidad', String(summary.unavailableProducts), { href: panelHref(id, 'catalogo'),
           tone: summary.unavailableProducts ? 'is-warn' : '', hint: `de ${summary.liveProducts} productos` })}
       </div>
-    </section>
+    </section>`;
+  const waiting = `
     <section class="panel-section" aria-labelledby="panel-atender">
       <h2 class="checkout-section-title" id="panel-atender">Esperan respuesta (${newOrders.length})</h2>
       ${newOrders.length ? `<div class="orders-group-list">${newOrders.map(order => orderCard(order, context)).join('')}</div>`
         : `<p class="quiet">${business.status === 'active' ? 'Todavía no tenés pedidos nuevos. Cuando entre uno aparece acá, en Pedidos, y suena un aviso.'
           : 'El comercio todavía no está publicado: completá la configuración y pedí la publicación.'}</p>`}
       <a class="button secondary full" href="${panelHref(id, 'pedidos')}">Ver todos los pedidos</a>
-    </section>
-    ${unavailable.length ? `<section class="panel-section" aria-labelledby="panel-agotados">
-      <h2 class="checkout-section-title" id="panel-agotados">No disponibles (${unavailable.length})</h2>
+    </section>`;
+  const missing = unavailable.length ? `
+    <section class="panel-section" aria-labelledby="panel-agotados">
+      <h2 class="checkout-section-title" id="panel-agotados">Sin disponibilidad (${unavailable.length})</h2>
       <ul class="plain-list unavailable-list">${unavailable.slice(0, 8).map(product => `<li>
         <span>${esc(product.name)}${product.trackStock && Number(product.stock) <= 0 ? ' <span class="quiet">· sin stock</span>' : ''}</span>
         ${product.available === false ? `<button class="link-button" type="button" data-action="product-toggle" data-business="${esc(id)}"
@@ -257,9 +272,36 @@ export function dashboard(business, summary, { newOrders = [], unavailable = [],
           : `<a class="link-button" href="${panelHref(id, 'catalogo')}">Cargar stock</a>`}
       </li>`).join('')}</ul>
       ${unavailable.length > 8 ? `<a class="link-button" href="${panelHref(id, 'catalogo')}">Ver los ${unavailable.length} en el catálogo</a>` : ''}
-    </section>` : ''}
-    ${canManage && business.status !== 'active' ? `<section class="panel-section">
+    </section>` : '';
+  const best = `
+    <section class="panel-section" aria-labelledby="panel-top">
+      <h2 class="checkout-section-title" id="panel-top">Más vendidos hoy</h2>
+      ${top.length ? `<ol class="plain-list top-products">${top.map((item, index) => `<li>
+          <span class="top-rank" aria-hidden="true">${index + 1}</span>
+          <span class="top-name">${esc(item.name)}</span>
+          <span class="top-units">${item.units} u.</span>
+          <span class="top-amount">${esc(money(item.amount))}</span>
+        </li>`).join('')}</ol>
+        <p class="microcopy">Unidades en los pedidos de hoy, sin contar los cancelados.</p>`
+        : '<p class="quiet">Todavía no hay ventas hoy.</p>'}
+    </section>`;
+  const latest = `
+    <section class="panel-section" aria-labelledby="panel-ventas">
+      <h2 class="checkout-section-title" id="panel-ventas">Últimas ventas</h2>
+      ${sales.length ? `<ul class="plain-list recent-sales">${sales.map(({ order, soldAt }) => `<li>
+          <span class="recent-sale-id"><strong>${esc(order.code)}</strong>
+            <span class="quiet">${esc(timeOnly(soldAt))} · ${esc(agoText(soldAt, now))}</span></span>
+          <span class="mode-chip ${order.fulfillment === 'delivery' ? 'is-delivery' : 'is-pickup'}">${order.fulfillment === 'delivery' ? 'Envío' : 'Retiro'}</span>
+          <strong class="recent-sale-total">${esc(money(order.total))}</strong>
+        </li>`).join('')}</ul>
+        <button class="button secondary full" type="button" data-action="show-orders" data-business="${esc(id)}"
+          data-filter="completados">Ver completados</button>`
+        : '<p class="quiet">Todavía no hay ventas entregadas.</p>'}
+    </section>`;
+  const publish = canManage && business.status !== 'active' ? `<section class="panel-section">
       <div class="notice"><strong>Para empezar a recibir pedidos:</strong> completá los datos, los horarios y el catálogo, y pedí la publicación desde Configuración.</div>
       <a class="button full" href="${panelHref(id, 'configuracion')}">Ir a Configuración</a>
-    </section>` : ''}`;
+    </section>` : '';
+  // Con pedidos esperando, primero se atiende; sin pedidos, primero los números.
+  return `${newOrders.length ? waiting + today : today + waiting}${missing}${best}${latest}${publish}`;
 }

@@ -187,23 +187,58 @@ export const isUnavailableProduct = product => !product?.archived
   && (product?.available === false || (product?.trackStock === true && Number(product?.stock) <= 0));
 
 // Lo que el titular necesita saber de un vistazo. "Vendido hoy" suma lo
-// entregado hoy (hora de la localidad): es lo que efectivamente se cobró.
+// entregado hoy (hora de la localidad): es lo que efectivamente se cobró. Lo
+// aceptado que todavía no se entregó se muestra aparte, como "en curso".
 export function panelSummary(orders = [], products = [], { now = new Date(), timeZone = DEFAULT_TIMEZONE } = {}) {
   const today = localDayKey(now, timeZone);
   const isToday = value => localDayKey(value, timeZone) === today;
   const completedToday = orders.filter(order => order.status === 'delivered' && isToday(closedAt(order, 'delivered')));
   const createdToday = orders.filter(order => order.status !== 'canceled' && isToday(order.createdAt));
+  const active = orders.filter(order => isOpenOrder(order) && order.status !== 'submitted');
+  const salesToday = completedToday.reduce((sum, order) => sum + (Number(order.total) || 0), 0);
   return {
     newOrders: orders.filter(order => order.status === 'submitted').length,
-    activeOrders: orders.filter(order => isOpenOrder(order) && order.status !== 'submitted').length,
+    activeOrders: active.length,
+    inProgressAmount: active.reduce((sum, order) => sum + (Number(order.total) || 0), 0),
     completedToday: completedToday.length,
-    salesToday: completedToday.reduce((sum, order) => sum + (Number(order.total) || 0), 0),
+    salesToday,
+    averageTicket: completedToday.length ? Math.round(salesToday / completedToday.length) : 0,
     canceledToday: orders.filter(order => order.status === 'canceled' && isToday(closedAt(order, 'canceled'))).length,
     pickupToday: createdToday.filter(order => order.fulfillment === 'pickup').length,
     deliveryToday: createdToday.filter(order => order.fulfillment === 'delivery').length,
     unavailableProducts: products.filter(isUnavailableProduct).length,
     liveProducts: products.filter(product => !product?.archived).length,
   };
+}
+
+// Más vendidos hoy: unidades en los pedidos de hoy que no se cancelaron
+// (incluye lo que está en curso). Producto y variante cuentan por separado.
+/** @param {any[]} orders @param {{ now?: Date, timeZone?: string, limit?: number }} [options] */
+export function topProducts(orders = [], { now = new Date(), timeZone = DEFAULT_TIMEZONE, limit = 5 } = {}) {
+  const today = localDayKey(now, timeZone);
+  const totals = new Map();
+  for (const order of orders) {
+    if (order?.status === 'canceled' || localDayKey(order?.createdAt, timeZone) !== today) continue;
+    for (const line of order.lines || []) {
+      const key = `${line.productId || line.name}|${line.variantId || ''}`;
+      const entry = totals.get(key) || { name: line.name, units: 0, amount: 0 };
+      entry.units += Number(line.quantity) || 0;
+      entry.amount += Number(line.total) || 0;
+      totals.set(key, entry);
+    }
+  }
+  return [...totals.values()].filter(entry => entry.units > 0)
+    .sort((a, b) => b.units - a.units || b.amount - a.amount || a.name.localeCompare(b.name))
+    .slice(0, limit);
+}
+
+// Últimas ventas: lo entregado, de lo más reciente a lo más viejo.
+/** @param {any[]} orders @param {{ limit?: number }} [options] */
+export function recentSales(orders = [], { limit = 5 } = {}) {
+  return orders.filter(order => order?.status === 'delivered')
+    .map(order => ({ order, soldAt: closedAt(order, 'delivered') }))
+    .sort((a, b) => String(b.soldAt || '').localeCompare(String(a.soldAt || '')))
+    .slice(0, limit);
 }
 
 // ── abierto o cerrado, y por qué ──

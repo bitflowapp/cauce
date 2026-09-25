@@ -61,7 +61,7 @@ for (const engine of browsersToRun) {
       const owner = await person(browser, { width: 390, height: 844, label: 'titular' });
       const m = owner.page;
       await landOnPanel(m, people.ownerA);
-      assert.ok(await m.getByRole('heading', { name: 'Hoy' }).isVisible(), 'el titular llega al inicio del panel');
+      assert.ok(await m.getByRole('heading', { name: 'Hoy', exact: true }).isVisible(), 'el titular llega al inicio del panel');
       assert.ok(await m.locator('.panel-openbar .open-flag').isVisible(), 'ABIERTO o CERRADO a la vista');
 
       // Entra un pedido mientras mira el inicio: aparece sin recargar.
@@ -88,12 +88,20 @@ for (const engine of browsersToRun) {
       await m.locator('[data-action="order-filter"][data-filter="completados"]').click();
       await ready(m);
       assert.ok(await card(m, code).isVisible(), 'queda en Completados');
+
+      // El inicio como control remoto: lo vendido, el ticket, lo más vendido y las últimas ventas.
       await m.getByRole('tab', { name: 'Inicio' }).click();
       await ready(m);
       const completed = Number(await m.locator('.metric', { hasText: 'Completados hoy' }).locator('.metric-value').textContent());
       assert.ok(completed >= 1);
-      assert.match(await m.locator('.metric', { hasText: 'Vendido hoy' }).textContent(), /\$\s?\d/);
+      assert.match(await m.locator('.panel-sales-value').textContent(), /\$\s?\d/);
+      assert.match(await m.locator('.metric', { hasText: 'Ticket promedio' }).textContent(), /\$\s?\d/);
+      assert.ok(await m.locator('.recent-sales').getByText(code).isVisible(), 'la venta aparece en Últimas ventas');
+      assert.ok(await m.locator('.top-products').getByText('Empanada de carne').isVisible(), 'y el producto en Más vendidos hoy');
       await shot(m, `${engine}-panel-inicio-despues`);
+      await m.getByRole('button', { name: 'Ver completados' }).click();
+      await ready(m);
+      assert.ok(await card(m, code).isVisible(), '"Ver completados" lleva a Pedidos con ese filtro');
       assert.deepEqual(owner.problems, []);
     } finally { await browser.close(); }
   });
@@ -260,7 +268,7 @@ for (const engine of browsersToRun) {
       // Una sección de administración por URL cae en Inicio.
       for (const section of ['configuracion', 'horarios', 'equipo']) {
         await go(m, `#panel/${A.id}/${section}`);
-        assert.ok(await m.getByRole('heading', { name: 'Hoy' }).isVisible(), `${section} no se abre para el equipo`);
+        assert.ok(await m.getByRole('heading', { name: 'Hoy', exact: true }).isVisible(), `${section} no se abre para el equipo`);
         assert.equal(await m.locator('form[data-form="business-update"], form[data-form="business-hours"], form[data-form="team-add"]').count(), 0);
       }
 
