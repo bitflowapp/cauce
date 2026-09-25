@@ -150,6 +150,49 @@ for (const engine of browsersToRun) {
     } finally { await setAvailable(true); await setOpen(true); await browser.close(); }
   });
 
+  test(`${engine}: la vista no se da por lista con una navegación o una acción pendientes`, async () => {
+    const browser = await launch(engine);
+    try {
+      const merchant = await person(browser, { width: 1200, height: 900, label: 'comercio', serviceWorkers: 'block' });
+      const m = merchant.page;
+      // Al ingresar, quien tiene un solo comercio va a su panel; pero si
+      // mientras carga la lista ya eligió otra vista, no se la lleva de vuelta.
+      await open(m, '#cuenta');
+      let slow = false;
+      await m.route('**/rest/v1/businesses*', async route => {
+        if (slow && route.request().method() === 'GET') await new Promise(resolve => setTimeout(resolve, 1200));
+        await route.continue();
+      });
+      await m.fill('#signin-email', people.owner.email);
+      await m.fill('#signin-password', people.owner.password);
+      slow = true;
+      await m.click('form[data-form="sign-in"] button[type="submit"]');
+      await m.waitForFunction(() => location.hash === '#panel', null, { timeout: 20000 });
+      await m.evaluate(() => { location.hash = '#comercios'; });
+      await ready(m);
+      slow = false;
+      await m.waitForTimeout(1500);
+      assert.equal(await m.evaluate(() => location.hash), '#comercios', 'la redirección no pisa la vista elegida');
+
+      // Una acción que espera al servidor: la vista recién está lista cuando
+      // terminó y se dibujó el resultado (el paso siguiente no se adelanta).
+      await go(m, `#panel/${E.id}`);
+      await m.getByRole('tab', { name: 'Reparto' }).click();
+      await ready(m);
+      await m.route('**/rest/v1/business_riders*', async route => {
+        if (route.request().method() === 'POST') await new Promise(resolve => setTimeout(resolve, 1200));
+        await route.continue();
+      });
+      await m.fill('#rider-name', `Reparto lento ${engine}`);
+      const started = Date.now();
+      await m.locator('form[data-form="rider-create"] button[type="submit"]').click();
+      await ready(m);
+      assert.ok(Date.now() - started >= 1000, 'ready esperó la respuesta del servidor');
+      assert.ok(await m.getByText(`Reparto lento ${engine}`).isVisible(), 'el resultado ya está dibujado');
+      assert.deepEqual(merchant.problems, []);
+    } finally { await browser.close(); }
+  });
+
   test(`${engine}: cancelar pide confirmación (y "volver" no cancela); rechazar exige motivo`, async () => {
     const browser = await launch(engine);
     try {

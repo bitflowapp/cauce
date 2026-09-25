@@ -13,7 +13,7 @@ import { REQUIRED_SCHEMA } from './core/contract.js';
 import { createTelemetry, classify } from './core/telemetry.js';
 import { nextOpening } from './core/business-hours.js';
 import { ROLE_LABELS } from './core/accounts.js';
-import { askReason, askConfirm } from './ui/dialog.js';
+import { askReason as askReasonDialog, askConfirm as askConfirmDialog } from './ui/dialog.js';
 import { announceNewOrders, clearOrderAlert, unlockSound, soundReady, setBaseTitle } from './ui/order-alert.js';
 import {
   contactButtons, timesLine, hoursSummary, hoursEditor, readHoursForm, teamTab, ROLE_NAMES,
@@ -36,6 +36,26 @@ import { confirmedPrice, isCommerciallyPurchasable, knownStock } from './core/co
 import { formatArgentinePhone } from './core/validators.js';
 
 const main = /** @type {HTMLElement} */ (document.querySelector('#main'));
+
+// `aria-busy="false"` en #main dice que la vista está estable (lo usan las
+// tecnologías de asistencia y las pruebas): ningún dibujo en curso, ninguna
+// navegación pedida y ninguna acción esperando al servidor. Mientras un
+// diálogo espera a la persona, la acción que lo abrió no cuenta.
+const busy = { actions: 0, asking: 0, navigating: false, redirecting: false, rendering: false };
+function settle() {
+  const working = busy.actions - busy.asking > 0 || busy.navigating || busy.redirecting || busy.rendering;
+  main.setAttribute('aria-busy', working ? 'true' : 'false');
+}
+/** @template T @param {Promise<T>} question @returns {Promise<T>} */
+async function whileAsking(question) {
+  busy.asking += 1;
+  settle();
+  try { return await question; } finally { busy.asking -= 1; settle(); }
+}
+/** @param {Parameters<typeof askReasonDialog>[0]} options */
+const askReason = options => whileAsking(askReasonDialog(options));
+/** @param {Parameters<typeof askConfirmDialog>[0]} options */
+const askConfirm = options => whileAsking(askConfirmDialog(options));
 
 const app = {
   repository: null,
@@ -245,7 +265,12 @@ function route() {
   return { page, param: parts[1] || null, extra: parts[2] || null };
 }
 
-const go = hash => { location.hash = hash; };
+// El dibujo empieza con el evento hashchange, que llega después: la vista ya
+// está ocupada desde ahora.
+const go = hash => {
+  if (location.hash !== hash) { busy.navigating = true; settle(); }
+  location.hash = hash;
+};
 
 // ───────────────────────── utilidades de interfaz ─────────────────────────
 
@@ -1444,7 +1469,15 @@ async function viewMerchantPanel(businessId) {
   if (!businessId) {
     if (businesses.length === 1 && !app.panelListShown) {
       app.panelListShown = true;
-      setTimeout(() => go(`#panel/${businesses[0].id}`), 0);
+      // Ocupada hasta llegar al panel del único comercio; si mientras tanto la
+      // persona fue a otra vista, no se la lleva de vuelta.
+      busy.redirecting = true;
+      setTimeout(() => {
+        busy.redirecting = false;
+        const now = route();
+        if (now.page === 'panel' && !now.param) go(`#panel/${businesses[0].id}`);
+        else settle();
+      }, 0);
     }
     return `
       ${offlineBanner()}
@@ -2485,6 +2518,8 @@ async function withBusy(element, operation) {
   element.dataset.busy = 'true';
   const wasDisabled = element.disabled;
   element.disabled = true;
+  busy.actions += 1;
+  settle();
   try {
     await operation();
   } catch (error) {
@@ -2500,6 +2535,8 @@ async function withBusy(element, operation) {
   } finally {
     element.dataset.busy = 'false';
     element.disabled = wasDisabled || (isConnected() && !app.online);
+    busy.actions -= 1;
+    settle();
   }
 }
 
@@ -3133,23 +3170,26 @@ function isEditing() {
 const GATED_ROUTES = new Set(['panel', 'admin', 'taxista', 'cuenta', 'alta-comercio']);
 
 async function render({ focus = false } = {}) {
+  // La ruta se lee ahora: cualquier navegación pedida queda atendida acá.
+  busy.navigating = false;
   if (!app.repository) return;
   const token = ++renderToken;
   const { page, param } = route();
   // Ocupada desde el primer instante: mientras se revalida la sesión la vista
   // todavía es la anterior y está por reemplazarse.
-  main.setAttribute('aria-busy', 'true');
+  busy.rendering = true;
+  settle();
   if (GATED_ROUTES.has(page) && isShared()) {
     try { app.session = await app.repository.session(); }
     catch (error) {
       // Con backend compartido, un fallo de sesión se muestra: nunca se degrada
       // a datos locales ni se sigue mostrando lo que la cuenta anterior veía.
-      main.innerHTML = errorView(error); main.setAttribute('aria-busy', 'false'); return;
+      if (token !== renderToken) return;
+      main.innerHTML = errorView(error); busy.rendering = false; settle(); return;
     }
     if (token !== renderToken) return;
   }
   const view = VIEWS[page];
-  main.setAttribute('aria-busy', 'true');
   applyRouteMeta(page);
   try {
     const markup = TAXI_ROUTES.has(page) && !feature('taxi')
@@ -3182,8 +3222,9 @@ async function render({ focus = false } = {}) {
   applyOfflineState();
   syncLive(page, param);
   // Recién acá la vista está completa: el contenido, el contador del carrito y
-  // la barra inferior coinciden. `aria-busy="false"` es esa señal.
-  main.setAttribute('aria-busy', 'false');
+  // la barra inferior coinciden (y `aria-busy` pasa a falso si nada más espera).
+  busy.rendering = false;
+  settle();
   if (focus) {
     main.focus({ preventScroll: true });
     window.scrollTo({ top: 0, behavior: 'instant' });

@@ -39,9 +39,11 @@ export async function launch(name) {
 
 // Cada persona usa su propio contexto: almacenamiento y sesión independientes,
 // como dos teléfonos distintos.
-export async function person(browser, { width = 390, height = 844, label = 'persona' } = {}) {
+// `serviceWorkers: 'block'` sólo para demorar respuestas con page.route(), que
+// no ve lo que pasa por el service worker.
+export async function person(browser, { width = 390, height = 844, label = 'persona', serviceWorkers = 'allow' } = {}) {
   const context = await browser.newContext({ viewport: { width, height }, locale: 'es-AR',
-    timezoneId: 'America/Argentina/Buenos_Aires', hasTouch: width < 900, isMobile: false });
+    timezoneId: 'America/Argentina/Buenos_Aires', hasTouch: width < 900, isMobile: false, serviceWorkers });
   const page = await context.newPage();
   const problems = [];
   problemsOf.set(page, problems);

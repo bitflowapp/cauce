@@ -49,7 +49,7 @@ local efímero dentro del runner.
 | Unitarias | `npm test` | dominio, horarios, telemetría, repositorio, service worker | 198/198 |
 | SQL embebido | `npm run test:db` | migraciones desde cero + actualización con datos legados, RLS por rol, techos del registro de errores | 52/52 |
 | Integración y seguridad | `npm run test:integration` | Postgres + GoTrue + PostgREST + Storage + Realtime + Mailpit reales | 45/45 |
-| E2E Chromium y WebKit | `npm run e2e:local` | recorridos en navegadores reales contra el build de producción (incluye invitación con correo real) | 29/29 |
+| E2E Chromium y WebKit | `npm run e2e:local` | recorridos en navegadores reales contra el build de producción (incluye invitación con correo real) | 31/31 |
 | Recorridos heredados y auditoría visual | `npm run e2e`, `e2e:demo`, `audit:visual`, `audit:visual:backend` | un Chrome por rol contra el backend de desarrollo y la demo; 32 pantallas sin desbordes ni errores | 37 · 12 · 32 · 32, seis vueltas seguidas sin fallos tras N-19 |
 | Builds | `npm run build`, `build:offline`, `build:production` | demo, demo sin red, producción con chequeo de bundle | PASS |
 | Smoke de producción | `npm run smoke:production` | sólo lectura contra el proyecto y el sitio reales | 4/5 al 25/09: sólo falta B6 (el sitio publica la demostración) |
