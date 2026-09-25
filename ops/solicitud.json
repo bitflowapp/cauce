@@ -1,8 +1,8 @@
 {
-  "paso": "admin",
-  "aplicar": false,
-  "confirmar": "",
+  "paso": "smoke-publicado",
+  "aplicar": true,
+  "confirmar": "ygqbcvxdrewcnzedfcyo",
   "email": "",
   "invitar": false,
-  "motivo": "Fase A · B4: ¿existe ya la cuenta de CAUCE_ADMIN_EMAIL, confirmada y con privilegio? Sólo lectura."
+  "motivo": "Fase A · B6: smoke obligatorio sobre el sitio publicado (main 2695953): comercios, cuentas y pedidos CAUCE QA que se borran al terminar."
 }
