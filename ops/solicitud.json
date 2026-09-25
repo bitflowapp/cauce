@@ -1,8 +1,8 @@
 {
-  "paso": "estado",
+  "paso": "backup",
   "aplicar": false,
   "confirmar": "",
   "email": "",
   "invitar": false,
-  "motivo": "Volver a comprobar qué secretos están cargados y el estado real del proyecto antes del informe final. Sólo lectura."
+  "motivo": "B5 antes de migrar: backups de Supabase, dump sin sesiones ni tokens, copia cifrada y restauración de prueba en la versión del origen (8 migraciones). Sólo lectura sobre el proyecto."
 }
