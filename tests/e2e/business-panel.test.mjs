@@ -4,7 +4,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  account, guest, makeAdmin, publishedBusiness, closeAll, order, ok, sql, run, env,
+  account, guest, makeAdmin, publishedBusiness, closeAll, order, ok, sql, run, env, anonClient,
   startPreview, stopPreview, browsersToRun, launch, person, go, ready, signIn, shot, layoutIssues, expectToast,
 } from './harness.mjs';
 
@@ -214,6 +214,71 @@ for (const engine of browsersToRun) {
       ok(await people.ownerC.client.from('businesses').update({ pickup_enabled: true }).eq('id', C.id));
       assert.deepEqual(owner.problems, []);
     } finally { await browser.close(); }
+  });
+
+  test(`${engine}: control remoto en el teléfono: precio al toque, envío arriba, pausar, reactivar y abrir`, async () => {
+    const browser = await launch(engine);
+    try {
+      const owner = await person(browser, { width: 390, height: 844, label: 'titular C' });
+      const m = owner.page;
+      await landOnPanel(m, people.ownerC);
+      // Dos filas de secciones: lo de todos los días arriba, la administración abajo.
+      const rowOf = async name => (await m.getByRole('tab', { name, exact: true }).boundingBox()).y;
+      assert.equal(await rowOf('Inicio'), await rowOf('Reparto'));
+      assert.ok(await rowOf('Horarios') > await rowOf('Inicio'));
+
+      // Precio y stock desde la fila del producto, sin abrir el formulario completo.
+      await go(m, `#panel/${C.id}/catalogo`);
+      const row = m.locator('article[aria-label="Producto Torta del día"]');
+      await row.locator('input[name="price"]').first().fill('9900');
+      await row.locator('form[data-form="product-quick"] input[name="stock"]').fill('5');
+      await row.locator('form[data-form="product-quick"]').getByRole('button', { name: 'Guardar', exact: true }).click();
+      await expectToast(m, 'Precio y stock guardados.');
+      await ready(m);
+      const [torta] = await sql`select price_ars::int as price, stock from public.products where id = ${C.products.tracked.id}`;
+      assert.deepEqual({ ...torta }, { price: 9900, stock: 5 });
+
+      // Costo de envío y pedido mínimo, lo primero de Configuración.
+      await go(m, `#panel/${C.id}/configuracion`);
+      const first = await m.locator('form[data-form="business-update"] .checkout-section-title').first().textContent();
+      assert.equal(first.trim(), 'Envío, pedidos y tiempos');
+      await m.fill('#b-fee', '2100');
+      await m.fill('#b-min', '4000');
+      await m.getByRole('button', { name: 'Guardar envío y tiempos' }).click();
+      await expectToast(m, 'Datos guardados.');
+      await ready(m);
+      const [fees] = await sql`select delivery_fee_ars::int as fee, minimum_order_ars::int as minimum from public.businesses where id = ${C.id}`;
+      assert.deepEqual({ ...fees }, { fee: 2100, minimum: 4000 });
+
+      // Pausar pide confirmación ("Volver" no pausa) y saca el comercio de CAUCE.
+      await go(m, `#panel/${C.id}/inicio`);
+      const dialog = m.locator('dialog.cauce-dialog');
+      await m.getByRole('button', { name: 'Pausar el comercio' }).click();
+      await dialog.getByRole('button', { name: 'Volver' }).click();
+      await ready(m);
+      assert.equal((await sql`select status from public.businesses where id = ${C.id}`)[0].status, 'active');
+      await m.getByRole('button', { name: 'Pausar el comercio' }).click();
+      await dialog.getByRole('button', { name: 'Pausar', exact: true }).click();
+      await ready(m);
+      assert.equal((await sql`select status from public.businesses where id = ${C.id}`)[0].status, 'paused');
+      assert.match(await m.locator('.panel-openbar').textContent(), /CERRADO[\s\S]*Pausaste el comercio/);
+      assert.deepEqual(ok(await anonClient().from('businesses').select('id').eq('id', C.id)), [], 'pausado no se ve en CAUCE');
+      // Reactivar lo vuelve a publicar con la atención cerrada: se abre con un toque.
+      await m.getByRole('button', { name: 'Reactivar el comercio' }).click();
+      await ready(m);
+      await m.getByRole('button', { name: 'Abrir atención' }).click();
+      await ready(m);
+      assert.match(await m.locator('.panel-openbar').textContent(), /ABIERTO/);
+      const [state] = await sql`select status, open from public.businesses where id = ${C.id}`;
+      assert.deepEqual({ ...state }, { status: 'active', open: true });
+      await shot(m, `${engine}-panel-control-remoto`);
+      assert.deepEqual(owner.problems, []);
+    } finally {
+      // C queda publicado y abierto para la corrida del otro navegador.
+      await people.ownerC.client.rpc('set_business_presence', { business: C.id, next_status: 'active' });
+      await people.ownerC.client.rpc('set_business_presence', { business: C.id, is_open: true });
+      await browser.close();
+    }
   });
 
   test(`${engine}: encargado/a en la tablet: atiende, cierra y abre la atención, ve el equipo sin cambiarlo`, async () => {
