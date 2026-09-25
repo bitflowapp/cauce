@@ -227,6 +227,8 @@ async function correo(t, list) {
   const redirectTo = `${t.siteUrl}/index.html`;
   const service = client(t.url, await t.serviceKey());
   let userId = null;
+  let invitedId = null;
+  let guest = null;
   try {
     // 1. Alta y confirmación.
     const t0 = Date.now();
@@ -274,12 +276,36 @@ async function correo(t, list) {
     const reused = await client(t.url, t.publishableKey).auth.verifyOtp({
       token_hash: recovery.searchParams.get('token_hash'), type: 'recovery' });
     list.check('el enlace de recuperación no se puede reutilizar', Boolean(reused.error), reused.error?.code || 'se reutilizó');
+
+    // 3. Invitación, como la usa la administración para sumar a alguien:
+    // correo real → enlace → la persona elige su contraseña → ingresa.
+    guest = t.local ? mailpitInbox(t.mailpitUrl, `${prefix}-invitado@example.com`) : await disposableInbox(`${prefix}-inv`);
+    const t2 = Date.now();
+    const invited = await service.auth.admin.inviteUserByEmail(guest.address, { redirectTo });
+    list.check('invitación enviada', !invited.error, invited.error?.message || maskEmail(guest.address));
+    if (invited.error) return;
+    invitedId = invited.data.user?.id;
+    const invitation = tokenLink(await guest.waitFor('Te invitaron a CAUCE', { after: t2 }));
+    list.check('llegó la invitación (entrega real)', true, invitation.origin + invitation.pathname);
+    list.check('la invitación vuelve al sitio real', `${invitation.origin}${invitation.pathname}` === redirectTo);
+    const accepter = client(t.url, t.publishableKey);
+    const accepted = await accepter.auth.verifyOtp({ token_hash: invitation.searchParams.get('token_hash'), type: 'invite' });
+    list.check('el enlace de invitación abre sesión', !accepted.error && Boolean(accepted.data.session),
+      accepted.error?.message || 'ok');
+    const chosen = `Qi${randomBytes(9).toString('base64url')}6`;
+    hide(chosen);
+    const set = await accepter.auth.updateUser({ password: chosen });
+    list.check('la persona invitada elige su contraseña', !set.error, set.error?.message || 'ok');
+    const invitedLogin = await client(t.url, t.publishableKey).auth.signInWithPassword({ email: guest.address, password: chosen });
+    list.check('ingresa con la contraseña que eligió', !invitedLogin.error, invitedLogin.error?.message || 'ok');
   } finally {
-    if (userId) {
-      const removed = await service.auth.admin.deleteUser(userId);
-      list.check('cuenta de prueba eliminada', !removed.error, removed.error?.message || 'ok');
+    for (const [id, label] of [[userId, 'cuenta de prueba eliminada'], [invitedId, 'cuenta invitada eliminada']]) {
+      if (!id) continue;
+      const removed = await service.auth.admin.deleteUser(id);
+      list.check(label, !removed.error, removed.error?.message || 'ok');
     }
     await inbox.close();
+    await guest?.close();
   }
 }
 
@@ -316,6 +342,24 @@ async function admin(t, list) {
   list.check('la tabla de administración no se expone por la API', !exposed.ok, `HTTP ${exposed.status}`);
 }
 
+// Lo que queda de las pruebas en el proyecto: cuentas con el patrón de QA,
+// comercios "CAUCE QA", sus pedidos (y los de cuentas QA) y archivos de
+// comercios que ya no existen. No mira ni cuenta nada real.
+const QA_EMAIL = "'^cauce-qa-[0-9a-f]{8}-[a-z]+@example\\.com$'";
+async function qaResidue(t) {
+  const [row] = await t.sql(`with qa_users as (select id from auth.users where email ~ ${QA_EMAIL}),
+      qa_businesses as (select id from public.businesses where slug ~ '^cauce-qa-' or name ~ '^CAUCE QA'
+        or id in (select business_id from public.business_memberships where role = 'owner' and user_id in (select id from qa_users)))
+    select (select count(*)::int from qa_users) as users,
+      (select count(*)::int from qa_businesses) as businesses,
+      (select count(*)::int from public.orders where business_id in (select id from qa_businesses)
+        or customer_id in (select id from qa_users)) as orders,
+      (select count(*)::int from storage.objects o where o.bucket_id = 'business-media' and o.name like 'businesses/%'
+        and not exists (select 1 from public.businesses b where b.id::text = split_part(o.name, '/', 2))) as storage`);
+  return { QA_USERS: Number(row.users), QA_BUSINESSES: Number(row.businesses), QA_ORDERS: Number(row.orders),
+    QA_STORAGE: Number(row.storage) };
+}
+
 // Residuo de QA: sólo cuentas con el patrón exacto que crean las pruebas
 // (cauce-qa-<8 hex>-<rol>@example.com), sus comercios, pedidos y archivos.
 async function limpiarQa(t, list) {
@@ -327,7 +371,13 @@ async function limpiarQa(t, list) {
   const [{ n: others }] = await t.sql(`select count(*)::int as n from auth.users
     where email is not null and email !~ '^cauce-qa-[0-9a-f]{8}-[a-z]+@example\\.com$'`);
   list.info('residuo encontrado', `${users.length} cuentas QA · ${businesses.length} comercios QA · ${others} cuentas reales intactas`);
-  if (!apply || (!users.length && !businesses.length)) { if (!apply) list.info('sin --aplicar', 'no se borró nada'); return; }
+  if (!apply || (!users.length && !businesses.length)) {
+    if (!apply) list.info('sin --aplicar', 'no se borró nada');
+    for (const [name, count] of Object.entries(await qaResidue(t))) {
+      if (apply) list.check(`${name} = 0`, count === 0, String(count)); else list.info(name, String(count));
+    }
+    return;
+  }
   const service = client(t.url, await t.serviceKey());
   const list2 = businesses.map(item => `'${item.id}'`).join(', ');
   if (businesses.length) {
@@ -345,9 +395,9 @@ async function limpiarQa(t, list) {
   }
   if (users.length) await t.sql(`delete from public.orders where customer_id in (${ids})`);
   for (const user of users) await service.auth.admin.deleteUser(user.id);
-  const [{ n: left }] = await t.sql(`select count(*)::int as n from auth.users
-    where email ~ '^cauce-qa-[0-9a-f]{8}-[a-z]+@example\\.com$'`);
-  list.check('residuo de QA borrado', left === 0, `${users.length} cuentas y ${businesses.length} comercios`);
+  list.info('borrado', `${users.length} cuentas y ${businesses.length} comercios QA`);
+  const residue = await qaResidue(t);
+  for (const [name, count] of Object.entries(residue)) list.check(`${name} = 0`, count === 0, String(count));
 }
 
 // ───────────────────────── arranque ─────────────────────────

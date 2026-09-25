@@ -6,7 +6,7 @@ repositorio. Cada pedido queda en el historial de git.
 
 | Campo | Valores |
 | --- | --- |
-| `paso` | `estado`, `migrar`, `auth`, `correo`, `admin`, `backup`, `smoke-publicado`, `limpiar-qa` |
+| `paso` | `estado`, `migrar`, `auth`, `correo`, `admin`, `backup`, `smoke-previo` (antes de publicar: build de producción contra el proyecto real), `smoke-publicado`, `limpiar-qa` |
 | `aplicar` | `false` (sólo muestra qué haría) o `true` (escribe) |
 | `confirmar` | para `aplicar: true`, el ref del proyecto: `ygqbcvxdrewcnzedfcyo` |
 | `email` | paso `admin`: correo de la cuenta de administración |

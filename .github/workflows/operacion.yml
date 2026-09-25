@@ -19,7 +19,7 @@ on:
         type: choice
         required: true
         default: estado
-        options: [estado, migrar, auth, correo, admin, backup, smoke-publicado, limpiar-qa]
+        options: [estado, migrar, auth, correo, admin, backup, smoke-previo, smoke-publicado, limpiar-qa]
       aplicar:
         description: Escribir cambios (si no, sólo muestra qué haría)
         type: boolean
@@ -70,6 +70,9 @@ jobs:
       CAUCE_SMTP_PASS: ${{ secrets.CAUCE_SMTP_PASS }}
       CAUCE_SMTP_SENDER: ${{ secrets.CAUCE_SMTP_SENDER }}
       CAUCE_BACKUP_PASSPHRASE: ${{ secrets.CAUCE_BACKUP_PASSPHRASE }}
+      # Paso admin: el correo de la administración puede venir del pedido o de
+      # este secreto (así no queda en el repositorio y los logs lo ocultan).
+      ADMIN_EMAIL_SECRET: ${{ secrets.CAUCE_ADMIN_EMAIL }}
     steps:
       - uses: actions/checkout@v4
       - name: Pedido validado
@@ -85,13 +88,18 @@ jobs:
             *)
               paso="$IN_PASO"; aplicar="$IN_APLICAR"; confirmar="$IN_CONFIRMAR"; email="$IN_EMAIL"; invitar="$IN_INVITAR" ;;
           esac
+          [ -z "$email" ] && [ "$paso" = "admin" ] && email="$ADMIN_EMAIL_SECRET"
           # Nada que no pase estas reglas llega al entorno del paso.
-          case "$paso" in estado|migrar|auth|correo|admin|backup|smoke-publicado|limpiar-qa) ;; *) echo "::error::paso inválido"; exit 1 ;; esac
+          case "$paso" in estado|migrar|auth|correo|admin|backup|smoke-previo|smoke-publicado|limpiar-qa) ;; *) echo "::error::paso inválido"; exit 1 ;; esac
           [[ "$aplicar" =~ ^(true|false)$ && "$invitar" =~ ^(true|false)$ ]] || { echo "::error::aplicar/invitar inválidos"; exit 1; }
           [[ -z "$email" || "$email" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$ ]] || { echo "::error::correo inválido"; exit 1; }
           [[ -z "$confirmar" || "$confirmar" =~ ^[a-z]{20}$ ]] || { echo "::error::confirmación inválida"; exit 1; }
           if [ "$aplicar" = "true" ] && [ "$confirmar" != "ygqbcvxdrewcnzedfcyo" ]; then
             echo "::error::Para escribir hay que repetir el ref del proyecto en 'confirmar'."; exit 1
+          fi
+          # Los smokes crean (y borran) comercios, cuentas y pedidos CAUCE QA en el proyecto real.
+          if [[ "$paso" == smoke-* ]] && [ "$aplicar" != "true" ]; then
+            echo "::error::El smoke crea y borra datos CAUCE QA: pedirlo con aplicar y confirmar."; exit 1
           fi
           skip=0
           if [ "$GITHUB_EVENT_NAME" = "schedule" ] && [ -z "$SUPABASE_ACCESS_TOKEN" ]; then
@@ -104,6 +112,7 @@ jobs:
           for name in SUPABASE_ACCESS_TOKEN SUPABASE_DB_PASSWORD CAUCE_SMTP_PASS CAUCE_SMTP_SENDER CAUCE_BACKUP_PASSPHRASE; do
             if [ -n "${!name}" ]; then echo "✔ $name"; else echo "✘ $name"; fi
           done
+          if [ -n "$ADMIN_EMAIL_SECRET" ]; then echo "✔ CAUCE_ADMIN_EMAIL"; else echo "✘ CAUCE_ADMIN_EMAIL"; fi
       - uses: actions/setup-node@v4
         if: env.SKIP != '1'
         with:
@@ -112,8 +121,8 @@ jobs:
       - name: Instalación limpia
         if: env.SKIP != '1'
         run: npm ci
-      - name: Navegadores para el smoke del sitio publicado
-        if: env.PASO == 'smoke-publicado' && env.SKIP != '1'
+      - name: Navegadores para el smoke (antes o después de publicar)
+        if: (env.PASO == 'smoke-publicado' || env.PASO == 'smoke-previo') && env.SKIP != '1'
         run: npx playwright install --with-deps chromium webkit
       - name: Paso
         if: env.SKIP != '1'
@@ -123,6 +132,10 @@ jobs:
           [ "$INVITAR" = "true" ] && args+=(--invitar)
           if [ "$PASO" = "smoke-publicado" ]; then
             npm run smoke:publicado
+          elif [ "$PASO" = "smoke-previo" ]; then
+            # El mismo artefacto que después publica Pages, contra el proyecto real.
+            npm run build:production
+            CAUCE_SMOKE_SITE=build npm run smoke:publicado
           else
             node scripts/operacion.mjs "${args[@]}"
           fi
