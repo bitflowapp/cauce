@@ -88,7 +88,7 @@ local efímero dentro del runner.
 | Recorridos heredados y auditoría visual | `npm run e2e`, `e2e:demo`, `audit:visual`, `audit:visual:backend` | un Chrome por rol contra el backend de desarrollo y la demo; 32 pantallas sin desbordes ni errores | 37 · 12 · 32 · 32, seis vueltas seguidas sin fallos tras N-19 |
 | Builds | `npm run build`, `build:offline`, `build:production` | demo, demo sin red, producción con chequeo de bundle | PASS |
 | Escaneo de secretos | `npm run scan:secrets` | todos los archivos versionados: claves de Supabase, tokens, claves privadas, contraseñas y SMTP; muestra archivo y regla, nunca el valor | PASS |
-| Smoke de producción | `npm run smoke:production` | sólo lectura contra el proyecto y el sitio reales; también todos los días a las 08:00 (`smoke.yml`) | 5/5 el 25/09 después de publicar `main` 7e328a6 (`js/app.CLP2K3QL.js`) |
+| Smoke de producción | `npm run smoke:production` | sólo lectura contra el proyecto y el sitio reales; también todos los días a las 08:17 (`smoke.yml`) | 5/5 el 25/09 después de publicar `main` 7e328a6 (`js/app.CLP2K3QL.js`) |
 
 `npm run verify` agrupa lint, tipos, compuertas, escaneo de secretos, unitarias, SQL y builds.
 
@@ -383,7 +383,7 @@ final en pesos, foto si tiene, y si controla stock o sólo marca "agotado".
 - **Supabase dashboard:** logs de Auth, API y Postgres; Advisors de seguridad
   y rendimiento después de cada migración.
 - **Smoke diario:** `.github/workflows/smoke.yml` corre el smoke de sólo
-  lectura todos los días a las 08:00 de Aluminé cuando Pages publica
+  lectura todos los días a las 08:17 de Aluminé cuando Pages publica
   producción (`.github/deploy-target` o la variable `CAUCE_DEPLOY_TARGET`);
   un fallo queda en rojo en Actions.
 - **Después de cada publicación:** `smoke-publicado`, `limpiar-qa` y
@@ -400,7 +400,7 @@ final en pesos, foto si tiene, y si controla stock o sólo marca "agotado".
   el proyecto, conteos, esquema, migración pendiente aplicada sobre la copia
   y verificaciones de contrato, API, RLS y Storage.
 - **Backup propio, semanal y automático** (workflow "Operación de
-  producción", lunes 03:30 en Aluminé, una vez cargados los secretos): dump
+  producción", lunes 03:41 en Aluminé, una vez cargados los secretos): dump
   de esquema y datos **sin sesiones ni tokens**, restauración de prueba en un
   stack nuevo construido con las migraciones del repo (así vuelven también
   las políticas de Storage, que el dump de esquema no incluye), verificación

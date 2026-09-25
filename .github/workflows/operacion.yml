@@ -38,7 +38,8 @@ on:
         type: boolean
         default: false
   schedule:
-    - cron: '30 6 * * 1' # lunes 03:30 en Aluminé: backup con prueba de restauración
+    # Fuera de la hora y la media hora en punto, que GitHub demora o descarta con carga.
+    - cron: '41 6 * * 1' # lunes 03:41 en Aluminé: backup con prueba de restauración
   # También desde las ramas de las próximas entregas: así el smoke previo y la
   # migración corren con su código contra el proyecto real antes de integrar.
   push:
