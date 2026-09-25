@@ -7,6 +7,7 @@ import {
   sql, account, guest, anonClient, makeAdmin, publishedBusiness, order, transition, ok, failsWith,
   invisible, closeAll, run,
 } from './harness.mjs';
+import { REQUIRED_SCHEMA } from '../../js/core/contract.js';
 
 const people = {};
 let A, B, draftC, orderOfA, orderOfB;
@@ -91,7 +92,7 @@ test('lo único que invoca una visita sin sesión es el contrato público', asyn
   const status = ok(await anon.rpc('app_status'));
   assert.equal(status.features.taxi, false);
   assert.equal(status.features.guest_checkout, true);
-  assert.equal(status.schema, 20260924120000);
+  assert.equal(status.schema, REQUIRED_SCHEMA, 'la base declara el contrato que exige este frontend');
   assert.equal(ok(await anon.rpc('track_order', { token: randomUUID() })), null);
   assert.equal(ok(await anon.rpc('report_client_event',
     { kind: 'frontend_error', code: 'TEST', message: 'correo qa@example.com tel 2942 123456', route: '#inicio' })), true);
