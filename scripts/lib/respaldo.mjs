@@ -119,7 +119,37 @@ export async function loadData({ db, adminUrl }, { dumped, dataFile }, list) {
   if (targetTables.length) {
     await db.unsafe(`truncate ${targetTables.map(name => name.split('.').map(part => `"${part}"`).join('.')).join(', ')} cascade`);
   }
-  const load = spawnSync('psql', [adminUrl, '-v', 'ON_ERROR_STOP=1', '-q', '-f', dataFile],
+  const colRows = await db.unsafe(`select table_schema || '.' || table_name as tbl, column_name as col from information_schema.columns where table_schema in ('auth', 'storage', 'public', 'private')`);
+  const colsByTable = new Map();
+  for (const { tbl, col } of colRows) {
+    if (!colsByTable.has(tbl)) colsByTable.set(tbl, new Set());
+    colsByTable.get(tbl).add(col);
+  }
+  const rawSql = await readFile(dataFile, 'utf8');
+  const filteredSql = rawSql.replace(
+    /^COPY "([a-z_]+)"\."([a-z_0-9]+)" \(([^)]+)\) FROM stdin;\r?\n([\s\S]*?)^\\\.\r?$/gm,
+    (full, schema, table, colList, body) => {
+      const tbl = `${schema}.${table}`;
+      const allowed = colsByTable.get(tbl);
+      if (!allowed) return '';
+      const cols = colList.split(',').map(c => c.trim().replace(/^"|"$/g, ''));
+      const keepIdx = cols.map((c, i) => allowed.has(c) ? i : -1).filter(i => i >= 0);
+      if (keepIdx.length === cols.length) return full;
+      const newCols = keepIdx.map(i => `"${cols[i]}"`).join(', ');
+      const newBody = body
+        .split(/\r?\n/)
+        .map(line => {
+          if (!line) return '';
+          const parts = line.split('\t');
+          return keepIdx.map(i => parts[i]).join('\t');
+        })
+        .join('\n');
+      return `COPY "${schema}"."${table}" (${newCols}) FROM stdin;\n${newBody}\\.`;
+    },
+  );
+  const adaptedFile = `${dataFile}.adapted.sql`;
+  await writeFile(adaptedFile, filteredSql);
+  const load = spawnSync('psql', [adminUrl, '-v', 'ON_ERROR_STOP=1', '-q', '-f', adaptedFile],
     { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
   list.check('los datos se restauran sin errores', load.status === 0, redact(load.stderr || '').trim().slice(0, 300) || 'ok');
   return load.status === 0;
