@@ -1,8 +1,8 @@
 {
-  "paso": "registros",
+  "paso": "backup",
   "aplicar": false,
   "confirmar": "",
   "email": "",
   "invitar": false,
-  "motivo": "Sandbox de Mercado Pago, paso 1: antes de tocar pagos, 5xx y errores de cada servicio del proyecto real en las últimas 24 h. Sólo lectura."
+  "motivo": "Sandbox de Mercado Pago, antes de migrar: copia cifrada del proyecto real, restauración en un stack nuevo y la migración pendiente del piloto de pagos por comercio (20260927120000) aplicada sobre la copia restaurada. Sólo lectura sobre el proyecto."
 }
