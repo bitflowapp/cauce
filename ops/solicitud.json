@@ -1,8 +1,8 @@
 {
-  "paso": "estado",
-  "aplicar": false,
-  "confirmar": "",
+  "paso": "auth",
+  "aplicar": true,
+  "confirmar": "ygqbcvxdrewcnzedfcyo",
   "email": "",
   "invitar": false,
-  "motivo": "Fase A: qué hay hoy en el proyecto real y qué secretos están cargados (sólo nombres). Sólo lectura."
+  "motivo": "Fase A · B2/B3: cargar el SMTP propio y las plantillas de CAUCE en Auth (los secretos ya están). Después se verifica 13/13."
 }
