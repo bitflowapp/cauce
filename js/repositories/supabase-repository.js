@@ -6,6 +6,7 @@ import { validateTripRequest } from '../core/taxi-dispatch.js';
 import { sanitizeText, validateCustomerName, isValidArgentinePhone } from '../core/validators.js';
 import { validateHours, DEFAULT_TIMEZONE } from '../core/business-hours.js';
 import { mapPilotMetrics } from '../core/pilot-metrics.js';
+import { optimizeImage, IMAGE_SIDES } from './image-prep.js';
 
 const MEDIA_BUCKET = 'business-media';
 const LOCALITY = 'alumine';
@@ -463,9 +464,11 @@ export function createSupabaseRepository({ client, redirectTo, storage, onError 
   }
 
   // ── medios ──
-  async function uploadMedia(businessId, folder, file) {
-    requireValue(file && typeof file.size === 'number', 'INVALID_IMAGE', 'Elegí una imagen.');
-    requireValue(IMAGE_TYPES.includes(file.type), 'INVALID_IMAGE_TYPE', 'Se admiten imágenes JPEG, PNG o WebP.');
+  async function uploadMedia(businessId, folder, original) {
+    requireValue(original && typeof original.size === 'number', 'INVALID_IMAGE', 'Elegí una imagen.');
+    requireValue(IMAGE_TYPES.includes(original.type), 'INVALID_IMAGE_TYPE', 'Se admiten imágenes JPEG, PNG o WebP.');
+    // Achicada al tamaño en que se muestra: carga rápida con datos móviles.
+    const file = await optimizeImage(original, { maxSide: IMAGE_SIDES[folder] || IMAGE_SIDES.product });
     requireValue(file.size > 0 && file.size <= MAX_IMAGE_BYTES, 'IMAGE_TOO_LARGE', 'La imagen no puede superar 5 MB.');
     const extension = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' }[file.type];
     const path = `businesses/${businessId}/${folder}/${crypto.randomUUID()}.${extension}`;
