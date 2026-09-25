@@ -1,8 +1,8 @@
 {
-  "paso": "registros",
-  "aplicar": false,
-  "confirmar": "",
+  "paso": "smoke-previo",
+  "aplicar": true,
+  "confirmar": "ygqbcvxdrewcnzedfcyo",
   "email": "",
   "invitar": false,
-  "motivo": "Fase A · P14 después del deploy y del smoke publicado: 5xx (falla el paso) y errores de cada servicio. Sólo lectura."
+  "motivo": "Fase B: el build de producción del panel (feat/cauce-business-panel-v1 con main al día) contra el proyecto real, antes de integrar #4 y publicar. Crea y borra datos CAUCE QA."
 }
