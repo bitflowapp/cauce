@@ -1,8 +1,8 @@
 {
-  "paso": "smoke-publicado",
+  "paso": "limpiar-qa",
   "aplicar": true,
   "confirmar": "ygqbcvxdrewcnzedfcyo",
   "email": "",
   "invitar": false,
-  "motivo": "Fase A · B6: smoke obligatorio sobre el sitio publicado (main 2695953): comercios, cuentas y pedidos CAUCE QA que se borran al terminar."
+  "motivo": "Fase A · P13 después del smoke publicado: QA_USERS, QA_BUSINESSES, QA_ORDERS y QA_STORAGE en 0. Nunca toca otras cuentas."
 }
