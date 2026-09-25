@@ -150,7 +150,7 @@ test('el navegador puede llamarlas: preflight y cabecera CORS (el sitio usa func
 
 test('OAuth: PKCE S256, state impredecible y URL de retorno fija; el token no pasa por la URL ni se guarda en claro', async () => {
   const flow = await beginOAuth(people.ownerA, A.id);
-  assert.equal(flow.url.origin + flow.url.pathname, 'https://auth.mercadopago.com/authorization');
+  assert.equal(flow.url.origin + flow.url.pathname, 'https://auth.mercadopago.com.ar/authorization');
   assert.equal(flow.url.searchParams.get('response_type'), 'code');
   assert.equal(flow.url.searchParams.get('code_challenge_method'), 'S256');
   assert.match(flow.challenge, /^[A-Za-z0-9_-]{43}$/, 'SHA-256 en base64url');

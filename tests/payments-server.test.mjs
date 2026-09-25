@@ -344,7 +344,7 @@ test('OAuth con PKCE: la URL de autorización lleva el state y el desafío S256;
   const state = randomToken(32);
   const url = new URL(authorizationUrl({ clientId: '1234567890', redirectUri: 'https://proyecto.supabase.co/functions/v1/payments-oauth',
     state, challenge }));
-  assert.equal(url.origin + url.pathname, 'https://auth.mercadopago.com/authorization');
+  assert.equal(url.origin + url.pathname, 'https://auth.mercadopago.com.ar/authorization');
   assert.deepEqual(Object.fromEntries(url.searchParams), { client_id: '1234567890', response_type: 'code', platform_id: 'mp',
     state, redirect_uri: 'https://proyecto.supabase.co/functions/v1/payments-oauth', code_challenge: challenge,
     code_challenge_method: 'S256' });

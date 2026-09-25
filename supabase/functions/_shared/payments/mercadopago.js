@@ -14,7 +14,9 @@
 
 export const PROVIDER = 'mercadopago';
 export const API_BASE = 'https://api.mercadopago.com';
-export const AUTH_BASE = 'https://auth.mercadopago.com/authorization';
+// Autorización del sitio de Argentina: el dominio global (auth.mercadopago.com)
+// primero pide elegir el país y después redirige acá.
+export const AUTH_BASE = 'https://auth.mercadopago.com.ar/authorization';
 
 // Las órdenes de prueba del proveedor llevan este prefijo (ORDTST…). Un piloto
 // en sandbox nunca redirige a una orden que no lo tenga.
