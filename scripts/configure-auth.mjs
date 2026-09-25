@@ -55,6 +55,20 @@ const payload = {
   // puede ser el de pruebas (30/h) sin frenar compras legítimas.
   rate_limit_anonymous_users: Number(process.env.CAUCE_ANONYMOUS_RATE_LIMIT || 150),
   mailer_autoconfirm: false,
+  // Lo mismo que rige en el stack local (supabase/config.toml), donde corren
+  // las pruebas, y lo que la app anuncia: 10+ caracteres con letras y números.
+  disable_signup: false,
+  external_email_enabled: true,
+  password_min_length: 10,
+  password_required_characters: 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ:0123456789',
+  refresh_token_rotation_enabled: true,
+  security_refresh_token_reuse_interval: 10,
+  security_manual_linking_enabled: false,
+  mailer_otp_exp: 3600,
+  mailer_secure_email_change_enabled: true,
+  // Cambiar la contraseña con una sesión de más de 24 h pide volver a
+  // ingresar (la app lo explica: reauthentication_needed).
+  security_update_password_require_reauthentication: true,
 };
 
 // URLs: el enlace del correo vuelve exactamente a donde se sirve la aplicación.
@@ -92,7 +106,8 @@ if (declared.length && declared.length < 5) {
 if (declared.length === 5) {
   const match = /^\s*(.*?)\s*<([^>]+)>\s*$/.exec(smtp.sender);
   payload.smtp_host = smtp.host;
-  payload.smtp_port = Number(smtp.port);
+  // La API lo declara texto (api.supabase.com/api/v1-json).
+  payload.smtp_port = String(Number(smtp.port));
   payload.smtp_user = smtp.user;
   payload.smtp_pass = smtp.pass;
   payload.smtp_sender_name = match ? match[1] : 'CAUCE Aluminé';

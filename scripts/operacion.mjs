@@ -76,6 +76,8 @@ export function authChecks(config, siteUrl = SITE_URL) {
       && /token_hash/.test(config.mailer_templates_confirmation_content || '')],
     ['rotación de refresh tokens', config.refresh_token_rotation_enabled === true],
     ['contraseña de 10+ caracteres', Number(config.password_min_length) >= 10, String(config.password_min_length)],
+    ['contraseña con letras y números', /[a-z]/.test(config.password_required_characters || '')
+      && /0123456789/.test(config.password_required_characters || ''), config.password_required_characters ? 'sí' : 'sin requisito'],
     ['enlaces de correo vencen en ≤ 1 h', Number(config.mailer_otp_exp) > 0 && Number(config.mailer_otp_exp) <= 3600,
       `${config.mailer_otp_exp} s`],
   ];
