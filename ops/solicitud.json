@@ -1,8 +1,8 @@
 {
-  "paso": "limpiar-qa",
-  "aplicar": true,
-  "confirmar": "ygqbcvxdrewcnzedfcyo",
+  "paso": "registros",
+  "aplicar": false,
+  "confirmar": "",
   "email": "",
   "invitar": false,
-  "motivo": "Verificación final: residuo QA en cero después del smoke final del sitio publicado (run 36115710350)."
+  "motivo": "Verificación final: registros después de publicar main b56beec, del smoke final y de la limpieza QA. 5xx y errores de cada servicio. Sólo lectura."
 }
