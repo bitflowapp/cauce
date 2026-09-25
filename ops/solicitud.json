@@ -1,8 +1,8 @@
 {
-  "paso": "smoke-publicado",
+  "paso": "limpiar-qa",
   "aplicar": true,
   "confirmar": "ygqbcvxdrewcnzedfcyo",
   "email": "",
   "invitar": false,
-  "motivo": "Fase C: smoke del sitio publicado después de integrar #5 (reparto propio v1, main 49da21c): el mismo pedido de punta a punta con la persona de reparto QA desde su teléfono. Crea y borra datos CAUCE QA."
+  "motivo": "Fase C: residuo QA en cero después del smoke publicado con el reparto integrado (run 36109397909)."
 }
