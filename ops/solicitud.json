@@ -4,5 +4,5 @@
   "confirmar": "",
   "email": "",
   "invitar": false,
-  "motivo": "Sandbox de Mercado Pago, antes de migrar: copia cifrada del proyecto real, restauración en un stack nuevo y la migración pendiente del piloto de pagos por comercio (20260927120000) aplicada sobre la copia restaurada. Sólo lectura sobre el proyecto."
+  "motivo": "Sandbox de Mercado Pago: la migración 20260927120000 cambió (el contexto del intento incluye created_at para que el reintento sea idéntico). Copia cifrada del proyecto real, restauración en un stack nuevo y la migración actualizada aplicada sobre la copia. Sólo lectura sobre el proyecto."
 }
