@@ -1,8 +1,8 @@
 {
-  "paso": "smoke-previo",
-  "aplicar": true,
-  "confirmar": "ygqbcvxdrewcnzedfcyo",
+  "paso": "backup",
+  "aplicar": false,
+  "confirmar": "",
   "email": "",
   "invitar": false,
-  "motivo": "Fase B: el build de producción del panel (feat/cauce-business-panel-v1 con main al día) contra el proyecto real, antes de integrar #4 y publicar. Crea y borra datos CAUCE QA."
+  "motivo": "Fase C, antes de migrar: copia cifrada del proyecto real, restauración en un stack nuevo y la migración pendiente del reparto (20260925120000) aplicada sobre la copia restaurada. Sólo lectura sobre el proyecto."
 }
