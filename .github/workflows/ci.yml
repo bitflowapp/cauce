@@ -74,6 +74,10 @@ jobs:
         run: npx playwright install --with-deps chromium webkit
       - name: E2E en Chromium y WebKit
         run: npm run e2e:local
+      - name: Pagos en Supabase Edge Runtime y la UI de pagos en Chromium y WebKit (doble del proveedor)
+        # Las funciones detrás del gateway del stack (CORS y verify_jwt reales) y
+        # el sitio del build local: conectar desde el panel, pagar, volver y aceptar.
+        run: node tests/edge/run-local.mjs --runtime edge --browser
       - name: Guardar evidencia
         if: always()
         uses: actions/upload-artifact@v4

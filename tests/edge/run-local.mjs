@@ -3,6 +3,8 @@
 //
 //   node tests/edge/run-local.mjs                 Deno (deno en el PATH o DENO_BIN)
 //   node tests/edge/run-local.mjs --runtime edge  Supabase Edge Runtime (supabase functions serve)
+//   … --runtime edge --browser                    además, la UI de pagos en Chromium y WebKit
+//       (tests/edge/browser.test.mjs; necesita el build local: npm run build:local)
 //   … --runtime edge --vendor <bundle.js>         igual, con supabase-js empaquetado localmente: sólo
 //       para entornos cuyo proxy TLS el runtime no acepta (el runtime no descarga de jsr.io). Escribe un
 //       deno.json temporal en cada función y lo borra al terminar.
@@ -19,6 +21,8 @@ const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const args = process.argv.slice(2);
 const runtime = args.includes('--runtime') ? args[args.indexOf('--runtime') + 1] : 'deno';
 const vendor = args.includes('--vendor') ? args[args.indexOf('--vendor') + 1] : '';
+const withBrowser = args.includes('--browser');
+if (withBrowser && runtime !== 'edge') throw new Error('La UI de pagos necesita las funciones detrás del gateway: --runtime edge.');
 const DENO = process.env.DENO_BIN || 'deno';
 const FUNCTIONS = ['payments-oauth', 'payments-checkout', 'payments-webhook'];
 const children = [];
@@ -113,7 +117,8 @@ try {
   }
 
   console.log(`Runtime: ${runtime} · sin secretos: ${failClosed}`);
-  const test = spawn(process.execPath, ['--test', '--test-concurrency=1', '--test-timeout=300000', 'tests/edge/functions.test.mjs'], {
+  const files = ['tests/edge/functions.test.mjs', ...(withBrowser ? ['tests/edge/browser.test.mjs'] : [])];
+  const test = spawn(process.execPath, ['--test', '--test-concurrency=1', '--test-timeout=300000', ...files], {
     cwd: ROOT, stdio: 'inherit',
     env: { ...process.env, EDGE_URLS: JSON.stringify(urls), EDGE_FAKE_MP: fake.url, EDGE_WEBHOOK_SECRET: secrets.MP_WEBHOOK_SECRET,
       EDGE_SITE_URL: secrets.CAUCE_SITE_URL, EDGE_SERVICE_ROLE_KEY: status.SERVICE_ROLE_KEY, EDGE_ANON_KEY: status.ANON_KEY },
