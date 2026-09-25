@@ -114,8 +114,40 @@ for (const engine of browsersToRun) {
       await landOnPanel(m, people.ownerA);
       await go(m, `#panel/${A.id}/catalogo`);
       const name = `Pan ${engine} ${run}`;
+      // Un redibujo de fondo justo después del toque no cierra lo que se abrió.
+      // El aviso `toggle` se descarta, como cuando le llega a un elemento que el
+      // redibujo ya reemplazó (así falló una vez en WebKit).
       const create = m.locator('details[data-keep-open="catalog-new"]');
-      if (await create.getAttribute('open') === null) await create.locator('summary').click();
+      if (await create.getAttribute('open') !== null) { await create.locator('summary').click(); await ready(m); }
+      await m.evaluate(() => {
+        const details = /** @type {HTMLDetailsElement} */ (document.querySelector('details[data-keep-open="catalog-new"]'));
+        details.dataset.stale = 'true';
+        const drop = event => {
+          if (event.target !== details) return;
+          event.stopImmediatePropagation();
+          window.removeEventListener('toggle', drop, true);
+        };
+        window.addEventListener('toggle', drop, true);
+        details.querySelector('summary').click();
+        window.dispatchEvent(new Event('online'));
+      });
+      await m.waitForFunction(() => {
+        const details = /** @type {HTMLElement|null} */ (document.querySelector('details[data-keep-open="catalog-new"]'));
+        return Boolean(details && !details.dataset.stale);
+      });
+      await ready(m);
+      assert.notEqual(await create.getAttribute('open'), null, 'el formulario recién abierto sigue abierto después del redibujo');
+      // Un refresco de fondo que ya estaba en camino cuando la persona empezó a
+      // escribir no borra lo tipeado.
+      await m.evaluate(() => {
+        window.dispatchEvent(new Event('online'));
+        const field = /** @type {HTMLInputElement} */ (document.querySelector('#prod-name'));
+        field.focus();
+        field.value = 'Pan';
+        field.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      await ready(m);
+      assert.equal(await m.inputValue('#prod-name'), 'Pan', 'lo que se empezó a escribir durante el refresco sigue ahí');
       await m.fill('#prod-name', name);
       await m.fill('#prod-description', 'De masa madre');
       await m.fill('#prod-price', '2500');
@@ -138,6 +170,7 @@ for (const engine of browsersToRun) {
       const edited = m.locator(`article[aria-label="Producto ${name} de campo"]`);
       await edited.waitFor();
       assert.match(await edited.textContent(), /2\.800/);
+      assert.equal(await edited.locator('details.catalog-edit').getAttribute('open'), null, 'guardar cierra la edición');
       const [saved] = await sql`select id, price_ars::int as price, description from public.products
         where business_id = ${A.id} and name = ${`${name} de campo`}`;
       assert.deepEqual({ price: saved.price, description: saved.description }, { price: 2800, description: 'De masa madre' });

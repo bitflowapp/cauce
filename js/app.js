@@ -1365,6 +1365,7 @@ async function viewBusinessSignup() {
 }
 
 async function viewMerchantPanel(businessId) {
+  const shownToken = renderToken;
   if (!isSignedIn()) {
     // Sesión vencida o cerrada: después de ingresar vuelve a esta misma sección.
     if (businessId) app.returnTo = location.hash;
@@ -1433,14 +1434,16 @@ async function viewMerchantPanel(businessId) {
   const paymentOverview = section === 'pagos' ? await app.repository.query('businessPaymentOverview', { businessId }) : null;
   const requirements = serverRequirements || missingPublicationRequirements(business, products);
 
-  // Pedidos nuevos desde la última vez que el panel los vio: aviso sonoro y
-  // visual. La primera carga sólo registra lo que ya estaba.
-  const seen = app.seenOrders.get(businessId);
-  const { pending, fresh } = freshOrderIds(orders, seen);
-  app.seenOrders.set(businessId, new Set([...(seen || []), ...pending]));
-  if (fresh.length) announceNewOrders(fresh.length);
-  else if (!pending.length) clearOrderAlert();
-  hideFloatingOrderAlert();
+  // Pedidos nuevos desde la última vez que el panel los mostró: aviso sonoro y
+  // visual. La primera carga sólo registra lo que ya estaba. Cuenta recién al
+  // mostrarse: un refresco que se descarta no los da por vistos.
+  const { pending, fresh } = freshOrderIds(orders, app.seenOrders.get(businessId));
+  whenShown = { token: shownToken, run() {
+    app.seenOrders.set(businessId, new Set([...(app.seenOrders.get(businessId) || []), ...pending]));
+    if (fresh.length) announceNewOrders(fresh.length);
+    else if (!pending.length) clearOrderAlert();
+    hideFloatingOrderAlert();
+  } };
   app.panelSyncedAt = new Date();
 
   const context = { businessId: business.id, localityId: business.localityId, connected, riders, fresh,
@@ -3343,6 +3346,10 @@ function applyRouteMeta(page) {
 }
 
 let renderToken = 0;
+// Lo que una vista hace recién cuando se muestra (marcar pedidos como vistos,
+// avisar): un redibujo descartado no lo aplica.
+/** @type {{ token: number, run: () => void } | null} */
+let whenShown = null;
 
 // ── sincronización en vivo ──
 // Una suscripción por vista, acotada a lo que esa vista muestra: el comercio
@@ -3400,7 +3407,7 @@ function syncLive(page, param) {
         return;
       }
       if (Date.now() - app.pointerAt < 600) { live.timer = setTimeout(run, 300); return; }
-      render();
+      render({ background: true });
     }, 250);
   };
   // Cerrar un canal al cambiar de vista es normal: sólo cuenta como falla lo
@@ -3436,7 +3443,20 @@ function isEditing() {
 // sesión se revalida antes de decidir qué se muestra.
 const GATED_ROUTES = new Set(['panel', 'admin', 'taxista', 'cuenta', 'alta-comercio', 'entregas']);
 
-async function render({ focus = false } = {}) {
+// Si cada desplegable estaba abierto la última vez que la app lo registró.
+/** @type {WeakMap<HTMLDetailsElement, boolean>} */
+const registeredOpen = new WeakMap();
+
+/** @param {HTMLDetailsElement} details */
+function registerOpen(details) {
+  const key = details.dataset.keepOpen || '';
+  if (details.open) app.openDetails.add(key); else app.openDetails.delete(key);
+  registeredOpen.set(details, details.open);
+}
+
+const keepOpenDetails = () => /** @type {HTMLDetailsElement[]} */ ([...main.querySelectorAll('details[data-keep-open]')]);
+
+async function render({ focus = false, background = false } = {}) {
   // La ruta se lee ahora: cualquier navegación pedida queda atendida acá.
   busy.navigating = false;
   if (!app.repository) return;
@@ -3466,7 +3486,35 @@ async function render({ focus = false } = {}) {
       ? await view(param)
       : emptyState('Página no encontrada', 'Volvé al inicio para seguir navegando.', '#inicio', 'Ir al inicio');
     if (token !== renderToken) return;
+    // Un refresco de fondo arranca sólo si nadie está escribiendo, pero la
+    // consulta tarda: si en ese lapso la persona empezó a escribir, reemplazar
+    // la vista borraría lo tipeado. Se descarta (un pedido nuevo igual se
+    // avisa) y el próximo refresco lo retoma.
+    if (background && isEditing()) {
+      if (page === 'panel' && param) peekNewOrders(param);
+      busy.rendering = false;
+      settle();
+      return;
+    }
+    // `toggle` llega una tarea después del toque (en WebKit, más tarde): si un
+    // redibujo de fondo reemplaza la vista en el medio, el aviso le llega a un
+    // elemento que ya no está y lo que la persona abrió se cerraba. Lo que
+    // cambió y la app todavía no registró se toma del DOM y se aplica sobre el
+    // HTML nuevo, que pudo armarse antes del toque. Lo que el código cierra a
+    // propósito (al guardar un producto) no se toca.
+    const unregistered = new Map();
+    for (const details of keepOpenDetails()) {
+      if (!registeredOpen.has(details) || details.open === registeredOpen.get(details)) continue;
+      unregistered.set(details.dataset.keepOpen, details.open);
+      registerOpen(details);
+    }
     main.innerHTML = markup;
+    for (const details of keepOpenDetails()) {
+      if (unregistered.has(details.dataset.keepOpen)) details.open = unregistered.get(details.dataset.keepOpen);
+      registeredOpen.set(details, details.open);
+    }
+    if (whenShown?.token === token) whenShown.run();
+    whenShown = null;
   } catch (error) {
     if (token !== renderToken) return;
     main.innerHTML = errorView(error);
@@ -3550,9 +3598,7 @@ function bindEvents() {
   // Los desplegables marcados con data-keep-open siguen abiertos al redibujar.
   document.addEventListener('toggle', event => {
     const details = /** @type {HTMLDetailsElement} */ (event.target);
-    const key = details?.dataset?.keepOpen;
-    if (!key) return;
-    if (details.open) app.openDetails.add(key); else app.openDetails.delete(key);
+    if (details?.dataset?.keepOpen) registerOpen(details);
   }, true);
 
   // La búsqueda se aplica al escribir, sin recargar la vista entera en cada tecla.
@@ -3609,14 +3655,14 @@ function bindEvents() {
     applyOfflineState();
     // Con backend, volver a tener red es volver a pedir lo actual, salvo que
     // la persona esté escribiendo.
-    if (!isConnected() || !isEditing()) render();
+    if (!isConnected() || !isEditing()) render({ background: isConnected() });
   });
 
   // Volver a la pestaña (o desbloquear el teléfono) actualiza lo que se ve.
   document.addEventListener('visibilitychange', () => {
     if (document.hidden || !isConnected()) return;
     const { page } = route();
-    if (['panel', 'pedido', 'seguimiento', 'actividad', 'inicio', 'pago'].includes(page) && !isEditing()) render();
+    if (['panel', 'pedido', 'seguimiento', 'actividad', 'inicio', 'pago'].includes(page) && !isEditing()) render({ background: true });
   });
 
   // El navegador sólo deja sonar avisos después de una interacción.
