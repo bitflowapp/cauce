@@ -4,35 +4,30 @@
 
 ## Estado
 
-**NOT_READY · detenido en B3 (SMTP).** El código, el esquema y las pruebas
-están listos (CI verde en el PR #3). Con los secretos que Marco cargó el
-24/09 (`SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD`,
-`CAUCE_BACKUP_PASSPHRASE`) se ejecutaron sobre el proyecto real B5, B1 y B2
-(salvo SMTP), en ese orden y con el workflow de operación. Falta el SMTP
-propio: sin él no hay confirmación ni recuperación reales, no se puede invitar
-a la administración y no se publica.
+**NOT_READY · detenido en B3 (SMTP).** Todo lo que no depende del correo
+está hecho y probado contra el proyecto real con el workflow de operación:
+backup y restauración, migración, Auth (salvo SMTP), el recorrido completo
+de comercio y cliente con el build de producción, la limpieza de QA y los
+registros. Falta el SMTP propio: sin él no hay confirmación ni recuperación
+reales ni invitación a la administración, y no se publica.
 
 | # | Gate | Resultado en el proyecto real | Evidencia |
 | --- | --- | --- | --- |
 | B5 | Backup y restauración | **PASS.** 4 backups diarios de Supabase (último 24/09 07:54 UTC), retención 7 días (plan Pro). Copia cifrada AES-256 (artefacto de 30 días). Restauración en la versión del origen (8 migraciones): 24 tablas con los mismos conteos, esquema idéntico salvo privilegios que fija la plataforma (N-21), y la migración pendiente aplicada sobre la copia con todas las verificaciones. | run 36078082544 · 14/14 |
-| B1 | Migración `20260924120000` | **PASS.** Historial 8/8 igual al repo; el dry-run listó únicamente `20260924120000`; ensayo sobre una copia de los datos reales; aplicada el 25/09 a las 00:46 UTC; 9/9 sincronizadas; smoke público 20/20 (`app_status` 20260924120000, catálogo HTTP 200, 9/9 tablas privadas cerradas). | runs 36078604627 (dry-run) y 36078756560 · 20/20 |
-| B2 | Auth real | **PASS salvo SMTP.** `site_url` `https://bitflowapp.github.io/cauce`, retornos sólo de ese sitio (sin localhost), registro por correo, confirmación obligatoria, compra sin cuenta (150 sesiones por hora e IP), contraseña de 10+ con letras y números (y control de contraseñas filtradas), rotación de tokens, enlaces de 1 h. Pendiente: SMTP propio y plantillas de CAUCE (se cargan junto con el SMTP). | run 36079258576 · 11/13 |
+| B1 | Migración `20260924120000` | **PASS.** Historial 8/8 igual al repo; el dry-run listó únicamente `20260924120000`; ensayo sobre una copia de los datos reales; aplicada el 25/09 a las 00:46 UTC; 9/9 sincronizadas; smoke público 20/20. | runs 36078604627 y 36078756560 |
+| B2 | Auth real | **PASS salvo SMTP.** `site_url` `https://bitflowapp.github.io/cauce`, retornos sólo de ese sitio, confirmación obligatoria, compra sin cuenta (150 sesiones por hora e IP), contraseña de 10+ con letras y números, rotación de tokens, enlaces de 1 h. Las plantillas de CAUCE se cargan junto con el SMTP. | run 36079258576 · 11/13 |
+| P5 | Comercio y cliente de punta a punta, con el build de producción contra el proyecto real (`smoke-previo`) | **PASS 7/7.** Alta por el procedimiento normal (datos, horarios, retiro y envío, categoría, productos, aprobación); compra sin cuenta con retiro, el comercio acepta → prepara → listo → retirado y el cliente lo ve en vivo; enlace de seguimiento sin datos personales; compra con cuenta y envío con encargado y repartidor (total 5.900 con 900 de envío, calculado por el servidor); 320, 390, 430, 768, 1280 y 1440 px en Chromium y WebKit; seguridad (panel sin sesión, comercio ajeno, staff, administración, precio cambiado, total escrito a mano, autoaceptación, saltos de estado, visita sin pedidos). | run 36081431076 |
+| P13 | Residuo QA | **PASS.** QA_USERS 0 · QA_BUSINESSES 0 · QA_ORDERS 0 · QA_STORAGE 0. | run 36081816451 |
+| P14 | Registros (24 h) | **PASS.** Ninguna respuesta 5xx. Los 4xx y errores de la base son las pruebas de seguridad rechazadas y llamadas anteriores a la migración; el único defecto que mostraron (canal en vivo sin sesión) se corrigió (N-23). | run 36082401624 |
 | B3 | SMTP, confirmación y recuperación reales | **STOP:** faltan `CAUCE_SMTP_PASS` y `CAUCE_SMTP_SENDER` (§3.1). | — |
-| B4 | Administración real | Bloqueado: la invitación llega por correo (B3) y se completa en el sitio conectado (B6); falta además el correo de la persona. | — |
-| B6 | Deploy de producción | No publicado: B3 es un gate crítico. | — |
-| — | Smoke post-deploy | Pendiente de B6. | — |
+| B4 | Administración real | El mecanismo pasó en el proyecto real (P5: sólo `private.platform_admins` da acceso). La cuenta de la persona se crea por invitación, que llega por correo (B3). | — |
+| B6 | Deploy de producción | No publicado: B3 es un gate crítico. `main` está protegida. | — |
 
-Estado real completo al 25/09 00:50 UTC (paso `estado`, run 36079325955,
-20/22): proyecto `cauce-production` (sa-east-1) activo, plan Pro, 9/9
-migraciones sin ajenas al repo, Auth completo salvo SMTP y plantillas, 4
-backups diarios sin PITR, y el smoke público entero en verde (contrato
-20260924120000, compra sin cuenta habilitada, catálogo HTTP 200, 9/9 tablas
-privadas cerradas, sin escritura de pedidos ni subida de archivos, Realtime).
-
-Con el SMTP cargado siguen, en este orden: `auth` (carga SMTP y plantillas),
-`correo` (confirmación y recuperación con entrega real), deploy
+Con el SMTP cargado siguen, en este orden (§3.2): `auth` (SMTP y
+plantillas), `correo` (confirmación, recuperación con el enlace anterior
+invalidado e invitación, con entrega real), deploy
 (`.github/deploy-target` = `production` + integrar el PR), `admin`
-(invitación) y `smoke-publicado` (§3.2).
+(invitación), `smoke-publicado`, `limpiar-qa` y `registros`.
 
 Integrar esta rama a `main` **no publica el build conectado** mientras
 `.github/deploy-target` diga `demo`: Pages vuelve a publicar la demostración
@@ -51,7 +46,7 @@ local efímero dentro del runner.
 | Lint | `npm run lint` | ESLint (flat config) sobre todo el repo | PASS |
 | Tipos | `npm run typecheck` | TypeScript `checkJs` sobre `js/` con JSDoc | PASS |
 | Compuertas estáticas | `npm run check` | sintaxis, imports, copy, orígenes permitidos, CSP | PASS |
-| Unitarias | `npm test` | dominio, horarios, telemetría, repositorio, service worker | 190/190 |
+| Unitarias | `npm test` | dominio, horarios, telemetría, repositorio, service worker | 198/198 |
 | SQL embebido | `npm run test:db` | migraciones desde cero + actualización con datos legados, RLS por rol, techos del registro de errores | 52/52 |
 | Integración y seguridad | `npm run test:integration` | Postgres + GoTrue + PostgREST + Storage + Realtime + Mailpit reales | 45/45 |
 | E2E Chromium y WebKit | `npm run e2e:local` | recorridos en navegadores reales contra el build de producción (incluye invitación con correo real) | 29/29 |
@@ -68,10 +63,11 @@ Supabase temporales y tardan varios minutos):
 | --- | --- | --- |
 | B1 de punta a punta sobre Supabase real con sólo las 8 migraciones de producción y datos de esa versión | `node scripts/ensayo-migracion.mjs` | PASS: migró con el mismo comando que en producción, filas intactas, contrato publicado por la API, pedidos en curso operables |
 | Paso `migrar`: al día, pendiente exacta y divergencia simulada | `node scripts/operacion.mjs migrar --local` | PASS · PASS · STOP como corresponde |
-| Paso `correo` (confirmación y recuperación) | `node scripts/operacion.mjs correo --local` | 15/15 |
+| Paso `correo` (confirmación, recuperación con el enlace anterior invalidado e invitación) | `node scripts/operacion.mjs correo --local` | 22/22 |
 | Paso `admin` (existente, invitación, correo malicioso) | `node scripts/operacion.mjs admin --local …` | PASS · PASS · rechazado |
 | Paso `backup` con restauración | `CAUCE_BACKUP_PASSPHRASE=… node scripts/operacion.mjs backup --local` | 12/12, esquema idéntico a las migraciones |
 | Smoke post-deploy (comercios CAUCE QA, Chromium y WebKit) | `CAUCE_SMOKE_LOCAL=1 npm run smoke:publicado` | 7/7 en 31 s, sin residuo |
+| El mismo smoke con el build de producción contra el proyecto real, antes de publicar | paso `smoke-previo` | 7/7 (run 36081431076) |
 | Limpieza de residuo QA (corrida interrumpida simulada) | `node scripts/operacion.mjs limpiar-qa --local --aplicar` | borró 2 cuentas y 1 comercio QA; 172 cuentas reales intactas |
 
 ### Qué cubren las pruebas de seguridad (contra el stack real)
@@ -152,7 +148,8 @@ Actions → New repository secret**. Nunca se pegan en un chat, un issue ni un
 archivo del repositorio.
 
 Cargados el 24/09: `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD` y
-`CAUCE_BACKUP_PASSPHRASE`. **Faltan `CAUCE_SMTP_PASS` y `CAUCE_SMTP_SENDER`.**
+`CAUCE_BACKUP_PASSPHRASE`. **Faltan `CAUCE_SMTP_PASS` y `CAUCE_SMTP_SENDER`**
+(y conviene cargar `CAUCE_ADMIN_EMAIL` en el mismo momento).
 
 | Secreto | Dónde se obtiene | Para |
 | --- | --- | --- |
@@ -161,6 +158,7 @@ Cargados el 24/09: `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD` y
 | `CAUCE_SMTP_PASS` | resend.com → **Domains → Add domain** (un dominio propio; cargar en el DNS los registros SPF, DKIM y MX que muestra y esperar *Verified*) → **API Keys → Create API key** (permiso *Sending access*, ese dominio). Empieza con `re_`. | B2, B3 |
 | `CAUCE_SMTP_SENDER` | Remitente del dominio verificado, por ejemplo `CAUCE Aluminé <hola@el-dominio>` | B2, B3 |
 | `CAUCE_BACKUP_PASSPHRASE` | Frase larga (16+ caracteres) generada por quien opera y guardada también **fuera** de GitHub: sin ella no se pueden abrir las copias cifradas. | B5 |
+| `CAUCE_ADMIN_EMAIL` | El correo de la persona que va a administrar CAUCE. Como secreto no queda en el repositorio; el paso `admin` lo usa si el pedido no trae `email`. | B4 |
 
 Con otro proveedor SMTP se cargan además `CAUCE_SMTP_HOST`, `CAUCE_SMTP_PORT`
 y `CAUCE_SMTP_USER`. Si se usa el ambiente `produccion` de GitHub con
@@ -178,13 +176,24 @@ ningún paso escribe. La evidencia (sin secretos) queda como artefacto del run.
    + copia cifrada (B5).
 3. `migrar` — dry-run; después `aplicar` (ensaya sobre una copia de los datos y
    recién ahí migra) (B1).
-4. `auth` con `aplicar` — URLs del sitio real, compra sin cuenta, SMTP (B2).
-5. `correo` — confirmación y recuperación con entrega real (B3).
-6. `admin` con `email`, `invitar` y `aplicar` — la persona acepta la invitación
-   y elige su contraseña; después `admin` con `aplicar` otorga el privilegio (B4).
+4. `smoke-previo` con `aplicar` — el recorrido completo con el build de
+   producción servido en el runner contra el proyecto real, antes de publicar.
+5. `auth` con `aplicar` — URLs del sitio real, compra sin cuenta, SMTP (B2).
+6. `correo` — confirmación, recuperación (el enlace anterior deja de valer) e
+   invitación, con entrega real a un buzón externo (B3).
 7. Commit `.github/deploy-target` → `production`, CI verde, integrar el PR:
    Pages exige el esquema y publica el build conectado (B6).
-8. `smoke-publicado` — smoke obligatorio sobre el sitio publicado.
+8. `admin` con `invitar` y `aplicar` (correo del secreto `CAUCE_ADMIN_EMAIL`)
+   — la persona acepta la invitación en el sitio ya publicado y elige su
+   contraseña; después `admin` con `aplicar` otorga el privilegio (B4).
+9. `smoke-publicado` con `aplicar` — smoke obligatorio sobre el sitio publicado.
+10. `limpiar-qa` con `aplicar` — confirma QA_USERS, QA_BUSINESSES, QA_ORDERS y
+    QA_STORAGE en 0 (nunca toca otras cuentas).
+11. `registros` — 5xx (falla el paso) y errores de cada servicio en las
+    últimas 24 h.
+
+Los smokes crean comercios y cuentas `CAUCE QA` en el proyecto real (y los
+borran al terminar): por eso también exigen `aplicar` y `confirmar`.
 
 Lo mismo desde una terminal: `SUPABASE_ACCESS_TOKEN=… node scripts/operacion.mjs <paso> [--aplicar]`
 y `npm run smoke:publicado`.
@@ -217,9 +226,10 @@ Nunca se concede administración por `user_metadata` ni desde la app.
 
 ### 3.5 Protección de `main`
 
-En GitHub → Settings → Branches: exigir pull request y los tres checks de CI
-("Lint, tipos, unitarias, SQL y builds", "Integración, seguridad y E2E contra
-Supabase" y "Demostración y backend de desarrollo") antes de integrar.
+Activa (verificado el 25/09). En GitHub → Settings → Branches: exigir pull
+request y los tres checks de CI ("Lint, tipos, unitarias, SQL y builds",
+"Integración, seguridad y E2E contra Supabase" y "Demostración y backend de
+desarrollo") antes de integrar.
 
 ### 3.6 Publicar (B6)
 
@@ -300,6 +310,11 @@ final en pesos, foto si tiene, y si controla stock o sólo marca "agotado".
   Como cualquiera con la clave pública puede reportar, la base pone techos:
   20 por minuto por sesión, 60 por minuto y 5.000 por día en total, con 30
   días de retención (la tabla no pasa de ~150.000 filas).
+- **Registros:** paso `registros` (sólo lectura, sin correos ni IP en la
+  salida): respuestas 5xx de la API, 4xx por ruta y errores de Postgres, Auth,
+  Realtime y Storage de las últimas 24 h, con la última vez que se vio cada
+  uno. Los rechazos de permisos y de transiciones son esperables (pruebas de
+  seguridad, intentos ajenos); un 5xx hace fallar el paso.
 - **Supabase dashboard:** logs de Auth, API y Postgres; Advisors de seguridad
   y rendimiento después de cada migración.
 - **Smoke diario:** `.github/workflows/smoke.yml` corre el smoke de sólo
