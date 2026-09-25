@@ -1,8 +1,8 @@
 {
-  "paso": "smoke-publicado",
+  "paso": "limpiar-qa",
   "aplicar": true,
   "confirmar": "ygqbcvxdrewcnzedfcyo",
   "email": "",
   "invitar": false,
-  "motivo": "Fase B: smoke del sitio publicado después de integrar #4 (panel remoto del comercio), con el build desplegado desde main 10276df. Crea y borra datos CAUCE QA."
+  "motivo": "Fase B: residuo QA en cero después del smoke publicado con el panel integrado (run 36103961675)."
 }
