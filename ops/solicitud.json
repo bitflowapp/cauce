@@ -1,8 +1,8 @@
 {
-  "paso": "registros",
-  "aplicar": false,
-  "confirmar": "",
+  "paso": "admin",
+  "aplicar": true,
+  "confirmar": "ygqbcvxdrewcnzedfcyo",
   "email": "",
   "invitar": false,
-  "motivo": "Verificación final: registros después de publicar main b56beec, del smoke final y de la limpieza QA. 5xx y errores de cada servicio. Sólo lectura."
+  "motivo": "Otorgar la administración de la plataforma a la cuenta de CAUCE_ADMIN_EMAIL (correo desde el secreto) si ya confirmó su correo. Si no confirmó, no escribe nada y lo informa."
 }
