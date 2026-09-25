@@ -20,9 +20,11 @@ import {
 } from './ui/merchant-tools.js';
 import {
   panelSections, resolveSection, canManageBusiness, groupOrders, freshOrderIds, panelSummary, openState,
-  isUnavailableProduct, ORDER_FILTERS,
+  isUnavailableProduct, deliveryBoardData, ORDER_FILTERS,
 } from './core/business-panel.js';
-import { panelNav, openBar, syncBar, newOrdersBanner, ordersBoard, dashboard } from './ui/business-panel.js';
+import {
+  panelNav, openBar, syncBar, newOrdersBanner, ordersBoard, dashboard, deliveryBoard,
+} from './ui/business-panel.js';
 import { renderIcon, renderSticker } from './ui/icons.js';
 import { renderCharacter } from './ui/brand-characters.js';
 import {
@@ -72,6 +74,9 @@ const app = {
   // y los desplegables abiertos, que un redibujo no tiene que cerrar.
   orderFilter: 'activos',
   openDetails: new Set(),
+  // Quién reparte, elegido en una tarjeta y todavía sin confirmar: sobrevive
+  // a los refrescos de fondo para que "Asignar reparto" asigne a esa persona.
+  riderChoice: new Map(),
   formDrafts: new Map(),
   toastTimer: null,
   // Entorno conectado: verticales habilitadas y contrato con la base.
@@ -1535,7 +1540,7 @@ async function viewMerchantPanel(businessId) {
   app.panelSyncedAt = new Date();
 
   const context = { businessId: business.id, localityId: business.localityId, connected, riders, fresh,
-    canManage, online: app.online };
+    canManage, online: app.online, riderChoice: app.riderChoice };
   const state = openState(business);
   const operational = ['inicio', 'pedidos'].includes(section);
   if (!ORDER_FILTERS.includes(app.orderFilter)) app.orderFilter = 'activos';
@@ -1553,7 +1558,8 @@ async function viewMerchantPanel(businessId) {
   } else if (section === 'horarios') {
     content = hoursEditor(business, { editable: business.status !== 'suspended', state });
   } else if (section === 'reparto') {
-    content = merchantRidersTab(business, riders);
+    content = `${deliveryBoard(deliveryBoardData(orders, riders), context, { deliveryEnabled: business.deliveryEnabled !== false })}
+      ${canManage ? merchantRidersTab(business, riders) : ''}`;
   } else if (section === 'equipo') {
     content = teamTab(business, team, { isOwner: role === 'owner', role });
   }
@@ -1576,7 +1582,7 @@ async function viewMerchantPanel(businessId) {
     ${panelNav(business.id, sections, section, { newCount: pending.length })}
     ${operational || ['horarios', 'configuracion'].includes(section) ? openBar(business, state, { canManage, online: app.online }) : ''}
     ${role === 'staff' && section === 'inicio' ? `<p class="microcopy panel-role">Tu rol: ${esc(ROLE_NAMES.staff)}. ${esc(ROLE_HINTS.staff)}</p>` : ''}
-    ${operational && connected ? syncBar({ liveHealthy: app.liveHealthy, syncedAt: app.panelSyncedAt, soundOn: soundReady() }) : ''}
+    ${(operational || section === 'reparto') && connected ? syncBar({ liveHealthy: app.liveHealthy, syncedAt: app.panelSyncedAt, soundOn: soundReady() }) : ''}
     ${content}`;
 }
 
@@ -2999,6 +3005,7 @@ const FORMS = {
       orderId: form.dataset.order, expectedVersion: Number(form.dataset.version),
       nextStatus: 'assigned', riderId: data.riderId,
     });
+    app.riderChoice.delete(form.dataset.order || '');
     toast('Reparto asignado.');
     await render();
   },
@@ -3327,6 +3334,11 @@ function bindEvents() {
   };
   document.addEventListener('input', markDirty);
   document.addEventListener('change', markDirty);
+  document.addEventListener('change', event => {
+    const select = /** @type {HTMLSelectElement} */ (event.target);
+    const form = /** @type {HTMLFormElement|null} */ (select.closest?.('form[data-form="assign-rider"]'));
+    if (form?.dataset.order) app.riderChoice.set(form.dataset.order, select.value);
+  });
   // Los desplegables marcados con data-keep-open siguen abiertos al redibujar.
   document.addEventListener('toggle', event => {
     const details = /** @type {HTMLDetailsElement} */ (event.target);

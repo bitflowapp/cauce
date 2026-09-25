@@ -188,7 +188,9 @@ for (const engine of browsersToRun) {
       await m.locator('form[data-form="rider-create"] button[type="submit"]').click();
       await ready(m);
       assert.ok(Date.now() - started >= 1000, 'ready esperó la respuesta del servidor');
-      assert.ok(await m.getByText(`Reparto lento ${engine}`).isVisible(), 'el resultado ya está dibujado');
+      // La persona nueva aparece en la lista del reparto del comercio (y también
+      // en "quién lleva qué", arriba).
+      assert.ok(await m.locator('.rider-list').getByText(`Reparto lento ${engine}`).isVisible(), 'el resultado ya está dibujado');
       assert.deepEqual(merchant.problems, []);
     } finally { await browser.close(); }
   });

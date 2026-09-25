@@ -7,7 +7,7 @@ import { whatsappNumber } from './merchant-tools.js';
 import { formatArgentinePhone } from '../core/validators.js';
 import { formatDeliveryCode } from '../core/delivery-code.js';
 import {
-  ORDER_GROUPS, groupOrders, merchantOrderActions, orderActionLabel, deliveryStage, isOpenOrder,
+  ORDER_GROUPS, DELIVERY_STAGES, groupOrders, merchantOrderActions, orderActionLabel, deliveryStage, isOpenOrder,
 } from '../core/business-panel.js';
 
 export function agoText(value, now = Date.now()) {
@@ -78,8 +78,9 @@ function customerContact(order) {
   </div>`;
 }
 
-function assignControl(order, riders, { canManage }) {
+function assignControl(order, riders, { canManage, online, riderChoice }) {
   const active = riders.filter(rider => rider.active !== false);
+  const chosen = riderChoice?.get(order.id) || order.riderId;
   if (!active.length) {
     return canManage
       ? `<button class="button secondary" type="button" data-action="set-panel-tab" data-business="${esc(order.businessId)}"
@@ -89,16 +90,16 @@ function assignControl(order, riders, { canManage }) {
   return `<form class="inline-form" data-form="assign-rider" data-order="${esc(order.id)}" data-version="${order.version}">
     <label class="visually-hidden" for="rider-${esc(order.id)}">Quién reparte ${esc(order.code)}</label>
     <select id="rider-${esc(order.id)}" name="riderId" required>
-      ${active.map(rider => `<option value="${esc(rider.id)}" ${rider.id === order.riderId ? 'selected' : ''}>${esc(rider.name)}</option>`).join('')}
+      ${active.map(rider => `<option value="${esc(rider.id)}" ${rider.id === chosen ? 'selected' : ''}>${esc(rider.name)}</option>`).join('')}
     </select>
-    <button class="button" type="submit">Asignar reparto</button>
+    <button class="button" type="submit" ${online ? '' : 'disabled'}>Asignar reparto</button>
   </form>`;
 }
 
 /**
  * @param {any} order
  * @param {{ businessId: string, localityId: string, connected: boolean, riders: any[], fresh?: string[],
- *   canManage?: boolean, online?: boolean, now?: number }} context
+ *   canManage?: boolean, online?: boolean, now?: number, riderChoice?: Map<string, string> }} context
  */
 export function orderCard(order, context) {
   const { riders = [], fresh = [], canManage = false, online = true, now = Date.now() } = context;
@@ -133,7 +134,7 @@ export function orderCard(order, context) {
         <p class="order-card-address">${renderIcon('pin', 14)} ${esc(order.customer?.address || 'Sin dirección')}</p>
         <p class="order-card-stage">${esc(deliveryStage(order, riderName))}</p>
         ${order.deliveryCode && open ? `<p class="microcopy">Código de entrega: <strong>${esc(formatDeliveryCode(order.deliveryCode.code))}</strong> · pedíselo a la persona al entregar.</p>` : ''}
-        ${forward.includes('assigned') ? assignControl(order, riders, { canManage }) : ''}
+        ${forward.includes('assigned') ? assignControl(order, riders, { canManage, online, riderChoice: context.riderChoice }) : ''}
       </section>` : ''}
       <p class="order-panel-total"><span>Total</span> <strong>${money(order.total)}</strong>
         ${order.deliveryFee ? `<small>incluye envío ${money(order.deliveryFee)}</small>` : ''}</p>
@@ -176,6 +177,45 @@ export function ordersBoard(orders, context, { filter = 'activos', businessActiv
     </section>`;
   }).join('');
   return `${orderFilters(groups, filter)}<div class="orders-board ${filter === 'activos' ? '' : 'is-single'}">${sections}</div>`;
+}
+
+// ── reparto ──
+// Tablero de despacho: las mismas tarjetas que Pedidos, sólo envíos, por
+// etapa de la entrega; arriba, quién lleva qué ahora.
+/**
+ * @param {{ stages: Record<string, any[]>, preparing: number, deliveredToday: number,
+ *   load: { rider: any, count: number }[] }} data  Lo que arma deliveryBoardData.
+ * @param {Parameters<typeof orderCard>[1]} context
+ * @param {{ deliveryEnabled?: boolean }} [options]
+ */
+export function deliveryBoard(data, context, { deliveryEnabled = true } = {}) {
+  const id = context.businessId;
+  const load = data.load.map(({ rider, count }) => {
+    const phone = String(rider.phone || '').replace(/[^\d+]/g, '');
+    return `<li class="${count ? 'is-busy' : ''}">
+      <span><strong>${esc(rider.name)}</strong> · ${count ? `${count} ${count === 1 ? 'pedido' : 'pedidos'} en curso` : 'sin pedidos'}</span>
+      ${phone ? `<a href="tel:${esc(phone)}">${renderIcon('phone', 14)} Llamar</a>` : ''}
+    </li>`;
+  }).join('');
+  const stages = DELIVERY_STAGES.map(stage => {
+    const list = data.stages[stage.key] || [];
+    return `<section class="orders-group" aria-labelledby="reparto-${stage.key}">
+      <h2 class="orders-group-title" id="reparto-${stage.key}">${esc(stage.label)} <span class="orders-group-count">${list.length}</span></h2>
+      ${list.length ? `<div class="orders-group-list">${list.map(order => orderCard(order, context)).join('')}</div>`
+        : `<p class="quiet orders-empty">${esc(stage.empty)}</p>`}
+    </section>`;
+  }).join('');
+  return `
+    <section class="panel-section" aria-labelledby="reparto-ahora">
+      <h2 class="checkout-section-title" id="reparto-ahora">Envíos ahora</h2>
+      ${deliveryEnabled ? '' : '<div class="notice">El comercio no ofrece envío en este momento: se activa en Configuración.</div>'}
+      <p class="microcopy delivery-counts">
+        ${data.preparing ? `<a href="${panelHref(id, 'pedidos')}">${data.preparing} ${data.preparing === 1 ? 'envío' : 'envíos'} en preparación</a>` : 'Ningún envío en preparación'}
+        · ${data.deliveredToday} ${data.deliveredToday === 1 ? 'entregado' : 'entregados'} hoy
+      </p>
+      ${load ? `<ul class="plain-list rider-load" aria-label="Quién lleva qué">${load}</ul>` : ''}
+    </section>
+    <div class="orders-board delivery-board">${stages}</div>`;
 }
 
 // ── inicio ──

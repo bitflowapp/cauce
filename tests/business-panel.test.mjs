@@ -7,7 +7,7 @@ import { readFile, readdir } from 'node:fs/promises';
 import {
   panelSections, resolveSection, groupOrders, orderGroupOf, merchantOrderActions, orderActionLabel,
   deliveryStage, freshOrderIds, localDayKey, panelSummary, openState, closingTime, isUnavailableProduct,
-  ORDER_GROUPS, canManageBusiness,
+  deliveryBoardData, ORDER_GROUPS, canManageBusiness,
 } from '../js/core/business-panel.js';
 
 const BUSINESS = 'b1';
@@ -30,12 +30,12 @@ async function serverMerchantTransitions() {
   return rows.filter(row => row.actor === 'merchant');
 }
 
-test('cada rol ve sus secciones; staff opera pedidos y catálogo', () => {
+test('cada rol ve sus secciones; staff opera pedidos, catálogo y reparto', () => {
   const keys = (role, connected) => panelSections(role, { connected }).map(section => section.key);
   const all = ['inicio', 'pedidos', 'catalogo', 'horarios', 'configuracion', 'reparto', 'equipo'];
   assert.deepEqual(keys('owner', true), all);
   assert.deepEqual(keys('manager', true), all);
-  assert.deepEqual(keys('staff', true), ['inicio', 'pedidos', 'catalogo']);
+  assert.deepEqual(keys('staff', true), ['inicio', 'pedidos', 'catalogo', 'reparto']);
   // En la demostración no hay horarios ni equipo en la base.
   assert.deepEqual(keys('owner', false), ['inicio', 'pedidos', 'catalogo', 'configuracion', 'reparto']);
   assert.equal(canManageBusiness('staff'), false);
@@ -123,6 +123,32 @@ test('la entrega se describe en palabras del comercio', () => {
   assert.equal(deliveryStage(order('assigned'), 'Juan'), 'Asignado a Juan: falta que lo retire.');
   assert.equal(deliveryStage(order('on_the_way'), 'Juan'), 'En camino con Juan.');
   assert.equal(deliveryStage(order('ready', { fulfillment: 'pickup' })), '', 'un retiro no tiene entrega');
+});
+
+test('reparto: sólo envíos, por etapa, y quién lleva qué', () => {
+  const now = new Date('2026-09-24T20:00:00Z');
+  const riders = [{ id: 'r1', name: 'Juan', active: true }, { id: 'r2', name: 'Ana', active: true },
+    { id: 'r3', name: 'Pausado libre', active: false }, { id: 'r4', name: 'Pausado con pedido', active: false }];
+  const orders = [
+    order('ready', { id: 'listo-2', createdAt: '2026-09-24T19:10:00Z' }),
+    order('ready', { id: 'listo-1', createdAt: '2026-09-24T19:00:00Z' }),
+    order('ready', { id: 'retiro', fulfillment: 'pickup' }),
+    order('assigned', { id: 'asig', riderId: 'r1' }),
+    order('picked_up', { id: 'retirado', riderId: 'r1' }),
+    order('on_the_way', { id: 'camino', riderId: 'r4' }),
+    order('arrived', { id: 'llego', riderId: 'r2' }),
+    order('preparing', { id: 'prep' }),
+    order('submitted', { id: 'nuevo' }),
+    order('delivered', { id: 'entregado', riderId: 'r1', history: [{ status: 'delivered', at: '2026-09-24T18:00:00Z' }] }),
+  ];
+  const data = deliveryBoardData(orders, riders, { now });
+  assert.deepEqual(data.stages['para-asignar'].map(item => item.id), ['listo-1', 'listo-2'], 'el retiro no es reparto; el más viejo primero');
+  assert.deepEqual(data.stages['por-salir'].map(item => item.id), ['asig', 'retirado']);
+  assert.deepEqual(data.stages['en-camino'].map(item => item.id).sort(), ['camino', 'llego']);
+  assert.equal(data.preparing, 2);
+  assert.equal(data.deliveredToday, 1);
+  assert.deepEqual(data.load.map(entry => [entry.rider.name, entry.count]),
+    [['Juan', 2], ['Ana', 1], ['Pausado con pedido', 1]], 'lo entregado no cuenta; quien está pausado sin pedidos no aparece');
 });
 
 test('un pedido nuevo es "fresco" sólo si apareció desde la última mirada', () => {

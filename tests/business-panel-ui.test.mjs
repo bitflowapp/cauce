@@ -2,9 +2,9 @@
 // ver en cada tarjeta, con lo escrito por el cliente siempre escapado.
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { orderCard, ordersBoard, dashboard, newOrdersBanner, panelNav } from '../js/ui/business-panel.js';
+import { orderCard, ordersBoard, dashboard, newOrdersBanner, panelNav, deliveryBoard } from '../js/ui/business-panel.js';
 import { hoursEditor, hoursFromEntries, allDaysClosed } from '../js/ui/merchant-tools.js';
-import { panelSections } from '../js/core/business-panel.js';
+import { panelSections, deliveryBoardData } from '../js/core/business-panel.js';
 
 const context = { businessId: 'b1', localityId: 'alumine', connected: true, canManage: true, online: true,
   riders: [{ id: 'r1', name: 'Juan', active: true }, { id: 'r2', name: 'Inactiva', active: false }], fresh: [],
@@ -118,4 +118,24 @@ test('horarios: los siete días cerrados no se guardan como "sin horario"', () =
   assert.equal(allDaysClosed(name => week[name]), true);
   delete week['d3-closed'];
   assert.equal(allDaysClosed(name => week[name]), false);
+});
+
+test('reparto: tablero de envíos, quién lleva qué y la elección que no se pierde', () => {
+  const orders = [order(), order({ id: 'o2', code: 'CA-0043', status: 'on_the_way', riderId: 'r1' }),
+    order({ id: 'o3', code: 'CA-0044', status: 'ready', fulfillment: 'pickup' })];
+  const riders = [...context.riders, { id: 'r3', name: 'Beto', active: true, phone: '2942 555111' }];
+  const html = deliveryBoard(deliveryBoardData(orders, riders, { now: new Date(context.now) }), { ...context, riders });
+  assert.ok(html.includes('aria-label="Pedido CA-0042"') && html.includes('aria-label="Pedido CA-0043"'));
+  assert.equal(html.includes('CA-0044'), false, 'un retiro no aparece en reparto');
+  assert.match(html, /<strong>Juan<\/strong> · 1 pedido en curso/);
+  assert.match(html, /<strong>Beto<\/strong> · sin pedidos[\s\S]*href="tel:2942555111"/);
+  assert.equal(html.includes('Inactiva'), false);
+  assert.ok(html.includes('Nadie tiene un pedido por salir.'));
+  assert.ok(deliveryBoard(deliveryBoardData([], []), context, { deliveryEnabled: false }).includes('no ofrece envío'));
+
+  // Una persona elegida y todavía sin confirmar sigue elegida tras un refresco.
+  const chosen = orderCard(order(), { ...context, riders, riderChoice: new Map([['o1', 'r3']]) });
+  assert.match(chosen, /<option value="r3" selected>Beto</);
+  assert.equal(/<option value="r1" selected>/.test(chosen), false);
+  assert.match(orderCard(order(), { ...context, online: false }), /type="submit" disabled>Asignar reparto</);
 });

@@ -169,7 +169,7 @@ for (const engine of browsersToRun) {
       await signIn(staff.page, people.staffA);
       await go(staff.page, `#panel/${A.id}`);
       const tabs = await staff.page.getByRole('tab').allTextContents();
-      assert.deepEqual(tabs.map(text => text.replace(/\d+/g, '').trim()), ['Inicio', 'Pedidos', 'Catálogo']);
+      assert.deepEqual(tabs.map(text => text.replace(/\d+/g, '').trim()), ['Inicio', 'Pedidos', 'Catálogo', 'Reparto']);
       await staff.page.getByRole('tab', { name: 'Catálogo' }).click();
       await ready(staff.page);
       assert.equal(await staff.page.locator('form[data-form="product-create"]').count(), 0);

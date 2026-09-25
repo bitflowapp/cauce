@@ -6958,3 +6958,21 @@ main {
 .hours-preview { margin: 0 0 8px; }
 .hours-preview .hours-list { margin: 4px 0 0; }
 .panel-role { margin: 0 0 12px; }
+
+/* Reparto: quién lleva qué ahora, con llamada a un toque. */
+.delivery-counts { margin: 0 0 10px; }
+.rider-load { display: grid; gap: 6px; margin: 0; }
+.rider-load li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+.rider-load li.is-busy { border-color: var(--teal-accent); }
+.rider-load a { display: inline-flex; align-items: center; gap: 4px; min-height: 42px; font-weight: 600; }
+.delivery-board { margin-top: 4px; }
+.delivery-board + .panel-section { margin-top: 28px; }

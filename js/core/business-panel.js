@@ -14,7 +14,9 @@ export const PANEL_SECTIONS = Object.freeze([
   Object.freeze({ key: 'catalogo', label: 'Catálogo', manage: false, connected: false }),
   Object.freeze({ key: 'horarios', label: 'Horarios', manage: true, connected: true }),
   Object.freeze({ key: 'configuracion', label: 'Configuración', manage: true, connected: false }),
-  Object.freeze({ key: 'reparto', label: 'Reparto', manage: true, connected: false }),
+  // Reparto es operativo para todo el equipo; cargar o pausar a quien reparte
+  // (business_riders) sólo lo permite la base a titular y encargado/a.
+  Object.freeze({ key: 'reparto', label: 'Reparto', manage: false, connected: false }),
   Object.freeze({ key: 'equipo', label: 'Equipo', manage: true, connected: true }),
 ]);
 const SECTION_ALIASES = Object.freeze({ datos: 'configuracion', resumen: 'inicio' });
@@ -128,6 +130,36 @@ export function deliveryStage(order, riderName = '') {
     case 'canceled': return 'Envío cancelado.';
     default: return '';
   }
+}
+
+// ── tablero de reparto ──
+// Sólo envíos: qué falta asignar, qué está por salir y qué va en camino, y
+// cuántos pedidos lleva cada persona de reparto en este momento.
+export const DELIVERY_STAGES = Object.freeze([
+  Object.freeze({ key: 'para-asignar', label: 'Para asignar', statuses: Object.freeze(['ready']),
+    empty: 'Nada listo esperando reparto.' }),
+  Object.freeze({ key: 'por-salir', label: 'Asignados, por salir', statuses: Object.freeze(['assigned', 'picked_up']),
+    empty: 'Nadie tiene un pedido por salir.' }),
+  Object.freeze({ key: 'en-camino', label: 'En camino', statuses: Object.freeze(['on_the_way', 'arrived']),
+    empty: 'Nada en camino.' }),
+]);
+const ON_ROAD = Object.freeze(['assigned', 'picked_up', 'on_the_way', 'arrived']);
+
+/** @param {any[]} orders @param {any[]} riders @param {{ now?: Date, timeZone?: string }} [options] */
+export function deliveryBoardData(orders = [], riders = [], { now = new Date(), timeZone = DEFAULT_TIMEZONE } = {}) {
+  const delivery = orders.filter(order => order?.fulfillment === 'delivery');
+  const today = localDayKey(now, timeZone);
+  const load = riders.map(rider => ({ rider,
+    count: delivery.filter(order => order.riderId === rider.id && ON_ROAD.includes(order.status)).length }));
+  return {
+    stages: Object.fromEntries(DELIVERY_STAGES.map(stage => [stage.key,
+      delivery.filter(order => stage.statuses.includes(order.status)).sort(byCreated)])),
+    preparing: delivery.filter(order => ['submitted', 'accepted', 'preparing'].includes(order.status)).length,
+    deliveredToday: delivery.filter(order => order.status === 'delivered'
+      && localDayKey(closedAt(order, 'delivered'), timeZone) === today).length,
+    // Quien está pausado sólo aparece si todavía lleva algo.
+    load: load.filter(entry => entry.rider.active !== false || entry.count > 0),
+  };
 }
 
 // ── pedidos nuevos ──
