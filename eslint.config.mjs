@@ -4,7 +4,9 @@ import js from '@eslint/js';
 import globals from 'globals';
 
 export default [
-  { ignores: ['node_modules/**', 'dist/**', 'dist-production/**', '.local/**', 'evidence/**', 'supabase/**', 'CAUCE-demo.html'] },
+  // De supabase/ se revisan sólo las Edge Functions (JavaScript para Deno).
+  { ignores: ['node_modules/**', 'dist/**', 'dist-production/**', '.local/**', 'evidence/**', 'supabase/*',
+    '!supabase/functions', 'CAUCE-demo.html'] },
   js.configs.recommended,
   {
     files: ['js/**/*.js'],
@@ -13,6 +15,12 @@ export default [
   {
     files: ['service-worker.js'],
     languageOptions: { ecmaVersion: 2023, sourceType: 'script', globals: { ...globals.serviceworker } },
+  },
+  {
+    // Edge Functions: APIs web estándar y Deno; nada del navegador ni de Node.
+    files: ['supabase/functions/**/*.js'],
+    languageOptions: { ecmaVersion: 2023, sourceType: 'module',
+      globals: { ...globals.worker, Deno: 'readonly', EdgeRuntime: 'readonly' } },
   },
   {
     files: ['scripts/**/*.mjs', 'tests/**/*.mjs'],
