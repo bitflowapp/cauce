@@ -1,8 +1,8 @@
 {
-  "paso": "smoke-previo",
-  "aplicar": true,
-  "confirmar": "ygqbcvxdrewcnzedfcyo",
+  "paso": "registros",
+  "aplicar": false,
+  "confirmar": "",
   "email": "",
   "invitar": false,
-  "motivo": "Fase D: el build de producción de feat/cauce-pilot-metrics contra el proyecto real ya migrado, antes de integrar y publicar: circuito completo con reparto y la administración con el día del piloto. Crea y borra datos CAUCE QA."
+  "motivo": "Sandbox de Mercado Pago, paso 1: antes de tocar pagos, 5xx y errores de cada servicio del proyecto real en las últimas 24 h. Sólo lectura."
 }
