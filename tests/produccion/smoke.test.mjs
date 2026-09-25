@@ -263,6 +263,11 @@ test('seguridad sobre el sitio y la API publicados', async () => {
     await signIn(admin.page, people.admin);
     await go(admin.page, '#admin');
     assert.ok(await admin.page.getByRole('heading', { name: 'Administración' }).isVisible());
+    // El día del piloto: números de hoy y el estado de cada comercio publicado.
+    assert.ok(await admin.page.getByRole('heading', { name: 'Hoy en CAUCE' }).isVisible());
+    assert.ok(Number(await admin.page.locator('.admin-today .metric', { hasText: 'Pedidos hoy' }).locator('dd').textContent()) >= 1);
+    assert.match(await admin.page.locator('.admin-business-list li', { hasText: A.name }).textContent(), /pedidos?\s+hoy/);
+    assert.ok(await admin.page.getByRole('heading', { name: /Necesitan atención/ }).isVisible());
   } finally { await browser.close(); }
 
   // API: precio, estado, tabla directa y pedidos ajenos.
