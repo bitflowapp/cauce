@@ -1,8 +1,8 @@
 {
-  "paso": "smoke-publicado",
+  "paso": "limpiar-qa",
   "aplicar": true,
   "confirmar": "ygqbcvxdrewcnzedfcyo",
   "email": "",
   "invitar": false,
-  "motivo": "Fase D: smoke obligatorio sobre el sitio publicado con la administración del piloto integrada (main 7e328a6): el mismo pedido de punta a punta con reparto, administración con el día del piloto, anchos y seguridad sobre la API publicada. Crea y borra datos CAUCE QA."
+  "motivo": "Fase D: residuo QA en cero después del smoke publicado con la administración del piloto (run 36112454465)."
 }
