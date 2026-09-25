@@ -27,6 +27,8 @@ import {
 import {
   panelNav, openBar, syncBar, newOrdersBanner, ordersBoard, dashboard, deliveryBoard,
 } from './ui/business-panel.js';
+import { riderHome, riderUnlinked } from './ui/rider.js';
+import { deliveryCodeFeedback } from './core/rider-app.js';
 import { renderIcon, renderSticker } from './ui/icons.js';
 import { renderCharacter } from './ui/brand-characters.js';
 import {
@@ -271,7 +273,7 @@ const ROUTE_ALIASES = Object.freeze({
   business: 'panel',
   presentacion: 'institucional',
   'taxi-driver': 'taxista',
-  rider: 'panel',
+  rider: 'entregas',
 });
 
 function route() {
@@ -1218,6 +1220,7 @@ async function viewActivity() {
           <span><strong>Ingresar o crear cuenta</strong><span class="quiet">${taxi ? 'Necesaria para comercios, taxistas y administración.' : 'Para comercios y su equipo. Para comprar no hace falta.'}</span></span>
         </a>`}
       ${hasRole('merchant') ? `<a class="secondary-access" href="#panel"><span class="secondary-access-icon" aria-hidden="true">${renderIcon('store', 26)}</span><span><strong>Panel de mi comercio</strong><span class="quiet">Pedidos, catálogo y reparto.</span></span></a>` : ''}
+      ${hasRole('rider') ? `<a class="secondary-access" href="#entregas"><span class="secondary-access-icon" aria-hidden="true">${renderIcon('delivery', 26)}</span><span><strong>Mis entregas</strong><span class="quiet">Los pedidos que te asignó el comercio.</span></span></a>` : ''}
       ${hasRole('driver') && taxi ? `<a class="secondary-access" href="#taxista"><span class="secondary-access-icon" aria-hidden="true">${renderIcon('taxi', 26)}</span><span><strong>Panel de taxista</strong><span class="quiet">Disponibilidad y solicitudes.</span></span></a>` : ''}
       ${hasRole('admin') ? `<a class="secondary-access" href="#admin"><span class="secondary-access-icon" aria-hidden="true">${renderIcon('shield-check', 26)}</span><span><strong>Administración</strong><span class="quiet">Altas pendientes y supervisión.</span></span></a>` : ''}
       ${app.repository.capabilities.reset ? `
@@ -1245,6 +1248,7 @@ async function viewAccount() {
         <p class="quiet">Accesos: ${esc(actor().roles.map(role => ROLE_LABELS[role] || role).join(' · '))}</p>
         <div class="stack">
           ${hasRole('merchant') ? '<a class="button secondary" href="#panel">Panel de mi comercio</a>' : '<a class="button secondary" href="#alta-comercio">Sumar mi comercio</a>'}
+          ${hasRole('rider') ? '<a class="button secondary" href="#entregas">Mis entregas</a>' : ''}
           ${!feature('taxi') ? '' : hasRole('driver') ? '<a class="button secondary" href="#taxista">Panel de taxista</a>' : '<a class="button secondary" href="#taxista">Registrarme como taxista</a>'}
           ${hasRole('admin') ? '<a class="button secondary" href="#admin">Administración</a>' : ''}
           <button class="button danger" type="button" data-action="sign-out">Cerrar sesión</button>
@@ -1520,7 +1524,7 @@ async function viewMerchantPanel(businessId) {
   const sections = panelSections(role, { connected });
   const section = resolveSection(route().extra, sections);
 
-  const [orders, products, riders, categories, team, serverRequirements, productCategories] = await Promise.all([
+  const [orders, products, riders, categories, team, serverRequirements, productCategories, riderAccounts] = await Promise.all([
     app.repository.query('businessOrders', { businessId }),
     app.repository.query('products', { businessId }),
     ['inicio', 'pedidos', 'reparto'].includes(section) ? app.repository.query('riders', { businessId }) : [],
@@ -1529,6 +1533,7 @@ async function viewMerchantPanel(businessId) {
     // En el entorno conectado los requisitos de publicación los decide el servidor.
     connected && canManage && section === 'configuracion' ? app.repository.query('businessRequirements', { businessId }) : null,
     connected && section === 'catalogo' ? app.repository.query('productCategories', { businessId }) : [],
+    connected && canManage && section === 'reparto' ? app.repository.query('riderAccounts', { businessId }) : {},
   ]);
   const requirements = serverRequirements || missingPublicationRequirements(business, products);
 
@@ -1563,7 +1568,7 @@ async function viewMerchantPanel(businessId) {
     content = hoursEditor(business, { editable: business.status !== 'suspended', state });
   } else if (section === 'reparto') {
     content = `${deliveryBoard(deliveryBoardData(orders, riders), context, { deliveryEnabled: business.deliveryEnabled !== false })}
-      ${canManage ? merchantRidersTab(business, riders) : ''}`;
+      ${canManage ? merchantRidersTab(business, riders, riderAccounts) : ''}`;
   } else if (section === 'equipo') {
     content = teamTab(business, team, { isOwner: role === 'owner', role });
   }
@@ -1956,15 +1961,33 @@ function merchantDataTab(business, missing, categories = []) {
     </section>`;
 }
 
-function merchantRidersTab(business, riders) {
+function merchantRidersTab(business, riders, accounts = {}) {
+  const connected = isConnected();
+  const disabled = app.online ? '' : 'disabled';
   return `
     <section class="panel-section">
       <h2 class="checkout-section-title">Reparto del comercio</h2>
       <p class="quiet">Cada comercio administra su propio reparto. CAUCE no opera una flota.</p>
+      ${connected ? `<p class="microcopy">Con una cuenta de CAUCE vinculada, la persona ve en su teléfono (Mis entregas) sólo los
+        pedidos que le asignes: marca retiro, salida y llegada, y entrega con el código del cliente. Sin cuenta, seguís marcando
+        cada paso desde acá.</p>` : ''}
       ${riders.length ? `<ul class="plain-list rider-list">${riders.map(rider => `
-        <li class="${rider.active === false ? 'is-inactive' : ''}"><span><strong>${esc(rider.name)}</strong>${rider.phone ? ` · ${esc(rider.phone)}` : ''}${rider.active === false ? ' · <span class="quiet">inactivo</span>' : ''}</span>
-          ${isConnected() ? `<button class="link-button" type="button" data-action="rider-toggle" data-rider="${esc(rider.id)}"
-            data-active="${rider.active === false ? 'true' : 'false'}">${rider.active === false ? 'Reactivar' : 'Pausar'}</button>` : ''}</li>`).join('')}</ul>`
+        <li class="${rider.active === false ? 'is-inactive' : ''}"><span><strong>${esc(rider.name)}</strong>${rider.phone ? ` · ${esc(rider.phone)}` : ''}${rider.active === false ? ' · <span class="quiet">inactivo</span>' : ''}
+          ${connected ? `<span class="rider-account">${rider.linked
+            ? `${renderIcon('check', 12)} Cuenta vinculada${accounts[rider.id] ? `: ${esc(accounts[rider.id])}` : ''}`
+            : 'Sin cuenta vinculada'}</span>` : ''}</span>
+          ${connected ? `<span class="rider-row-actions">
+            <button class="link-button" type="button" data-action="rider-toggle" data-rider="${esc(rider.id)}"
+              data-active="${rider.active === false ? 'true' : 'false'}">${rider.active === false ? 'Reactivar' : 'Pausar'}</button>
+            ${rider.linked ? `<button class="link-button" type="button" data-action="rider-unlink" data-rider="${esc(rider.id)}"
+              data-name="${esc(rider.name)}" ${disabled}>Desvincular cuenta</button>` : ''}
+          </span>` : ''}
+          ${connected && !rider.linked && rider.active !== false ? `<form class="inline-form rider-link" data-form="rider-link" data-rider="${esc(rider.id)}">
+            <label class="visually-hidden" for="rider-link-${esc(rider.id)}">Correo de la cuenta de ${esc(rider.name)}</label>
+            <input id="rider-link-${esc(rider.id)}" name="email" type="email" inputmode="email" autocomplete="off" required
+              maxlength="254" placeholder="Correo de su cuenta de CAUCE">
+            <button class="button secondary" type="submit" ${disabled}>Vincular cuenta</button>
+          </form>` : ''}</li>`).join('')}</ul>`
         : '<p class="quiet">Todavía no cargaste personas de reparto. Si repartís vos, cargate con tu nombre.</p>'}
       <form class="checkout-form" data-form="rider-create" data-business="${esc(business.id)}">
         <div class="field">
@@ -1975,9 +1998,41 @@ function merchantRidersTab(business, riders) {
           <label for="rider-phone">Teléfono (opcional)</label>
           <input id="rider-phone" name="phone" type="tel" inputmode="tel" maxlength="24">
         </div>
-        <button class="button full" type="submit" ${app.online ? '' : 'disabled'}>Agregar al reparto</button>
+        <button class="button full" type="submit" ${disabled}>Agregar al reparto</button>
       </form>
     </section>`;
+}
+
+// ───────────────────────── reparto ─────────────────────────
+
+// Quien reparte para un comercio, desde el teléfono. La base le entrega sólo
+// sus pedidos (rider_orders) y decide cada paso; la interfaz sólo los ordena.
+async function viewRider() {
+  if (!isConnected()) {
+    return `${backLink('#inicio', 'Inicio')}
+      <section class="page-header"><h1 class="page-title">Mis entregas</h1></section>
+      <div class="notice">Las entregas desde el teléfono funcionan con CAUCE conectado. En esta demostración el comercio
+        marca cada paso desde su panel.</div>`;
+  }
+  if (!isSignedIn()) {
+    // Después de ingresar vuelve acá.
+    app.returnTo = '#entregas';
+    return `${backLink('#inicio', 'Inicio')}
+      <section class="page-header">
+        <h1 class="page-title">Mis entregas</h1>
+        <p class="quiet">Ingresá con la cuenta que el comercio vinculó a tu reparto.</p>
+      </section>
+      <a class="button full" href="#cuenta">Ingresar</a>`;
+  }
+  const [orders, riders] = await Promise.all([
+    app.repository.query('riderOrders'),
+    app.repository.query('myRiderProfiles'),
+  ]);
+  if (!riders.some(rider => rider.active) && !orders.length) {
+    return `${offlineBanner()}${riderUnlinked(actor().email, { paused: riders.length > 0 })}`;
+  }
+  const feedback = app.riderFeedback && orders.some(order => order.id === app.riderFeedback.orderId) ? app.riderFeedback : null;
+  return `${offlineBanner()}${riderHome({ orders, riders, online: app.online, updatedAt: new Date().toISOString(), feedback })}`;
 }
 
 // ───────────────────────── administración ─────────────────────────
@@ -2695,6 +2750,30 @@ const ACTIONS = {
     toast(slot === 'cover' ? 'Portada quitada.' : 'Logo quitado.');
     await render();
   },
+  // Reparto: retiré, salí, llegué. La base valida que el pedido sea de esta
+  // persona y que el paso corresponda.
+  async 'rider-step'(element) {
+    const { order, version, next } = element.dataset;
+    await runCommand('order.transition', { orderId: order, expectedVersion: Number(version), nextStatus: next });
+    app.riderFeedback = null;
+    toast({ picked_up: 'Pedido retirado. El cliente lo ve en su seguimiento.', on_the_way: 'En camino. El cliente ya lo sabe.',
+      arrived: 'Llegaste. Pedile el código al cliente para entregar.' }[next || ''] || 'Listo.');
+    await render();
+  },
+  'rider-refresh'() {
+    return render();
+  },
+  async 'rider-unlink'(element) {
+    const confirmed = await askConfirm({
+      title: `¿Desvincular la cuenta de ${element.dataset.name || 'esta persona'}?`,
+      message: 'Deja de ver sus entregas en el teléfono. Los pedidos asignados siguen en tu panel y los podés completar desde acá.',
+      confirmLabel: 'Desvincular', cancelLabel: 'Volver',
+    });
+    if (!confirmed) return;
+    await runCommand('rider.unlinkAccount', { riderId: element.dataset.rider });
+    toast('Cuenta desvinculada.');
+    await render();
+  },
   async 'order-transition'(element) {
     const { order, version, next } = element.dataset;
     let reason = '';
@@ -2897,7 +2976,8 @@ const FORMS = {
     app.authNotice = '';
     toast(`Hola, ${actor().name}.`);
     // Si se pidió ingresar a mitad de una compra, se vuelve al carrito.
-    const target = app.returnTo || (hasRole('admin') ? '#admin' : hasRole('merchant') ? '#panel' : '#actividad');
+    const target = app.returnTo || (hasRole('admin') ? '#admin' : hasRole('merchant') ? '#panel'
+      : hasRole('rider') ? '#entregas' : '#actividad');
     app.returnTo = null;
     go(target);
     await render({ focus: true });
@@ -3055,6 +3135,27 @@ const FORMS = {
     await render();
   },
 
+  // Entregar con el código del cliente. Un código equivocado vuelve como
+  // respuesta (el intento queda registrado en la base), no como error.
+  async 'rider-deliver'(form) {
+    const data = Object.fromEntries(new FormData(form));
+    const result = await runCommand('order.confirmDelivery', {
+      orderId: form.dataset.order, expectedVersion: Number(form.dataset.version), code: data.code,
+    });
+    const feedback = deliveryCodeFeedback(result);
+    app.riderFeedback = feedback.ok ? null : { orderId: form.dataset.order, message: feedback.message };
+    toast(feedback.message, feedback.ok ? 'info' : 'error');
+    await render();
+  },
+
+  async 'rider-link'(form) {
+    const data = Object.fromEntries(new FormData(form));
+    await runCommand('rider.linkAccount', { riderId: form.dataset.rider, email: data.email });
+    form.reset();
+    toast('Cuenta vinculada. La persona ya ve sus entregas en “Mis entregas”.');
+    await render();
+  },
+
   async 'assign-rider'(form) {
     const data = Object.fromEntries(new FormData(form));
     await runCommand('order.transition', {
@@ -3174,6 +3275,7 @@ const VIEWS = {
   taxi: viewTaxi,
   viaje: viewTrip,
   taxista: viewDriver,
+  entregas: viewRider,
   institucional: viewInstitutional,
   recuperar: viewRecovery,
   seguimiento: viewTracking,
@@ -3185,9 +3287,10 @@ const ROUTE_TITLES = Object.freeze({
   actividad: 'Mis pedidos · CAUCE', cuenta: 'Tu cuenta · CAUCE', 'alta-comercio': 'Sumar mi comercio · CAUCE',
   panel: 'Panel del comercio · CAUCE', admin: 'Administración · CAUCE', institucional: 'Qué es CAUCE',
   recuperar: 'Recuperar contraseña · CAUCE', seguimiento: 'Seguimiento de pedido · CAUCE',
+  entregas: 'Mis entregas · CAUCE',
 });
 const PRIVATE_ROUTES = new Set(['carrito', 'pedido', 'actividad', 'cuenta', 'alta-comercio', 'panel', 'admin',
-  'recuperar', 'seguimiento', 'taxista', 'viaje']);
+  'recuperar', 'seguimiento', 'taxista', 'viaje', 'entregas']);
 const TAXI_ROUTES = new Set(['taxi', 'viaje', 'taxista']);
 
 function applyRouteMeta(page) {
@@ -3215,7 +3318,7 @@ const live = { key: '', stop: null, timer: null };
 // Realtime es la vía principal; el sondeo es el respaldo. Un teléfono que se
 // bloquea o una red móvil que cambia cortan el WebSocket sin aviso: el panel
 // igual se actualiza cada 30 segundos y al volver a la pestaña.
-const POLL_MS = Object.freeze({ panel: 30000, pedido: 45000, seguimiento: 30000, taxista: 15000 });
+const POLL_MS = Object.freeze({ panel: 30000, pedido: 45000, seguimiento: 30000, taxista: 15000, entregas: 15000 });
 
 function syncLive(page, param) {
   const me = actor();
@@ -3234,7 +3337,8 @@ function syncLive(page, param) {
     else if (page === 'taxista' && me?.driverId && feature('taxi')) scopes.push({ kind: 'driverTrips', driverId: me.driverId });
   }
   const pollEvery = connected && (panel || order
-    || (page === 'seguimiento' && param) || (page === 'taxista' && me?.driverId)) ? POLL_MS[page] : 0;
+    || (page === 'seguimiento' && param) || (page === 'taxista' && me?.driverId)
+    || (page === 'entregas' && isSignedIn())) ? POLL_MS[page] : 0;
   const key = `${page}:${param || ''}:${me?.id || ''}:${scopes.length}:${pollEvery}`;
   if (key === live.key) return;
   live.stop?.();
@@ -3293,7 +3397,7 @@ function isEditing() {
 // backend los roles viven en el servidor y pueden cambiar mientras la pestaña
 // sigue abierta (por ejemplo, cuando administración aprueba un alta), así que la
 // sesión se revalida antes de decidir qué se muestra.
-const GATED_ROUTES = new Set(['panel', 'admin', 'taxista', 'cuenta', 'alta-comercio']);
+const GATED_ROUTES = new Set(['panel', 'admin', 'taxista', 'cuenta', 'alta-comercio', 'entregas']);
 
 async function render({ focus = false } = {}) {
   // La ruta se lee ahora: cualquier navegación pedida queda atendida acá.
@@ -3384,7 +3488,7 @@ function bindEvents() {
   // fondo (Realtime, sondeo) no lo pisan hasta que se guarde o se salga.
   const markDirty = event => {
     const form = /** @type {HTMLElement} */ (event.target).closest?.('form');
-    if (form && main.contains(form) && form.dataset.form && !['search', 'checkout', 'assign-rider'].includes(form.dataset.form)) {
+    if (form && main.contains(form) && form.dataset.form && !['search', 'checkout', 'assign-rider', 'rider-deliver'].includes(form.dataset.form)) {
       form.dataset.dirty = 'true';
     }
   };

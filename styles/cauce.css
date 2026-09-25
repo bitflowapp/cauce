@@ -7058,3 +7058,76 @@ main {
   /* En 320 px cada sección tiene ~72 px: el número de pedidos nuevos entra al lado del nombre. */
   #main .tabs.panel-nav .tab { font-size: 12px; white-space: nowrap; }
 }
+
+/* ── Mis entregas: la aplicación de quien reparte ──
+   Una mano y poca atención: un paso por tarjeta, botones de 56 px, la
+   dirección grande y el importe a cobrar a la vista. */
+.rider-app { display: grid; gap: 14px; }
+.rider-app-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.rider-app-head h1 { margin: 4px 0 2px; font-size: 26px; line-height: 1.15; }
+.rider-app-head p { margin: 0; }
+.rider-refresh { flex: none; min-height: 44px; }
+.rider-updated { margin: -6px 0 0; }
+.rider-deliveries { display: grid; gap: 14px; }
+.rider-card {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  min-width: 0;
+}
+.rider-card[data-status="arrived"] { border-color: var(--forest); box-shadow: 0 0 0 1px var(--forest), var(--shadow-sm); }
+.rider-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.rider-destination { display: grid; gap: 8px; }
+.rider-address { display: flex; gap: 8px; align-items: flex-start; margin: 0; font-size: 18px; line-height: 1.35; overflow-wrap: anywhere; }
+.rider-address .icon { flex: none; margin-top: 3px; color: var(--clay); }
+.rider-maps, .rider-contact-actions .button { justify-content: center; min-height: 48px; }
+.rider-contact { display: grid; gap: 8px; overflow-wrap: anywhere; }
+.rider-contact-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
+.rider-charge {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin: 0;
+  padding: 10px 12px;
+  background: var(--forest-tint);
+  border-radius: var(--radius-sm);
+  color: var(--forest-deep);
+}
+.rider-charge strong { font-size: 22px; white-space: nowrap; }
+.rider-step { width: 100%; min-height: 56px; font-size: 17px; justify-content: center; }
+.rider-code { display: grid; gap: 6px; margin: 0; }
+.rider-code label { display: flex; gap: 6px; align-items: center; font-weight: 700; }
+.rider-code-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+.rider-code input {
+  min-height: 56px;
+  min-width: 0;
+  font-size: 26px;
+  letter-spacing: 0.3em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.rider-code .button { min-height: 56px; padding-inline: 22px; }
+.rider-code .microcopy, .rider-feedback { margin: 0; }
+.rider-locked { color: var(--clay); font-weight: 600; }
+.rider-shop-call { justify-self: start; min-height: 40px; display: inline-flex; gap: 6px; align-items: center; }
+.rider-history h2 { margin: 6px 0 2px; font-size: 18px; }
+.rider-history-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+.rider-history-item > span:nth-child(2) { grid-row: 2; color: var(--muted); }
+.rider-history-item > strong { grid-row: 1 / span 2; grid-column: 2; align-self: center; }
+.rider-empty h2 { font-size: 18px; }
+
+/* Panel del comercio · Reparto: cuenta vinculada de cada persona. */
+.rider-account { display: block; font-size: 12px; color: var(--muted); }
+.rider-row-actions { display: flex; gap: 12px; flex-wrap: wrap; }
+.rider-list .rider-link { flex-basis: 100%; }

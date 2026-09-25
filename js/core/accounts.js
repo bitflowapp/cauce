@@ -9,6 +9,7 @@ export const ROLE_LABELS = Object.freeze({
   customer: 'Persona usuaria',
   merchant: 'Comercio',
   driver: 'Taxista',
+  rider: 'Reparto',
   admin: 'Administración',
 });
 
