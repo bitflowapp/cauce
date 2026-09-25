@@ -1,31 +1,38 @@
 # CAUCE · Preparación para producción
 
-Última revisión: 24 de septiembre de 2026 · rama `claude/cauce-production-hardening-km1t5s`.
+Última revisión: 25 de septiembre de 2026 · rama `claude/cauce-production-hardening-km1t5s`.
 
 ## Estado
 
-**NOT_READY.** El código, el esquema y las pruebas están listos (CI verde en
-el PR #3). Cada paso sobre el proyecto real quedó **automatizado y ensayado**
-contra Supabase local; lo único que falta para ejecutarlos es que existan los
-secretos, que este entorno no tiene ni puede crear:
+**NOT_READY · detenido en B3 (SMTP).** El código, el esquema y las pruebas
+están listos (CI verde en el PR #3). Con los secretos que Marco cargó el
+24/09 (`SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD`,
+`CAUCE_BACKUP_PASSPHRASE`) se ejecutaron sobre el proyecto real B5, B1 y B2
+(salvo SMTP), en ese orden y con el workflow de operación. Falta el SMTP
+propio: sin él no hay confirmación ni recuperación reales, no se puede invitar
+a la administración y no se publica.
 
-| # | Gate | Qué ejecuta la operación | Ensayo | Falta |
-| --- | --- | --- | --- | --- |
-| B1 | Migración `20260924120000` en el proyecto real | `migrar`: historial, dry-run (sólo esa migración o STOP), **ensayo sobre una copia de los datos reales**, push, sincronización y smoke | `scripts/ensayo-migracion.mjs` sobre un Supabase con sólo las 8 migraciones de producción y datos de esa versión: PASS | `SUPABASE_ACCESS_TOKEN` |
-| B2 | Auth real | `auth`: `site_url`/retornos del sitio real sin localhost, compra sin cuenta, confirmación obligatoria, SMTP, plantillas, verificación | — (configura el proyecto real) | `SUPABASE_ACCESS_TOKEN` + SMTP |
-| B3 | SMTP, confirmación y recuperación reales | `correo`: alta → correo real → enlace en otro dispositivo → ingreso; recuperación → correo real → contraseña nueva → la vieja rechazada → enlace no reutilizable; borra la cuenta | Stack local con Mailpit: 15/15 | SMTP con dominio verificado |
-| B4 | Administración real | `admin`: invitación por correo (la persona elige su contraseña; sin contraseñas temporales) y privilegio en `private.platform_admins` | local: existente, invitación y correo malicioso rechazado | correo de la persona + B3 |
-| B5 | Backup y restauración | `backup`: backups de Supabase (API), dump sin sesiones ni tokens, restauración en un stack nuevo con las migraciones, conteos, RLS, contrato, API, desvío de esquema, copia cifrada AES-256; semanal | local: 12/12 | `SUPABASE_ACCESS_TOKEN` + `CAUCE_BACKUP_PASSPHRASE` |
-| B6 | Deploy de producción | commit de `.github/deploy-target` = `production` + integrar el PR; Pages exige el esquema antes de publicar | — | B1–B3 |
-| — | Smoke post-deploy | `smoke-publicado`: comercios CAUCE QA, compra sin cuenta y con cuenta, retiro y envío, titular/encargado/equipo, seguridad, 320–1440 px, Chromium y WebKit; borra los datos QA | local: ver §1 | B6 |
+| # | Gate | Resultado en el proyecto real | Evidencia |
+| --- | --- | --- | --- |
+| B5 | Backup y restauración | **PASS.** 4 backups diarios de Supabase (último 24/09 07:54 UTC), retención 7 días (plan Pro). Copia cifrada AES-256 (artefacto de 30 días). Restauración en la versión del origen (8 migraciones): 24 tablas con los mismos conteos, esquema idéntico salvo privilegios que fija la plataforma (N-21), y la migración pendiente aplicada sobre la copia con todas las verificaciones. | run 36078082544 · 14/14 |
+| B1 | Migración `20260924120000` | **PASS.** Historial 8/8 igual al repo; el dry-run listó únicamente `20260924120000`; ensayo sobre una copia de los datos reales; aplicada el 25/09 a las 00:46 UTC; 9/9 sincronizadas; smoke público 20/20 (`app_status` 20260924120000, catálogo HTTP 200, 9/9 tablas privadas cerradas). | runs 36078604627 (dry-run) y 36078756560 · 20/20 |
+| B2 | Auth real | **PASS salvo SMTP.** `site_url` `https://bitflowapp.github.io/cauce`, retornos sólo de ese sitio (sin localhost), registro por correo, confirmación obligatoria, compra sin cuenta (150 sesiones por hora e IP), contraseña de 10+ con letras y números (y control de contraseñas filtradas), rotación de tokens, enlaces de 1 h. Pendiente: SMTP propio y plantillas de CAUCE (se cargan junto con el SMTP). | run 36079258576 · 11/13 |
+| B3 | SMTP, confirmación y recuperación reales | **STOP:** faltan `CAUCE_SMTP_PASS` y `CAUCE_SMTP_SENDER` (§3.1). | — |
+| B4 | Administración real | Bloqueado: la invitación llega por correo (B3) y se completa en el sitio conectado (B6); falta además el correo de la persona. | — |
+| B6 | Deploy de producción | No publicado: B3 es un gate crítico. | — |
+| — | Smoke post-deploy | Pendiente de B6. | — |
 
-Estado real del proyecto (última comprobación: 24/09/2026 23:30 UTC, run
-36073055064 del workflow de operación, sólo lectura): sin `app_status` y el
-catálogo nuevo responde HTTP 400 (migración pendiente), compra sin cuenta
-deshabilitada, sitio publicado = demostración, y **ningún secreto cargado en
-GitHub** (`✘` en los cinco). Lo que ya está bien hoy: una visita no lee
-ninguna de las 9 tablas privadas, no escribe pedidos ni sube archivos, la
-confirmación de correo es obligatoria y Realtime acepta suscripciones.
+Estado real completo al 25/09 00:50 UTC (paso `estado`, run 36079325955,
+20/22): proyecto `cauce-production` (sa-east-1) activo, plan Pro, 9/9
+migraciones sin ajenas al repo, Auth completo salvo SMTP y plantillas, 4
+backups diarios sin PITR, y el smoke público entero en verde (contrato
+20260924120000, compra sin cuenta habilitada, catálogo HTTP 200, 9/9 tablas
+privadas cerradas, sin escritura de pedidos ni subida de archivos, Realtime).
+
+Con el SMTP cargado siguen, en este orden: `auth` (carga SMTP y plantillas),
+`correo` (confirmación y recuperación con entrega real), deploy
+(`.github/deploy-target` = `production` + integrar el PR), `admin`
+(invitación) y `smoke-publicado` (§3.2).
 
 Integrar esta rama a `main` **no publica el build conectado** mientras
 `.github/deploy-target` diga `demo`: Pages vuelve a publicar la demostración
@@ -50,7 +57,7 @@ local efímero dentro del runner.
 | E2E Chromium y WebKit | `npm run e2e:local` | recorridos en navegadores reales contra el build de producción (incluye invitación con correo real) | 29/29 |
 | Recorridos heredados y auditoría visual | `npm run e2e`, `e2e:demo`, `audit:visual`, `audit:visual:backend` | un Chrome por rol contra el backend de desarrollo y la demo; 32 pantallas sin desbordes ni errores | 37 · 12 · 32 · 32, seis vueltas seguidas sin fallos tras N-19 |
 | Builds | `npm run build`, `build:offline`, `build:production` | demo, demo sin red, producción con chequeo de bundle | PASS |
-| Smoke de producción | `npm run smoke:production` | sólo lectura contra el proyecto y el sitio reales | 2/5 (B1, B2, B6) |
+| Smoke de producción | `npm run smoke:production` | sólo lectura contra el proyecto y el sitio reales | 4/5 al 25/09: sólo falta B6 (el sitio publica la demostración) |
 
 `npm run verify` agrupa lint, tipos, compuertas, unitarias, SQL y builds.
 
@@ -143,6 +150,9 @@ Supabase ygqbcvxdrewcnzedfcyo (sa-east-1)
 GitHub → repositorio `bitflowapp/cauce` → **Settings → Secrets and variables →
 Actions → New repository secret**. Nunca se pegan en un chat, un issue ni un
 archivo del repositorio.
+
+Cargados el 24/09: `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD` y
+`CAUCE_BACKUP_PASSPHRASE`. **Faltan `CAUCE_SMTP_PASS` y `CAUCE_SMTP_SENDER`.**
 
 | Secreto | Dónde se obtiene | Para |
 | --- | --- | --- |
@@ -298,11 +308,14 @@ final en pesos, foto si tiene, y si controla stock o sólo marca "agotado".
 
 ## 6. Backups y restauración
 
-- **Lo que ofrece Supabase no está verificado todavía**: el paso `backup`
-  lo consulta por la API (backups completos, último, PITR y plan) y lo
-  informa como `BACKUP_AVAILABLE`, `BACKUP_FREQUENCY` y `BACKUP_RETENTION`.
-  Según la documentación de Supabase, el plan Pro incluye backups diarios con
-  7 días de retención; PITR es un complemento pago.
+- **Lo que ofrece Supabase, verificado por la API** (run 36078082544, 25/09):
+  `BACKUP_AVAILABLE` PASS (4 backups completos, el último del 24/09 a las
+  07:54 UTC), `BACKUP_FREQUENCY` diaria, `BACKUP_RETENTION` 7 días (plan
+  Pro), sin PITR (es un complemento pago).
+- **`RESTORE_TEST` PASS** sobre los datos reales (mismo run, 14/14): dump,
+  copia cifrada, restauración en un stack nuevo con las migraciones que tenía
+  el proyecto, conteos, esquema, migración pendiente aplicada sobre la copia
+  y verificaciones de contrato, API, RLS y Storage.
 - **Backup propio, semanal y automático** (workflow "Operación de
   producción", lunes 03:30 en Aluminé, una vez cargados los secretos): dump
   de esquema y datos **sin sesiones ni tokens**, restauración de prueba en un
@@ -310,10 +323,13 @@ final en pesos, foto si tiene, y si controla stock o sólo marca "agotado".
   las políticas de Storage, que el dump de esquema no incluye), verificación
   de conteos, RLS, contrato, API y desvío de esquema, y copia cifrada con
   AES-256 (`CAUCE_BACKUP_PASSPHRASE`) guardada 30 días como artefacto.
-- **Restaurar de verdad** (desastre): descargar el artefacto, descifrar con
-  `gpg --decrypt`, crear un proyecto nuevo, `supabase db push` con las
-  migraciones del repo y cargar `data.sql` como `supabase_admin`
-  (`psql -v ON_ERROR_STOP=1 -f data.sql`), igual que hace la prueba.
+- **Restaurar de verdad** (desastre): primero, el backup diario de Supabase
+  (Dashboard → Database → Backups → Restore). Si no alcanza: descargar el
+  artefacto `cauce-backup-<run>`, descifrar con `gpg --decrypt`, crear un
+  proyecto nuevo, `supabase db push` con las migraciones del repo y cargar
+  `data.sql` como `supabase_admin` (`psql -v ON_ERROR_STOP=1 -f data.sql`),
+  igual que hace la prueba. El volcado no incluye MFA, SSO, OAuth, SCIM ni
+  WebAuthn, que CAUCE no usa (si se habilitan, hay que sumarlos).
 - **Storage no entra en los backups de la base.** Las imágenes de
   `business-media` se vuelven a subir desde el panel; si se quiere copia,
   descargarlas con la API de Storage.
