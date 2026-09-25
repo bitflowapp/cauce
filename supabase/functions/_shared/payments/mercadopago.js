@@ -3,9 +3,10 @@
 // memoria, para una llamada).
 //
 // Traduce en los dos sentidos:
-//   · de CAUCE al proveedor: el pedido de una orden (API de Orders, pago dentro
-//     de CAUCE) o de una preferencia (Checkout Pro, redirección), siempre con
-//     la clave de idempotencia del intento;
+//   · de CAUCE al proveedor: una orden de la API de Orders, sea Checkout Pro
+//     (redirección a la página del proveedor, el flujo activo) o pago dentro de
+//     CAUCE; la preferencia clásica queda como alternativa. Siempre con la
+//     clave de idempotencia del intento;
 //   · del proveedor a CAUCE: el estado de una orden o de un pago, a los estados
 //     neutrales. Un estado desconocido devuelve null: no se aplica, se anota.
 //
@@ -14,6 +15,10 @@
 export const PROVIDER = 'mercadopago';
 export const API_BASE = 'https://api.mercadopago.com';
 export const AUTH_BASE = 'https://auth.mercadopago.com/authorization';
+
+// Las órdenes de prueba del proveedor llevan este prefijo (ORDTST…). Un piloto
+// en sandbox nunca redirige a una orden que no lo tenga.
+export const isTestOrderId = id => /^ORDTST[0-9A-Z]{6,}$/.test(String(id || ''));
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -91,15 +96,15 @@ const headersFor = (accessToken, idempotencyKey) => ({
 
 // Pago dentro de CAUCE (Checkout API vía Orders). El token de la tarjeta lo
 // genera el SDK del proveedor en el navegador; CAUCE nunca ve la tarjeta.
-export function buildOrderRequest(context, { cardToken, paymentMethodId, paymentMethodType, installments = 1, payerEmail },
-  accessToken) {
+export function buildOrderRequest(context, { cardToken, paymentMethodId, paymentMethodType, installments = 1, payerEmail,
+  apiBase = API_BASE }, accessToken) {
   checkContext(context);
   if (!cardToken || typeof cardToken !== 'string') throw new Error('Falta el token de la tarjeta.');
   if (!paymentMethodId || !paymentMethodType) throw new Error('Falta el medio de pago.');
   if (!EMAIL.test(String(payerEmail || ''))) throw new Error('Falta el correo del pagador.');
   if (!Number.isInteger(installments) || installments < 1 || installments > 24) throw new Error('Cuotas inválidas.');
   return {
-    url: `${API_BASE}/v1/orders`,
+    url: `${apiBase}/v1/orders`,
     method: 'POST',
     headers: headersFor(accessToken, context.idempotency_key),
     body: {
@@ -118,27 +123,74 @@ export function buildOrderRequest(context, { cardToken, paymentMethodId, payment
   };
 }
 
-// Redirección a Mercado Pago (Checkout Pro). Una sola línea con el total del
-// pedido: el importe sale del intento, nunca se recalcula sumando líneas. Sin
-// descriptor propio: el cobro es del comercio y el resumen de la tarjeta
-// muestra el nombre de su cuenta.
-export function buildPreferenceRequest(context, { siteUrl, notificationUrl, expiresAt = null }, accessToken) {
-  checkContext(context);
+// Las páginas de retorno de CAUCE (#/pago/*) con la referencia del intento.
+// Nunca aprueban nada: consultan la base.
+function returnUrls(context, siteUrl) {
   const site = new URL(siteUrl);
   if (site.protocol !== 'https:' && site.hostname !== '127.0.0.1' && site.hostname !== 'localhost') {
     throw new Error('El sitio de retorno tiene que ser https.');
   }
-  if (new URL(notificationUrl).protocol !== 'https:') throw new Error('El webhook tiene que ser https.');
   const back = outcome => `${site.origin}${site.pathname.replace(/\/?$/, '/')}index.html#/pago/${outcome}?intento=${context.attempt_id}`;
-  const title = `Pedido ${context.order?.code || ''} · ${context.business?.name || 'CAUCE'}`.slice(0, 120);
+  return { success: back('exito'), pending: back('pendiente'), failure: back('error') };
+}
+const orderTitle = context => `Pedido ${context.order?.code || ''} · ${context.business?.name || 'CAUCE'}`.slice(0, 120);
+
+// Duración ISO 8601 hasta que vence el intento (PT30M): la orden del proveedor
+// vence con él y un enlace viejo no se puede pagar.
+export function expirationDuration(expiresAt, now = Date.now()) {
+  const until = Date.parse(String(expiresAt || ''));
+  if (!Number.isFinite(until)) return null;
+  const minutes = Math.floor((until - now) / 60000);
+  if (minutes < 1) throw new Error('El intento ya venció.');
+  return `PT${Math.min(minutes, 24 * 60)}M`;
+}
+
+// Checkout Pro vía la API de Orders (el flujo activo): una orden `online` en
+// modo manual que devuelve `checkout_url`, adonde va quien compra. Una sola
+// línea con el total del pedido: el importe sale del intento, nunca se
+// recalcula sumando líneas ni viene del navegador. Sin comisión de
+// marketplace: CAUCE no cobra comisión. Las notificaciones llegan al webhook
+// configurado en la aplicación (tema "Order").
+export function buildCheckoutProOrderRequest(context, { siteUrl, expiresAt = null, now = Date.now(), apiBase = API_BASE },
+  accessToken) {
+  checkContext(context);
+  const back = returnUrls(context, siteUrl);
+  const amount = amountText(context.amount);
+  const expiration = expiresAt ? expirationDuration(expiresAt, now) : null;
   return {
-    url: `${API_BASE}/checkout/preferences`,
+    url: `${apiBase}/v1/orders`,
+    method: 'POST',
+    headers: headersFor(accessToken, context.idempotency_key),
+    body: {
+      type: 'online',
+      processing_mode: 'manual',
+      external_reference: context.attempt_id,
+      total_amount: amount,
+      description: orderTitle(context),
+      ...(expiration ? { expiration_time: expiration } : {}),
+      items: [{ external_code: String(context.order?.code || context.attempt_id).slice(0, 64), title: orderTitle(context),
+        quantity: 1, unit_price: amount }],
+      config: { online: { success_url: back.success, pending_url: back.pending, failure_url: back.failure,
+        auto_return: 'approved' } },
+    },
+  };
+}
+
+// Checkout Pro clásico (preferencia): alternativa, hoy sin uso. Mismas reglas.
+export function buildPreferenceRequest(context, { siteUrl, notificationUrl, expiresAt = null, apiBase = API_BASE },
+  accessToken) {
+  checkContext(context);
+  const back = returnUrls(context, siteUrl);
+  if (new URL(notificationUrl).protocol !== 'https:') throw new Error('El webhook tiene que ser https.');
+  const title = orderTitle(context);
+  return {
+    url: `${apiBase}/checkout/preferences`,
     method: 'POST',
     headers: headersFor(accessToken, context.idempotency_key),
     body: {
       items: [{ id: context.attempt_id, title, quantity: 1, currency_id: 'ARS', unit_price: context.amount }],
       external_reference: context.attempt_id,
-      back_urls: { success: back('exito'), pending: back('pendiente'), failure: back('error') },
+      back_urls: back,
       auto_return: 'approved',
       notification_url: notificationUrl,
       ...(expiresAt ? { expires: true, expiration_date_to: expiresAt } : {}),
@@ -171,7 +223,9 @@ export function readOrder(order) {
 // Lo que la base necesita de un pago (Checkout Pro).
 export function readPayment(payment) {
   return {
-    providerOrderId: payment?.order?.id ? String(payment.order.id) : null,
+    // La orden de un pago (merchant order) no es la orden que guarda el
+    // intento: el intento se encuentra por nuestra referencia.
+    providerOrderId: null,
     attemptReference: UUID.test(String(payment?.external_reference || '')) ? payment.external_reference : null,
     status: mapPaymentStatus(payment?.status, payment?.status_detail),
     statusDetail: String(payment?.status_detail || '').slice(0, 80),
@@ -185,10 +239,10 @@ export function readPayment(payment) {
 
 // Dónde leer el recurso que avisa un webhook. Sólo órdenes y pagos: el resto
 // de los temas se reconoce (200) y no se procesa.
-export function resourceRequest(type, id, accessToken) {
+export function resourceRequest(type, id, accessToken, apiBase = API_BASE) {
   const safe = encodeURIComponent(String(id || ''));
   if (!safe) return null;
-  if (type === 'order') return { url: `${API_BASE}/v1/orders/${safe}`, read: readOrder, accessToken };
-  if (type === 'payment') return { url: `${API_BASE}/v1/payments/${safe}`, read: readPayment, accessToken };
+  if (type === 'order') return { url: `${apiBase}/v1/orders/${safe}`, read: readOrder, accessToken };
+  if (type === 'payment') return { url: `${apiBase}/v1/payments/${safe}`, read: readPayment, accessToken };
   return null;
 }

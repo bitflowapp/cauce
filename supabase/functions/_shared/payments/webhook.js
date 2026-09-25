@@ -39,7 +39,8 @@ const reply = (status, body) => ({ status, body });
 /**
  * @param {{ method: string, url: string, headers: { get(name: string): string|null }, text(): Promise<string> }} request
  * @param {{ secret: string, recordEvent: Function, credentialsForSeller: Function, fetchJson: Function,
- *   applyUpdate: Function, markEvent: Function, toleranceSeconds?: number|null, now?: () => number }} deps
+ *   applyUpdate: Function, markEvent: Function, toleranceSeconds?: number|null, now?: () => number,
+ *   apiBase?: string }} deps
  */
 export async function handleWebhook(request, deps) {
   if (request.method !== 'POST') return reply(405, { error: 'method_not_allowed' });
@@ -75,7 +76,7 @@ export async function handleWebhook(request, deps) {
         await deps.markEvent(event.eventId, 'ignored', 'Vendedor sin cuenta conectada');
         return { outcome: 'ignored' };
       }
-      const target = resourceRequest(type, dataId, credentials.accessToken);
+      const target = resourceRequest(type, dataId, credentials.accessToken, deps.apiBase);
       const resource = await deps.fetchJson(target.url, target.accessToken);
       const read = target.read(resource);
       if (!read.status) {

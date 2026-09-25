@@ -7,7 +7,23 @@
 //   MP_WEBHOOK_SECRET     clave secreta de webhooks (firma x-signature)
 //   PAYMENTS_TOKEN_KEYS   {"1":"<32 bytes en base64>"}: claves para cifrar tokens
 //   CAUCE_SITE_URL        sitio publicado (retornos y redirecciones)
+// Sólo para las pruebas del stack local (nunca en el proyecto real):
+//   MP_API_BASE           un doble del proveedor en 127.0.0.1 / host.docker.internal,
+//                         para provocar demoras, 429 y 500. Cualquier otro valor
+//                         se ignora y se usa la API real.
 import { importTokenKey } from './vault.js';
+import { API_BASE } from './mercadopago.js';
+
+const TEST_HOSTS = new Set(['127.0.0.1', 'localhost', 'host.docker.internal']);
+
+/** @param {string} value */
+export function apiBaseFrom(value) {
+  try {
+    const url = new URL(value);
+    if (url.protocol === 'http:' && TEST_HOSTS.has(url.hostname)) return url.origin;
+  } catch { /* sin valor o inválido: la API real */ }
+  return API_BASE;
+}
 
 export const REQUIRED_SECRETS = Object.freeze(['MP_CLIENT_ID', 'MP_CLIENT_SECRET', 'MP_WEBHOOK_SECRET',
   'PAYMENTS_TOKEN_KEYS']);
@@ -22,6 +38,7 @@ export function paymentsConfig(getEnv) {
     webhookSecret: read('MP_WEBHOOK_SECRET'),
     siteUrl: (read('CAUCE_SITE_URL') || 'https://bitflowapp.github.io/cauce').replace(/\/+$/, ''),
     functionsUrl: `${read('SUPABASE_URL').replace(/\/+$/, '')}/functions/v1`,
+    apiBase: apiBaseFrom(read('MP_API_BASE')),
     // Sólo nombres: nunca valores.
     missing: () => REQUIRED_SECRETS.filter(name => !read(name)),
     // {versión: CryptoKey}; la versión más alta es la que cifra.

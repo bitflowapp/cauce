@@ -25,9 +25,16 @@ export async function pkcePair() {
   return { verifier, challenge: toBase64Url(digest) };
 }
 
+// El stack local de Supabase sirve las funciones por http (kong, 127.0.0.1):
+// sólo ahí se admite. El proyecto real siempre es https.
+const LOCAL_HOSTS = new Set(['127.0.0.1', 'localhost', 'kong', 'host.docker.internal']);
+
 export function authorizationUrl({ clientId, redirectUri, state, challenge }) {
   if (!clientId || !redirectUri || !state || !challenge) throw new Error('Faltan datos para autorizar.');
-  if (new URL(redirectUri).protocol !== 'https:') throw new Error('La URL de retorno tiene que ser https.');
+  const target = new URL(redirectUri);
+  if (target.protocol !== 'https:' && !LOCAL_HOSTS.has(target.hostname)) {
+    throw new Error('La URL de retorno tiene que ser https.');
+  }
   const url = new URL(AUTH_BASE);
   url.searchParams.set('client_id', clientId);
   url.searchParams.set('response_type', 'code');
@@ -40,21 +47,23 @@ export function authorizationUrl({ clientId, redirectUri, state, challenge }) {
 }
 
 // Canje del código. Va del servidor al proveedor; nunca desde el navegador.
-export function tokenRequest({ clientId, clientSecret, code, redirectUri, verifier }) {
+// Un piloto en sandbox pide credenciales de prueba (test_token): nunca reales.
+export function tokenRequest({ clientId, clientSecret, code, redirectUri, verifier, testToken = false,
+  apiBase = API_BASE }) {
   if (!clientId || !clientSecret || !code || !redirectUri || !verifier) throw new Error('Faltan datos para el canje.');
   return {
-    url: `${API_BASE}/oauth/token`,
+    url: `${apiBase}/oauth/token`,
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: { client_id: clientId, client_secret: clientSecret, grant_type: 'authorization_code', code,
-      redirect_uri: redirectUri, code_verifier: verifier },
+      redirect_uri: redirectUri, code_verifier: verifier, ...(testToken ? { test_token: true } : {}) },
   };
 }
 
-export function refreshRequest({ clientId, clientSecret, refreshToken }) {
+export function refreshRequest({ clientId, clientSecret, refreshToken, apiBase = API_BASE }) {
   if (!clientId || !clientSecret || !refreshToken) throw new Error('Faltan datos para renovar.');
   return {
-    url: `${API_BASE}/oauth/token`,
+    url: `${apiBase}/oauth/token`,
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: { client_id: clientId, client_secret: clientSecret, grant_type: 'refresh_token', refresh_token: refreshToken },

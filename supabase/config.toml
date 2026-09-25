@@ -440,10 +440,16 @@ enabled = true
 # El proveedor llama al webhook y vuelve del OAuth sin un JWT de Supabase: la
 # autenticidad la dan la firma x-signature y el `state` de un solo uso.
 [functions.payments-webhook]
+# JavaScript: sin esto la CLI busca index.ts y no sirve ni despliega la función.
+entrypoint = "./functions/payments-webhook/index.js"
 verify_jwt = false
 
 [functions.payments-oauth]
+# JavaScript: sin esto la CLI busca index.ts y no sirve ni despliega la función.
+entrypoint = "./functions/payments-oauth/index.js"
 verify_jwt = false
 
 [functions.payments-checkout]
+# JavaScript: sin esto la CLI busca index.ts y no sirve ni despliega la función.
+entrypoint = "./functions/payments-checkout/index.js"
 verify_jwt = true
