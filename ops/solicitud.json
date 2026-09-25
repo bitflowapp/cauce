@@ -1,8 +1,8 @@
 {
-  "paso": "backup",
+  "paso": "migrar",
   "aplicar": false,
   "confirmar": "",
   "email": "",
   "invitar": false,
-  "motivo": "B5 antes de migrar (segundo intento): el run 36077799356 pasó todo salvo la comparación de esquema, cuyas 15 diferencias son privilegios por defecto que fija Supabase. Sólo lectura sobre el proyecto."
+  "motivo": "B1, dry-run: historial remoto y `db push --dry-run`; tiene que listar únicamente 20260924120000 (si aparece cualquier otra, STOP). No aplica nada. Backup previo: run 36078082544 (RESTORE_TEST PASS)."
 }
