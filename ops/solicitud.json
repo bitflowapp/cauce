@@ -1,8 +1,8 @@
 {
-  "paso": "registros",
-  "aplicar": false,
-  "confirmar": "",
+  "paso": "smoke-publicado",
+  "aplicar": true,
+  "confirmar": "ygqbcvxdrewcnzedfcyo",
   "email": "",
   "invitar": false,
-  "motivo": "Fase C: registros después de publicar el reparto (main 49da21c), del smoke publicado y de la limpieza QA. 5xx y errores de cada servicio. Sólo lectura."
+  "motivo": "Fase D: smoke obligatorio sobre el sitio publicado con la administración del piloto integrada (main 7e328a6): el mismo pedido de punta a punta con reparto, administración con el día del piloto, anchos y seguridad sobre la API publicada. Crea y borra datos CAUCE QA."
 }
