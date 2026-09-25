@@ -1,8 +1,8 @@
 {
-  "paso": "pagos-funciones",
-  "aplicar": true,
-  "confirmar": "ygqbcvxdrewcnzedfcyo",
+  "paso": "pagos-estado",
+  "aplicar": false,
+  "confirmar": "",
   "email": "",
   "invitar": false,
-  "motivo": "Sandbox de Mercado Pago: desplegar payments-oauth, payments-checkout y payments-webhook con los pagos globales apagados y el código sin credenciales; crear PAYMENTS_TOKEN_KEYS si falta (nunca se muestra) y verificar que sin secretos de Mercado Pago cierran (503/401) y que el navegador puede llamarlas (preflight CORS)."
+  "motivo": "Sandbox de Mercado Pago: estado del proyecto después de migrar y desplegar (funciones, secretos sólo por nombre, interruptor, pilotos, cuentas y notificaciones). Sólo lectura."
 }
