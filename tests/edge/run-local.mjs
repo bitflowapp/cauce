@@ -40,15 +40,20 @@ const secrets = {
 };
 const fake = await startFakeMercadoPago({ port: 9911, clientId: secrets.MP_CLIENT_ID, clientSecret: secrets.MP_CLIENT_SECRET });
 
-async function waitFor(url, timeout = 90000) {
+// Espera a la función. Con `answered(status, body)`, hasta que la respuesta
+// salga de su propio código (no del gateway); sin él, cualquier cosa que no
+// sea "todavía no hay nada" (502/404).
+async function waitFor(url, timeout = 90000, answered = null) {
   const end = Date.now() + timeout;
+  let last = 'sin respuesta';
   for (;;) {
     try {
       const response = await fetch(url, { method: 'OPTIONS' });
-      await response.body?.cancel();
-      if (response.status !== 502 && response.status !== 404) return;
+      const body = await response.text();
+      last = `${response.status} ${body.slice(0, 80)}`;
+      if (answered ? answered(response.status, body) : response.status !== 502 && response.status !== 404) return;
     } catch { /* todavía no */ }
-    if (Date.now() > end) throw new Error(`No arrancó: ${url}`);
+    if (Date.now() > end) throw new Error(`No arrancó: ${url} (última respuesta: ${last})`);
     await new Promise(resolve => setTimeout(resolve, 500));
   }
 }
@@ -100,7 +105,14 @@ try {
     const serveArgs = ['supabase', 'functions', 'serve', '--env-file', envFile];
     run('npx', serveArgs, {}, 'edge-runtime');
     for (const name of FUNCTIONS) urls[name] = `${status.API_URL}/functions/v1/${name}`;
-    await waitFor(urls['payments-webhook'], 180000);
+    // Cada función arranca su worker con el primer pedido (y en el CI resuelve
+    // sus dependencias): se espera a que las TRES respondan desde su propio
+    // código antes de empezar, para que ninguna prueba cargue con el arranque
+    // en frío. checkout y OAuth contestan el preflight (204); el webhook, 405.
+    // El webhook, sin pilotos todavía, contesta su propio 503 JSON (compuerta cerrada).
+    const answered = { 'payments-oauth': status => status === 204, 'payments-checkout': status => status === 204,
+      'payments-webhook': (status, body) => status === 405 || (status === 503 && /payments_disabled|not_configured/.test(body)) };
+    for (const name of FUNCTIONS) await waitFor(urls[name], 180000, answered[name]);
     // Al servir, la CLI registra las rutas en el gateway local: se espera a que
     // la API vuelva a responder de corrido antes de empezar.
     let steady = 0;
@@ -129,7 +141,7 @@ try {
   process.exitCode = 1;
 } finally {
   for (const { child, label, log } of children) {
-    if (process.exitCode && log.length) console.error(`── ${label} ──\n${log.join('').slice(-4000)}`);
+    if (process.exitCode && log.length) console.error(`── ${label} ──\n${log.join('').slice(-30000)}`);
     try { process.kill(-child.pid, 'SIGTERM'); } catch { /* ya terminó */ }
   }
   // La CLI demora en cerrar: después de unos segundos, se corta sin más.

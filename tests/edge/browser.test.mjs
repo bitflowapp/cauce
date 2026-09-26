@@ -125,8 +125,18 @@ for (const [index, engine] of browsersToRun.entries()) {
       await simulateProvider(owner.context, `71000001${index}0`);
       await signIn(owner.page, people[`owner-${engine}`]);
       await go(owner.page, `#panel/${shops[engine].id}/pagos`);
-      await owner.page.locator('[data-action="payment-connect"]').click();
-      await owner.page.waitForURL(/conexion=ok/, { timeout: 30000 });
+      // Por etapas, para que una falla diga dónde se cortó: el inicio (función
+      // de OAuth), la ida al proveedor y la vuelta con el resultado.
+      const connect = owner.page.locator('[data-action="payment-connect"]');
+      await connect.waitFor({ timeout: 20000 });
+      const [started] = await Promise.all([
+        owner.page.waitForResponse(response => response.url().includes('/functions/v1/payments-oauth')
+          && response.request().method() === 'POST', { timeout: 45000 }),
+        connect.click(),
+      ]);
+      assert.equal(started.status(), 200, `inicio del OAuth: HTTP ${started.status()}`);
+      await owner.page.waitForURL(url => /[?&]conexion=/.test(url.hash), { timeout: 45000 });
+      assert.match(owner.page.url(), /conexion=ok$/, `vuelta: ${owner.page.url().replace(/^[^#]*/, '')} · ${owner.problems.join(' | ')}`);
       await ready(owner.page);
       const panel = owner.page.locator('.pay-panel');
       await panel.getByText('Cuenta conectada. Ya se pueden cobrar pedidos online.').waitFor({ timeout: 20000 });
