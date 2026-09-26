@@ -129,3 +129,74 @@ test('con el interruptor encendido, el comercio B no ve ni toca la cuenta ni los
     await setFlag(false);
   }
 });
+
+// ───────────────── sandbox: piloto por comercio ─────────────────
+const pilot = (business, sandbox = true) => sql`insert into private.payment_pilot_businesses (business_id, sandbox, reason)
+  values (${business}, ${sandbox}, 'CAUCE QA · Mercado Pago') on conflict (business_id) do nothing`;
+const unpilot = business => sql`delete from private.payment_pilot_businesses where business_id = ${business}`;
+
+test('las funciones nuevas del servidor (renovación, estado, descarte) son sólo de service_role', async () => {
+  const calls = {
+    payments_accepting: {},
+    payment_oauth_discard: { state: 'y'.repeat(43) },
+    payment_accounts_expiring: { within_days: 30 },
+    payment_account_rotate: { account: crypto.randomUUID(), access_ciphertext: 'v1.aaaaaaaaaaaaaaaa.bbbbbbbbbbbbbbbb',
+      refresh_ciphertext: '', new_key_version: 1, new_expires_at: new Date().toISOString() },
+  };
+  for (const [name, args] of Object.entries(calls)) {
+    denied(await anonClient().rpc(name, args), `visita · ${name}`);
+    denied(await people.cliente.client.rpc(name, args), `cliente · ${name}`);
+    denied(await people.ownerA.client.rpc(name, args), `titular · ${name}`);
+  }
+  assert.equal(ok(await admin.rpc('payments_accepting')), false, 'producción: nada encendido');
+  assert.equal(ok(await admin.rpc('payment_oauth_discard', calls.payment_oauth_discard)), null);
+  assert.deepEqual(ok(await admin.rpc('payment_accounts_expiring', calls.payment_accounts_expiring)), []);
+});
+
+test('un comercio piloto cobra online con el interruptor apagado; los demás y el público no ven nada', async () => {
+  await pilot(A.id);
+  try {
+    await sql`insert into public.payment_provider_accounts (business_id, provider, status, provider_user_id, live_mode, connected_at)
+      values (${A.id}, 'mercadopago', 'connected', '3131313131', false, now())`;
+    await sql`insert into public.payment_provider_accounts (business_id, provider, status, provider_user_id, live_mode, connected_at)
+      values (${B.id}, 'mercadopago', 'connected', '3232323232', false, now())`;
+    assert.equal(ok(await anonClient().rpc('app_status')).features.payments_online, false, 'el interruptor sigue apagado');
+    assert.equal(ok(await admin.rpc('payments_accepting')), true);
+    const methodsA = ok(await anonClient().rpc('payment_methods', { business: A.id })).map(method => method.id);
+    const methodsB = ok(await anonClient().rpc('payment_methods', { business: B.id })).map(method => method.id);
+    assert.deepEqual(methodsA, ['cash_on_pickup', 'cash_on_delivery', 'online']);
+    assert.deepEqual(methodsB, ['cash_on_pickup', 'cash_on_delivery'], 'B no es piloto');
+    // Sólo titular o encargado/a ven que su comercio es piloto.
+    const [ownRow] = ok(await people.ownerA.client.from('businesses').select('id,payments_pilot').eq('id', A.id));
+    assert.equal(ownRow.payments_pilot, true);
+    const [foreign] = ok(await people.ownerB.client.from('businesses').select('id,payments_pilot').eq('id', A.id));
+    assert.equal(foreign.payments_pilot, null);
+    const [ownB] = ok(await people.ownerB.client.from('businesses').select('id,payments_pilot').eq('id', B.id));
+    assert.equal(ownB.payments_pilot, false);
+    assert.ok((await anonClient().from('businesses').select('id,payments_pilot').eq('id', A.id)).error,
+      'el público no puede pedir la columna del piloto');
+    // Un pedido online en A: B ni lo ve ni lo toca; un webhook del vendedor de B no actualiza a A.
+    const buyer = await guest('pagos-piloto');
+    const id = ok(await buyer.client.rpc('create_order', { business: A.id, idem: crypto.randomUUID(), fulfillment: 'pickup',
+      payment_method: 'online', contact: contact(), items: [{ product_id: A.products.untracked.id, quantity: 1 }],
+      expected_total: null }));
+    const started = ok(await buyer.client.rpc('start_payment', { order_id: id }));
+    const intruder = ok(await admin.rpc('payment_apply_update', { provider: 'mercadopago', seller_id: '3232323232',
+      attempt_reference: started.attempt_id, provider_order_id: null, status: 'approved', status_detail: '',
+      paid_amount: Number(started.amount), transactions: [], event_id: null }));
+    assert.equal(intruder.reason, 'seller_mismatch');
+    const [row] = await sql`select payment_status from public.orders where id = ${id}`;
+    assert.equal(row.payment_status, 'pending', 'el vendedor ajeno no aprueba nada');
+    assert.deepEqual(ok(await people.ownerB.client.from('payment_attempts').select('id').eq('order_id', id)), []);
+    denied(await people.ownerB.client.rpc('disconnect_payment_account', { business: A.id, provider: 'mercadopago' }),
+      'B desconecta a A');
+    denied(await anonClient().from('payment_transactions').select('*'), 'la visita lee movimientos');
+    assert.ok((await buyer.client.schema('private').from('payment_provider_credentials').select('*')).error,
+      'el cliente no lee credenciales');
+  } finally {
+    await sql`delete from public.payment_provider_accounts where business_id in (${A.id}, ${B.id})`;
+    await unpilot(A.id);
+  }
+  assert.deepEqual(ok(await anonClient().rpc('payment_methods', { business: A.id })).map(method => method.id),
+    ['cash_on_pickup', 'cash_on_delivery'], 'sin piloto, vuelve el efectivo solo');
+});

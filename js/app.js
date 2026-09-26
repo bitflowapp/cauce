@@ -1416,7 +1416,9 @@ async function viewMerchantPanel(businessId) {
   const role = business.membershipRole || 'owner';
   const canManage = canManageBusiness(role);
   const connected = isConnected();
-  const sections = panelSections(role, { connected, payments: paymentsOnline() });
+  // "Pagos" aparece con el interruptor encendido o en un comercio piloto (el
+  // de QA del sandbox): la base decide y sólo lo informa a titular y encargado/a.
+  const sections = panelSections(role, { connected, payments: paymentsOnline() || business.paymentsPilot === true });
   const section = resolveSection(route().extra, sections);
 
   const [orders, products, riders, categories, team, serverRequirements, productCategories, riderAccounts] = await Promise.all([

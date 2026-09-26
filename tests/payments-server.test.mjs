@@ -6,13 +6,15 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   mapOrderStatus, mapPaymentStatus, toPesos, buildOrderRequest, buildPreferenceRequest, readOrder, readPayment,
-  resourceRequest,
+  resourceRequest, buildCheckoutProOrderRequest, expirationDuration, isTestOrderId, SANDBOX_PAYER_EMAIL,
 } from '../supabase/functions/_shared/payments/mercadopago.js';
 import { verifySignature, signForTest, signatureManifest } from '../supabase/functions/_shared/payments/signature.js';
 import { handleWebhook, eventKey } from '../supabase/functions/_shared/payments/webhook.js';
 import { importTokenKey, sealToken, openToken } from '../supabase/functions/_shared/payments/vault.js';
-import { pkcePair, authorizationUrl, tokenRequest, parseTokenResponse, randomToken } from '../supabase/functions/_shared/payments/oauth.js';
-import { paymentsConfig, REQUIRED_SECRETS } from '../supabase/functions/_shared/payments/config.js';
+import { pkcePair, authorizationUrl, tokenRequest, parseTokenResponse, randomToken, accountRequest, isTestAccount }
+  from '../supabase/functions/_shared/payments/oauth.js';
+import { paymentsConfig, REQUIRED_SECRETS, apiBaseFrom } from '../supabase/functions/_shared/payments/config.js';
+import { freshAccessToken, refreshDue, ReconnectRequired, REFRESH_WINDOW_DAYS } from '../supabase/functions/_shared/payments/tokens.js';
 import { PAYMENT_STATES } from '../js/core/payment.js';
 
 const WEBHOOK_KEY = 'clave-de-webhook-solo-para-pruebas';
@@ -111,15 +113,21 @@ test('la preferencia (Checkout Pro) vuelve a #/pago/* con la referencia del inte
 
 // ───────────────── del proveedor a CAUCE ─────────────────
 test('una orden leída del proveedor da el estado, la referencia, el importe y los movimientos', () => {
+  // Forma documentada de GET /v1/orders/{id}: las devoluciones van en transactions.refunds.
   const read = readOrder({ id: 'ORD01PRUEBA', external_reference: ATTEMPT, status: 'processed', status_detail: 'accredited',
     total_amount: '7500.00', total_paid_amount: '7500.00',
     transactions: { payments: [{ id: 'PAY01PRUEBA', amount: '7500.00', paid_amount: '7500.00', status: 'processed',
-      status_detail: 'accredited', payment_method: { id: 'master', type: 'credit_card' },
-      refunds: [{ id: 'REF01', amount: '500.00', status: 'processed' }] }] } });
+      status_detail: 'accredited', payment_method: { id: 'master', type: 'credit_card' } }],
+    refunds: [{ id: 'REF01', transaction_id: 'PAY01PRUEBA', amount: '500.00', status: 'processed' }] } });
   assert.deepEqual({ ...read, transactions: undefined }, { providerOrderId: 'ORD01PRUEBA', attemptReference: ATTEMPT,
     status: 'approved', statusDetail: 'accredited', paidAmount: 7500, transactions: undefined });
   assert.deepEqual(read.transactions.map(movement => [movement.kind, movement.id, movement.status, movement.amount]),
     [['payment', 'PAY01PRUEBA', 'approved', 7500], ['refund', 'REF01', 'refunded', 500]]);
+  // Respuestas viejas con la devolución dentro del pago: la misma, sin repetirse.
+  const nested = readOrder({ id: 'ORD01PRUEBA', external_reference: ATTEMPT, status: 'processed', total_paid_amount: '7500.00',
+    transactions: { payments: [{ id: 'PAY01PRUEBA', paid_amount: '7500.00', status: 'processed',
+      refunds: [{ id: 'REF01', amount: '500.00' }] }], refunds: [{ id: 'REF01', amount: '500.00' }] } });
+  assert.deepEqual(nested.transactions.map(movement => movement.id), ['PAY01PRUEBA', 'REF01']);
   // Una referencia que no es un intento de CAUCE no se usa.
   assert.equal(readOrder({ id: 'X', external_reference: 'otro-sistema' }).attemptReference, null);
 });
@@ -129,7 +137,8 @@ test('un pago leído del proveedor (Checkout Pro) da lo mismo', () => {
     transaction_amount: 7500, payment_type_id: 'account_money', order: { id: 987 } });
   assert.equal(read.status, 'approved');
   assert.equal(read.attemptReference, ATTEMPT);
-  assert.equal(read.providerOrderId, '987');
+  // La merchant order de un pago no es la orden del intento: se encuentra por la referencia.
+  assert.equal(read.providerOrderId, null);
   assert.equal(read.paidAmount, 7500);
   assert.deepEqual(read.transactions[0], { kind: 'payment', id: '123456', status: 'approved', status_detail: 'accredited',
     amount: 7500, method_type: 'account_money' });
@@ -335,7 +344,7 @@ test('OAuth con PKCE: la URL de autorización lleva el state y el desafío S256;
   const state = randomToken(32);
   const url = new URL(authorizationUrl({ clientId: '1234567890', redirectUri: 'https://proyecto.supabase.co/functions/v1/payments-oauth',
     state, challenge }));
-  assert.equal(url.origin + url.pathname, 'https://auth.mercadopago.com/authorization');
+  assert.equal(url.origin + url.pathname, 'https://auth.mercadopago.com.ar/authorization');
   assert.deepEqual(Object.fromEntries(url.searchParams), { client_id: '1234567890', response_type: 'code', platform_id: 'mp',
     state, redirect_uri: 'https://proyecto.supabase.co/functions/v1/payments-oauth', code_challenge: challenge,
     code_challenge_method: 'S256' });
@@ -368,4 +377,206 @@ test('sin secretos las funciones no arrancan, y sólo se informan los nombres qu
   assert.equal(current, 2);
   assert.deepEqual(Object.keys(keys), ['1', '2']);
   assert.equal(JSON.stringify(config.missing()).includes('secreto'), false);
+});
+
+// ───────────────── sandbox: Checkout Pro vía la API de Orders ─────────────────
+test('Checkout Pro va por la API de Orders: orden online manual con el importe del intento y su clave', () => {
+  const now = Date.parse('2026-09-26T12:00:00Z');
+  const call = buildCheckoutProOrderRequest(context({ created_at: '2026-09-26T11:59:40Z', expires_at: '2026-09-26T12:29:40Z' }),
+    { siteUrl: 'https://bitflowapp.github.io/cauce', payerEmail: SANDBOX_PAYER_EMAIL, now }, 'token-de-prueba');
+  assert.equal(call.url, 'https://api.mercadopago.com/v1/orders');
+  assert.equal(call.method, 'POST');
+  assert.equal(call.headers['X-Idempotency-Key'], '0a1b2c3d-4e5f-4a6b-8c7d-8e9fa0b1c2d3');
+  assert.equal(call.headers.Authorization, 'Bearer token-de-prueba');
+  const { body } = call;
+  // Lo que exige la documentación de Checkout Pro vía Orders.
+  assert.equal(body.type, 'online');
+  assert.equal(body.processing_mode, 'manual');
+  assert.equal(body.total_amount, '7500.00');
+  assert.equal(body.external_reference, ATTEMPT);
+  assert.ok(body.external_reference.length <= 64);
+  assert.equal(body.expiration_time, 'PT30M');
+  // Una sola línea con el total del pedido: nunca se suma desde el navegador.
+  assert.deepEqual(body.items, [{ external_code: 'CA-0042', title: 'Pedido CA-0042 · Almacén Los Pehuenes', quantity: 1,
+    unit_price: '7500.00' }]);
+  assert.equal(body.items.reduce((sum, item) => sum + Number(item.unit_price) * item.quantity, 0), Number(body.total_amount));
+  // Sin comisión de marketplace: CAUCE no cobra comisión.
+  assert.equal('marketplace_fee' in body, false);
+  assert.equal(body.config.online.auto_return, 'approved');
+  assert.equal(body.config.online.success_url,
+    `https://bitflowapp.github.io/cauce/index.html#/pago/exito?intento=${ATTEMPT}`);
+  assert.match(body.config.online.pending_url, /#\/pago\/pendiente\?intento=/);
+  assert.match(body.config.online.failure_url, /#\/pago\/error\?intento=/);
+  // En sandbox el pagador es el de prueba que exige el proveedor (@testuser.com):
+  // ningún dato de la persona ni del navegador viaja en la orden.
+  assert.deepEqual(body.payer, { email: 'test@testuser.com' });
+  // Sin correo válido no se inventa un pagador: el proveedor lo pide en su página.
+  for (const payerEmail of ['', 'no-es-correo', undefined]) {
+    assert.equal('payer' in buildCheckoutProOrderRequest(context(), { siteUrl: 'https://bitflowapp.github.io/cauce',
+      payerEmail }, 't').body, false);
+  }
+  // El código del ítem admite hasta 30 caracteres.
+  const long = buildCheckoutProOrderRequest(context({ order: { code: 'X'.repeat(40) } }),
+    { siteUrl: 'https://bitflowapp.github.io/cauce' }, 't');
+  assert.equal(long.body.items[0].external_code.length, 30);
+});
+
+test('el mismo intento arma siempre el mismo pedido (reintento con la misma clave)', () => {
+  const attempt = context({ created_at: '2026-09-26T12:00:00Z', expires_at: '2026-09-26T12:30:00Z' });
+  const options = { siteUrl: 'https://bitflowapp.github.io/cauce', payerEmail: SANDBOX_PAYER_EMAIL };
+  const first = buildCheckoutProOrderRequest(attempt, { ...options, now: Date.parse('2026-09-26T12:00:02Z') }, 'a');
+  // Veinte minutos después, con el token renovado: el cuerpo y la clave, idénticos.
+  const retry = buildCheckoutProOrderRequest(attempt, { ...options, now: Date.parse('2026-09-26T12:20:00Z') }, 'b');
+  assert.equal(JSON.stringify(retry.body), JSON.stringify(first.body));
+  assert.equal(retry.headers['X-Idempotency-Key'], first.headers['X-Idempotency-Key']);
+  assert.equal(first.body.expiration_time, 'PT30M');
+});
+
+test('la orden vive lo que vive el intento; un intento vencido no se manda al proveedor', () => {
+  const now = Date.parse('2026-09-26T12:10:00Z');
+  const createdAt = '2026-09-26T12:00:00Z';
+  // La vida completa del intento, sin importar cuándo se envía.
+  assert.equal(expirationDuration({ expiresAt: '2026-09-26T12:30:00Z', createdAt, now }), 'PT30M');
+  assert.equal(expirationDuration({ expiresAt: '2026-09-26T12:30:00Z', createdAt, now: Date.parse('2026-09-26T12:25:00Z') }),
+    'PT30M');
+  // Con menos de un minuto por delante ya no se crea una orden: el intento está vencido.
+  assert.throws(() => expirationDuration({ expiresAt: '2026-09-26T12:10:59Z', createdAt, now }), /venció/);
+  assert.throws(() => expirationDuration({ expiresAt: '2026-09-26T12:09:00Z', createdAt, now }), /venció/);
+  assert.equal(expirationDuration({ expiresAt: '2026-10-09T12:00:00Z', createdAt, now }), 'PT1440M', 'nunca más de un día');
+  assert.equal(expirationDuration({ expiresAt: null, createdAt, now }), null);
+  // Sin la creación: el plazo por defecto del proveedor (tampoco depende de la hora).
+  assert.equal(expirationDuration({ expiresAt: '2026-09-26T12:30:00Z', createdAt: null, now }), null);
+  assert.throws(() => buildCheckoutProOrderRequest(context({ status: 'approved' }),
+    { siteUrl: 'https://bitflowapp.github.io/cauce' }, 't'), /abierto/);
+  assert.throws(() => buildCheckoutProOrderRequest(context(), { siteUrl: 'http://sitio.example' }, 't'), /https/);
+});
+
+test('sólo una orden de prueba (ORDTST…) sirve para un piloto en sandbox', () => {
+  assert.equal(isTestOrderId('ORDTST01KS5AJ6HTK2HRQ3XJ3C2JCKP9'), true);
+  for (const id of ['ORD01J49MMW3SSBK5PSV3DFR32959', '', null, 'ordtst01abc', 'ORDTST', 'ORDTST01 x']) {
+    assert.equal(isTestOrderId(id), false, String(id));
+  }
+});
+
+test('el canje nunca pide credenciales TEST- (la API de Orders las rechaza)', () => {
+  const base = { clientId: '1', clientSecret: 's', code: 'c', redirectUri: 'https://x.example/cb', verifier: 'v'.repeat(64) };
+  assert.equal('test_token' in tokenRequest(base).body, false);
+  assert.equal('test_token' in tokenRequest({ ...base, testToken: true }).body, false);
+});
+
+test('de prueba o real lo dice el proveedor sobre la cuenta', () => {
+  const who = accountRequest('token-de-la-cuenta');
+  assert.deepEqual({ url: who.url, method: who.method, auth: who.headers.Authorization },
+    { url: 'https://api.mercadopago.com/users/me', method: 'GET', auth: 'Bearer token-de-la-cuenta' });
+  assert.throws(() => accountRequest(''), /token/);
+  assert.equal(isTestAccount({ id: 1, tags: ['normal', 'test_user'] }), true);
+  assert.equal(isTestAccount({ id: 1, email: 'test_user_123@testuser.com' }), true);
+  for (const real of [{ id: 1, tags: ['normal'], email: 'comercio@example.com' }, {}, null, { tags: 'test_user' },
+    { email: 'alguien@testuser.com.ar' }]) {
+    assert.equal(isTestAccount(real), false, JSON.stringify(real));
+  }
+});
+
+test('la URL de retorno http sólo vale en el stack local', async () => {
+  const { challenge } = await pkcePair();
+  const state = randomToken(32);
+  for (const local of ['http://kong:8000/functions/v1/payments-oauth', 'http://127.0.0.1:54321/functions/v1/payments-oauth']) {
+    assert.match(authorizationUrl({ clientId: '1', redirectUri: local, state, challenge }), /^https:\/\/auth\.mercadopago\.com/);
+  }
+  assert.throws(() => authorizationUrl({ clientId: '1', redirectUri: 'http://proyecto.supabase.co/x', state, challenge }), /https/);
+});
+
+test('el doble del proveedor sólo puede estar en la máquina local: si no, la API real', () => {
+  assert.equal(apiBaseFrom('http://127.0.0.1:9911'), 'http://127.0.0.1:9911');
+  assert.equal(apiBaseFrom('http://host.docker.internal:9911/x'), 'http://host.docker.internal:9911');
+  for (const value of ['', 'https://evil.example', 'http://api.mercadopago.com.evil.example', 'https://127.0.0.1:9911',
+    'no-es-url']) {
+    assert.equal(apiBaseFrom(value), 'https://api.mercadopago.com', value);
+  }
+});
+
+// ───────────────── renovación de tokens ─────────────────
+async function tokenFixture({ expiresInDays, refresh = true }) {
+  const key = await importTokenKey(KEY);
+  const keys = { 1: key };
+  const now = Date.parse('2026-09-26T12:00:00Z');
+  return {
+    now, keys,
+    credentials: {
+      account_id: '11111111-2222-4333-8444-555555555555',
+      access_token_ciphertext: await sealToken('token-guardado', key, 1),
+      refresh_token_ciphertext: refresh ? await sealToken('renovacion-guardada', key, 1) : '',
+      expires_at: new Date(now + expiresInDays * 24 * 3600 * 1000).toISOString(),
+    },
+  };
+}
+const providerAnswer = (status, body) => async () => ({ status, ok: status >= 200 && status < 300, json: async () => body });
+
+test('un token lejos de vencer se usa como está, sin llamar al proveedor', async () => {
+  const { credentials, keys, now } = await tokenFixture({ expiresInDays: 90 });
+  assert.equal(refreshDue(credentials, { now }), false);
+  let called = false;
+  const token = await freshAccessToken(credentials, { keys, current: 1, clientId: '1', clientSecret: 's', now,
+    fetch: async () => { called = true; }, rotate: async () => {}, markReconnect: async () => {} });
+  assert.equal(token, 'token-guardado');
+  assert.equal(called, false);
+});
+
+test('cerca de vencer se renueva del lado del servidor y se guarda cifrado con su nuevo vencimiento', async () => {
+  const { credentials, keys, now } = await tokenFixture({ expiresInDays: REFRESH_WINDOW_DAYS - 1 });
+  assert.equal(refreshDue(credentials, { now }), true);
+  const seen = {};
+  const token = await freshAccessToken(credentials, { keys, current: 1, clientId: '1', clientSecret: 's', now,
+    fetch: async (url, init) => {
+      seen.body = JSON.parse(init.body);
+      return { status: 200, ok: true, json: async () => ({ access_token: 'token-nuevo', refresh_token: 'renovacion-nueva',
+        user_id: 123456789, expires_in: 15552000, live_mode: false }) };
+    },
+    rotate: async (...args) => { seen.rotate = args; },
+    markReconnect: async () => { seen.reconnect = true; } });
+  assert.equal(token, 'token-nuevo');
+  assert.deepEqual({ grant: seen.body.grant_type, refresh: seen.body.refresh_token },
+    { grant: 'refresh_token', refresh: 'renovacion-guardada' });
+  const [account, access, refresh, version, expires] = seen.rotate;
+  assert.equal(account, credentials.account_id);
+  // A la base llega cifrado, nunca el token en claro.
+  assert.equal(access.includes('token-nuevo'), false);
+  assert.equal(refresh.includes('renovacion-nueva'), false);
+  assert.equal(await openToken(access, keys), 'token-nuevo');
+  assert.equal(await openToken(refresh, keys), 'renovacion-nueva');
+  assert.equal(version, 1);
+  assert.equal(expires, '2027-03-25T12:00:00.000Z');
+  assert.equal(seen.reconnect, undefined);
+});
+
+test('si el proveedor rechaza la renovación, la cuenta pide reconectar', async () => {
+  const { credentials, keys, now } = await tokenFixture({ expiresInDays: 2 });
+  let reason = '';
+  await assert.rejects(freshAccessToken(credentials, { keys, current: 1, clientId: '1', clientSecret: 's', now,
+    fetch: providerAnswer(400, { error: 'invalid_grant' }), rotate: async () => assert.fail('no rota'),
+    markReconnect: async text => { reason = text; } }), ReconnectRequired);
+  assert.match(reason, /volver a conectar/);
+});
+
+test('si el proveedor no responde, se sigue con el token vigente; vencido, se pide reconectar', async () => {
+  const soon = await tokenFixture({ expiresInDays: 3 });
+  const deps = { keys: soon.keys, current: 1, clientId: '1', clientSecret: 's', now: soon.now,
+    fetch: providerAnswer(503, {}), rotate: async () => assert.fail('no rota'), markReconnect: async () => assert.fail('no') };
+  assert.equal(await freshAccessToken(soon.credentials, deps), 'token-guardado');
+  const timeout = { ...deps, fetch: async () => { throw new Error('timeout'); } };
+  assert.equal(await freshAccessToken(soon.credentials, timeout), 'token-guardado');
+  const expired = await tokenFixture({ expiresInDays: -1 });
+  let marked = false;
+  await assert.rejects(freshAccessToken(expired.credentials, { ...deps, keys: expired.keys,
+    markReconnect: async () => { marked = true; } }), ReconnectRequired);
+  assert.equal(marked, true);
+});
+
+test('sin refresh_token no hay renovación: cerca de vencer, se pide reconectar', async () => {
+  const { credentials, keys, now } = await tokenFixture({ expiresInDays: 1, refresh: false });
+  let marked = false;
+  await assert.rejects(freshAccessToken(credentials, { keys, current: 1, clientId: '1', clientSecret: 's', now,
+    fetch: async () => assert.fail('no llama'), rotate: async () => {}, markReconnect: async () => { marked = true; } }),
+  ReconnectRequired);
+  assert.equal(marked, true);
 });

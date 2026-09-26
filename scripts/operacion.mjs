@@ -13,6 +13,11 @@
 //   node scripts/operacion.mjs backup              dump, restauración de prueba y copia cifrada
 //   node scripts/operacion.mjs limpiar-qa [--aplicar]   residuo de pruebas (cuentas cauce-qa-…)
 //   node scripts/operacion.mjs registros [--horas 3]    5xx y errores de cada servicio (Logs Explorer)
+//   node scripts/operacion.mjs pagos-estado             funciones, secretos (sólo nombres), pilotos y cuentas
+//   node scripts/operacion.mjs pagos-funciones [--aplicar]  despliega las Edge Functions de pagos (cerradas)
+//   node scripts/operacion.mjs pagos-limpiar [--aplicar]    saca pilotos, credenciales y comercios QA de pagos
+//   node scripts/operacion.mjs pagos-sandbox --aplicar [--modo automatico|asistido|mixto]
+//        Mercado Pago real en modo de prueba de punta a punta (cuentas y tarjetas de prueba) y limpieza
 //
 // --local ensaya el mismo paso contra el stack de `npx supabase start`.
 import { randomBytes } from 'node:crypto';
@@ -25,6 +30,8 @@ import {
 } from './lib/proyecto.mjs';
 import { disposableInbox, mailpitInbox, tokenLink } from './lib/casilla.mjs';
 import { backup, rehearseMigration } from './lib/respaldo.mjs';
+import { pagosEstado, pagosFunciones, pagosLimpiar } from './lib/pagos.mjs';
+import { pagosSandbox } from './lib/pagos-sandbox.mjs';
 
 const args = process.argv.slice(2);
 const step = args[0];
@@ -417,11 +424,17 @@ const SEVERE = "upper(severity_text) in ('ERROR', 'FATAL', 'PANIC', 'CRITICAL')"
 const LAST = 'toString(toStartOfMinute(max(timestamp))) as last';
 const CALLER = `substring(any(log_attributes['request.headers.x_client_info']), 1, 28) as client,
       substring(any(log_attributes['request.headers.referer']), 1, 40) as referer`;
+// Un 503 de una función de pagos es su contrato mientras está cerrada (sin
+// secretos o sin interruptor ni piloto): se informa aparte. Cualquier otro
+// 5xx, también de esas funciones, cuenta como falla.
+const PAYMENTS_CLOSED = `${STATUS} = 503 and startsWith(log_attributes['request.path'], '/functions/v1/payments-')`;
 const LOG_QUERIES = {
   'API 5xx': `select ${STATUS} as code, log_attributes['request.method'] as method,
       log_attributes['request.path'] as path, count() as n, ${LAST}, ${CALLER}
-    from logs where source = 'edge_logs' and ${STATUS} between 500 and 599
+    from logs where source = 'edge_logs' and ${STATUS} between 500 and 599 and not (${PAYMENTS_CLOSED})
     group by code, method, path order by n desc limit 10`,
+  'Funciones de pagos cerradas (503 esperado)': `select log_attributes['request.path'] as path, count() as n, ${LAST}
+    from logs where source = 'edge_logs' and ${PAYMENTS_CLOSED} group by path order by n desc limit 5`,
   'API por código': `select ${STATUS} as code, count() as n
     from logs where source = 'edge_logs' group by code order by code limit 20`,
   'API 4xx por ruta': `select ${STATUS} as code, log_attributes['request.method'] as method,
@@ -475,7 +488,11 @@ async function registros(t, list) {
 // ───────────────────────── arranque ─────────────────────────
 
 const STEPS = { estado, migrar, auth, correo, admin, backup: (t, checks) => { t.link(); return backup(t, checks); },
-  'limpiar-qa': limpiarQa, registros };
+  'limpiar-qa': limpiarQa, registros,
+  'pagos-estado': (t, checks) => pagosEstado(t, checks),
+  'pagos-funciones': (t, checks) => pagosFunciones(t, checks, { apply }),
+  'pagos-limpiar': (t, checks) => pagosLimpiar(t, checks, { apply }),
+  'pagos-sandbox': (t, checks) => pagosSandbox(t, checks, { apply, mode: option('modo') || 'mixto' }) };
 if (!STEPS[step]) {
   console.error(`Paso desconocido: ${step || '(ninguno)'}. Pasos: ${Object.keys(STEPS).join(', ')}.`);
   process.exit(2);
