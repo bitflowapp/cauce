@@ -135,24 +135,49 @@ test('PostgREST respeta RLS entre comercios y clientes', async () => {
   assert.equal(ok(await merchantA.client.from('business_contacts').select('*').eq('business_id', shopB.id), 'contacto ajeno').length, 0);
 });
 
+// SUBSCRIBED sólo confirma el canal: los cambios de Postgres llegan recién
+// cuando Realtime avisa «Subscribed to PostgreSQL» (con el stack en frío, varios
+// segundos después). Se espera ese aviso, como hace la aplicación.
+function listenOrders(client, name, onInsert, timeout = 30000) {
+  let lastError = '';
+  let timer;
+  const channel = client.channel(name).on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, payload => onInsert(payload.new));
+  const ready = new Promise((resolve, reject) => {
+    timer = setTimeout(() => reject(new Error(`Realtime no confirmó la suscripción a Postgres ${lastError}`)), timeout);
+    channel.on('system', {}, payload => {
+      if (payload?.extension !== 'postgres_changes') return;
+      // Un error acá es transitorio: Realtime reintenta solo y después avisa «ok».
+      if (payload.status !== 'ok') { lastError = String(payload.message || ''); return; }
+      clearTimeout(timer);
+      resolve();
+    }).subscribe((state, error) => {
+      if (state === 'CHANNEL_ERROR' || state === 'TIMED_OUT') { clearTimeout(timer); reject(error || new Error(state)); }
+    });
+  });
+  return { channel, ready };
+}
+
 test('Realtime entrega a cada comercio sólo sus pedidos', async () => {
   const received = { A: [], B: [] };
   const channels = [];
-  for (const [key, merchant, shop] of [['A', merchantA, shopA], ['B', merchantB, shopB]]) {
-    merchant.client.realtime.setAuth((await merchant.client.auth.getSession()).data.session.access_token);
-    const channel = merchant.client.channel(`qa-${key}-${run}`).on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' },
-      payload => received[key].push(payload.new.business_id));
-    await new Promise((resolve, reject) => channel.subscribe(state => (state === 'SUBSCRIBED' ? resolve() : state === 'CHANNEL_ERROR' ? reject(new Error(state)) : null)));
-    channels.push([merchant, channel, shop]);
+  try {
+    for (const [key, merchant] of [['A', merchantA], ['B', merchantB]]) {
+      merchant.client.realtime.setAuth((await merchant.client.auth.getSession()).data.session.access_token);
+      const { channel, ready } = listenOrders(merchant.client, `qa-${key}-${run}`, row => received[key].push(row.business_id));
+      channels.push([merchant, channel]);
+      await ready;
+    }
+    ok(await order(await guest('Realtime'), shopB.id, [{ product_id: shopB.made.id, quantity: 1 }]), 'pedido a B');
+    const until = Date.now() + 10000;
+    while (!received.B.length && Date.now() < until) await new Promise(r => setTimeout(r, 200));
+    await new Promise(r => setTimeout(r, 800));
+    assert.ok(received.B.length >= 1, 'B recibe su pedido');
+    assert.ok(received.B.every(id => id === shopB.id));
+    assert.equal(received.A.filter(id => id === shopB.id).length, 0, 'A no recibe pedidos de B');
+  } finally {
+    // Un canal abierto mantiene vivo el proceso: se cierran aunque falle.
+    for (const [merchant, channel] of channels) await merchant.client.removeChannel(channel);
   }
-  ok(await order(await guest('Realtime'), shopB.id, [{ product_id: shopB.made.id, quantity: 1 }]), 'pedido a B');
-  const until = Date.now() + 8000;
-  while (!received.B.length && Date.now() < until) await new Promise(r => setTimeout(r, 200));
-  await new Promise(r => setTimeout(r, 800));
-  assert.ok(received.B.length >= 1, 'B recibe su pedido');
-  assert.ok(received.B.every(id => id === shopB.id));
-  assert.equal(received.A.filter(id => id === shopB.id).length, 0, 'A no recibe pedidos de B');
-  for (const [merchant, channel] of channels) await merchant.client.removeChannel(channel);
 });
 
 test('ferias de punta a punta por la API: organizador, inscripción, puesto y retiro en feria', async () => {
