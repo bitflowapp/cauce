@@ -231,6 +231,7 @@ async function orders(ctx, member) {
         list = await ctx.repo.panelOrders(member.businessId).catch(() => list);
         const fresh = list.filter(o => o.status === 'submitted' && !before.has(o.id));
         if (fresh.length) {
+          filter = 'nuevos';
           ctx.toast(fresh.length === 1 ? `¡Nuevo pedido ${fresh[0].code}!` : `${fresh.length} pedidos nuevos`, 'ok');
           if (sound) beep();
           navigator.vibrate?.([120, 80, 120]);

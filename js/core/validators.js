@@ -23,9 +23,10 @@ export function normalizeWhatsapp(value) {
     if (!digits.startsWith('549') && digits.length === 12) digits = `549${digits.slice(2)}`;
   } else if (digits.length === 10) {
     digits = `549${digits}`;
-  } else if (digits.length === 12 && digits.slice(4, 6) === '15') {
-    // Código de área de 4 + 15 + número: se quita el 15.
-    digits = `549${digits.slice(0, 4)}${digits.slice(6)}`;
+  } else if (digits.length === 12) {
+    // Código de área (2 a 4 cifras) + 15 + número: se quita el 15.
+    const area = [3, 4, 2].find(len => digits.slice(len, len + 2) === '15');
+    if (area) digits = `549${digits.slice(0, area)}${digits.slice(area + 2)}`;
   }
   return digits.length >= 8 && digits.length <= 15 ? digits : '';
 }
