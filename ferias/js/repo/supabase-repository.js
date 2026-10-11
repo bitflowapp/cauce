@@ -476,6 +476,11 @@ export function createRepository({ client, siteUrl, redirectTo, onError = null }
     subscribeOrders(filter, onChange) {
       const channel = client.channel(`orders-${filter.replace(/[^a-z0-9]/gi, '')}-${Math.random().toString(36).slice(2, 8)}`)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'orders', filter }, () => onChange())
+        // SUBSCRIBED llega enseguida, pero los cambios de Postgres empiezan a
+        // fluir cuando Realtime lo confirma (segundos después, y otra vez tras
+        // cada reconexión). Al confirmarse se vuelve a consultar: un pedido que
+        // entró en ese hueco no queda afuera.
+        .on('system', {}, payload => { if (payload?.extension === 'postgres_changes' && payload.status === 'ok') onChange(); })
         .subscribe(status => { if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') onChange({ degraded: true }); });
       return () => { client.removeChannel(channel); };
     },
