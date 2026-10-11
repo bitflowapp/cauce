@@ -6,6 +6,7 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 import { sofia } from '../js/ui/sofia.js';
+import { sofia as generico } from '../js/ui/personaje-generico.js';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const favicon = await readFile(resolve(root, 'assets/brand/favicon.svg'), 'utf8');
@@ -29,11 +30,14 @@ for (const size of [192, 512]) {
   await shot(`<div style="width:${size}px;height:${size}px">${favicon.replace('<svg ', `<svg width="${size}" height="${size}" `)}</div>`, size, size, `assets/brand/icon-${size}.png`);
 }
 await shot(`<div style="width:512px;height:512px;background:#b5432a;display:grid;place-items:center">${favicon.replace('<svg ', '<svg width="380" height="380" ')}</div>`, 512, 512, 'assets/brand/icon-maskable-512.png');
-await shot(`<div style="width:1200px;height:630px;display:grid;grid-template-columns:1fr 520px;align-items:center;background:repeating-linear-gradient(90deg,#f2557e 0 60px,#ee4a12 60px 120px)">
+const ogHtml = art => `<div style="width:1200px;height:630px;display:grid;grid-template-columns:1fr 520px;align-items:center;background:repeating-linear-gradient(90deg,#f2557e 0 60px,#ee4a12 60px 120px)">
   <div style="margin-left:70px;background:#fffbf6;border-radius:36px;padding:48px 52px;box-shadow:0 20px 60px rgba(91,46,24,.25)">
     <div style="font-family:'Lilita One';font-size:120px;line-height:1;color:#b5432a">CAUCE</div>
     <div style="font-family:system-ui;font-weight:800;letter-spacing:.22em;font-size:26px;color:#f2557e;margin-top:6px">FERIAS NEUQUÉN</div>
     <div style="font-family:'Caveat Brush';font-size:64px;color:#6a5d24;margin-top:18px">Hecho cerca tuyo.</div></div>
-  <div style="align-self:end">${sofia('bienvenida', { size: 500, animated: false })}</div></div>`, 1200, 630, 'assets/brand/og.png');
+  <div style="align-self:end">${art}</div></div>`;
+await shot(ogHtml(sofia('bienvenida', { size: 500, animated: false })), 1200, 630, 'assets/brand/og.png');
+// Para builds públicos sin la autorización de Sofía (FERIAS_PERSONAJE=generico).
+await shot(ogHtml(generico('bienvenida', { size: 500, animated: false })), 1200, 630, 'assets/brand/og-generico.png');
 await browser.close();
-console.log('íconos y og.png generados en assets/brand/');
+console.log('íconos, og.png y og-generico.png generados en assets/brand/');

@@ -1,14 +1,17 @@
-// Hoja de personaje: renderiza todas las escenas de Sofía en Chromium y guarda
-// una captura (docs/evidencia/sofia-escenas.png). Sirve para revisar que las
-// proporciones se mantengan entre poses.
+// Hoja de personaje: renderiza todas las escenas en Chromium y guarda una
+// captura. Sirve para revisar que las proporciones se mantengan entre poses.
+//   node scripts/sofia-sheet.mjs            → Sofía (docs/evidencia/sofia-escenas.png)
+//   node scripts/sofia-sheet.mjs --generico → personaje genérico (docs/evidencia/personaje-generico.png)
 import { mkdir, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
-import { sofia, SCENE_NAMES } from '../js/ui/sofia.js';
+
+const generic = process.argv.includes('--generico');
+const { sofia, SCENE_NAMES } = await import(generic ? '../js/ui/personaje-generico.js' : '../js/ui/sofia.js');
 
 const root = fileURLToPath(new URL('../', import.meta.url));
-const out = resolve(root, process.argv[2] || 'docs/evidencia/sofia-escenas.png');
+const out = resolve(root, generic ? 'docs/evidencia/personaje-generico.png' : 'docs/evidencia/sofia-escenas.png');
 const fonts = resolve(root, 'node_modules/@fontsource/lilita-one/files/lilita-one-latin-400-normal.woff2');
 const css = await readFile(resolve(root, 'styles/ferias.css'), 'utf8').catch(() => '');
 const html = `<!doctype html><html><head><meta charset="utf-8"><style>

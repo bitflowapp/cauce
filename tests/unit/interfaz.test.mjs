@@ -3,6 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { sofia, SCENE_NAMES } from '../../js/ui/sofia.js';
+import * as generico from '../../js/ui/personaje-generico.js';
 import { icon, ICON_NAMES } from '../../js/ui/icons.js';
 import { productCard, storeCard, fairCard, emptyState, banner, stepper } from '../../js/ui/components.js';
 
@@ -44,4 +45,13 @@ test('las tarjetas escapan nombres y textos de los comercios', () => {
   assert.match(String(emptyState({ title: evil })), /&lt;script&gt;/);
   assert.match(String(banner('warn', evil)), /role="status"/);
   assert.match(String(stepper({ value: 1, max: 1 })), /aria-label="Restar uno" disabled/);
+});
+
+test('el personaje genérico reemplaza a Sofía sin cambiar la API ni nombrarla', () => {
+  assert.deepEqual([...generico.SCENE_NAMES], [...SCENE_NAMES]);
+  for (const scene of SCENE_NAMES) {
+    const svg = generico.sofia(scene, { size: 120 });
+    assert.match(svg, /role="img" aria-label="[^"]+"/, scene);
+    assert.doesNotMatch(svg, /Sofía|s-hair-back|sofia-sticker/, scene);
+  }
 });

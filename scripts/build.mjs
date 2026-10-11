@@ -4,7 +4,7 @@
 //   npm run build        → proyecto remoto propio (variables FERIAS_*) en dist/
 //
 // Variables para el build remoto: FERIAS_SUPABASE_URL, FERIAS_SUPABASE_PUBLISHABLE_KEY,
-// FERIAS_SITE_URL y, opcional, FERIAS_RELEASE / FERIAS_OUT_DIR. Falla si falta algo,
+// FERIAS_SITE_URL y, opcional, FERIAS_RELEASE / FERIAS_OUT_DIR / FERIAS_PERSONAJE. Falla si falta algo,
 // si la clave no es pública o si en el bundle aparece una credencial privilegiada.
 // Nunca apunta al proyecto de CAUCE · Aluminé.
 import { build } from 'esbuild';
@@ -43,6 +43,12 @@ if (parsed.protocol !== 'https:' && !isLocalHost) fail('La URL de Supabase debe 
 if (!local && !isLocalHost && !/^[a-z0-9]{20}\.supabase\.co$/.test(parsed.hostname)) fail(`Host de Supabase inesperado: ${parsed.hostname}.`);
 if (FORBIDDEN_PROJECTS.some(ref => parsed.hostname.startsWith(ref))) fail('Ese es el proyecto de CAUCE · Aluminé: Ferias usa un proyecto propio.');
 if (!siteUrl) fail('Falta FERIAS_SITE_URL (la dirección pública del sitio).');
+
+// Personaje: Sofía sólo en el stack local o con FERIAS_PERSONAJE=sofia explícito,
+// que se usa recién con su autorización escrita (docs/PERSONAJE.md). Cualquier
+// build remoto usa por defecto el personaje genérico.
+const character = process.env.FERIAS_PERSONAJE || (local ? 'sofia' : 'generico');
+if (!['sofia', 'generico'].includes(character)) fail('FERIAS_PERSONAJE debe ser "sofia" o "generico".');
 
 function keyRole(key) {
   if (key.startsWith('sb_publishable_')) return 'publishable';
@@ -105,6 +111,10 @@ const result = await build({
   legalComments: 'none', metafile: true, write: true,
   plugins: [{ name: 'ferias-runtime', setup(builder) {
     builder.onLoad({ filter: /[\\/]js[\\/]runtime-env\.js$/ }, () => ({ loader: 'js', resolveDir: root, contents: runtimeModule }));
+    if (character === 'generico') {
+      builder.onLoad({ filter: /[\\/]js[\\/]ui[\\/]sofia\.js$/ }, async () => ({ loader: 'js', resolveDir: resolve(root, 'js/ui'),
+        contents: await readFile(resolve(root, 'js/ui/personaje-generico.js'), 'utf8') }));
+    }
   } }],
 });
 const outputs = Object.entries(result.metafile.outputs).filter(([file]) => file.endsWith('.js'));
@@ -120,6 +130,10 @@ for (const token of allCode.match(/eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A
   if (keyRole(token) !== 'anon') fail('Hay un JWT que no es de rol anon en el bundle.');
 }
 if (FORBIDDEN_PROJECTS.some(ref => allCode.includes(ref))) fail('El bundle menciona el proyecto de CAUCE · Aluminé.');
+if (character === 'generico') {
+  if (/Sof(í|\\xED|\\u00ED)a|s-hair-back|sofia-sticker/i.test(allCode)) fail('Build con personaje genérico: el bundle todavía contiene a Sofía.');
+  await cp(resolve(root, 'assets/brand/og-generico.png'), resolve(output, 'assets/brand/og.png'));
+}
 // Presupuesto de lo que descarga quien compra (los paneles van aparte).
 const BUDGET = 400 * 1024;
 if (bundle.length > BUDGET) fail(`El bundle inicial pesa ${Math.round(bundle.length / 1024)} KB (tope ${BUDGET / 1024} KB).`);
@@ -175,5 +189,5 @@ await writeFile(resolve(output, 'service-worker.js'), worker);
 for (const file of shellFiles.filter(f => f !== './')) {
   try { await stat(resolve(output, file)); } catch { fail(`Falta ${file} en la salida.`); }
 }
-console.log(`BUILD PASS · ${local ? 'stack local' : parsed.hostname} · release ${release} · esquema ${CONFIG.requiredSchema}`
+console.log(`BUILD PASS · ${local ? 'stack local' : parsed.hostname} · personaje ${character} · release ${release} · esquema ${CONFIG.requiredSchema}`
   + ` · JS inicial ${Math.round(bundle.length / 1024)} KB (+${chunkNames.length} partes, ${Math.round((allCode.length - bundle.length) / 1024)} KB) · CSS ${Math.round(css.length / 1024)} KB · ${relOut}`);

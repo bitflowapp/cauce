@@ -1,0 +1,72 @@
+name: CAUCE · Ferias CI
+
+# No publica nada ni usa secretos: la integración y los E2E levantan un stack
+# Supabase local, efímero, dentro del runner.
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ferias-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verificar:
+    name: Lint, tipos, compuertas, unitarias y SQL
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run check
+      - run: npm test
+      - name: Migraciones y RLS en PostgreSQL embebido
+        run: npm run test:db
+
+  supabase:
+    name: Integración, E2E (Chromium y WebKit) y auditoría visual
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci
+      - name: Stack Supabase local de Ferias (Postgres, Auth, REST, Storage, Realtime, Mailpit)
+        run: npm run db:start
+      - name: Integración y seguridad contra el stack real
+        run: npm run test:integration
+      - name: Navegadores
+        run: npx playwright install --with-deps chromium webkit
+      - name: E2E en Chromium y WebKit
+        run: npm run e2e
+      - name: Datos de demostración y auditoría visual (7 anchos, Chromium y WebKit)
+        run: |
+          npm run seed:demo
+          npm run build:local
+          node tests/visual/capture.mjs --browsers=chromium,webkit
+      - name: Guardar evidencia
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ferias-evidencia-${{ github.sha }}
+          path: evidence/
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Apagar el stack
+        if: always()
+        run: npx supabase stop --no-backup
