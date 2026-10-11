@@ -45,7 +45,7 @@ proyecto remoto ni se publicó nada**: esas dos acciones requieren autorización
 | 16 | Documentación de instalación | **Listo** | `INSTALACION.md` |
 | 17 | Informe de listo y pendiente | **Este documento** | |
 | 18 | Estimación de costos | **Listo, con salvedad** | `COSTOS.md` (cuotas a confirmar en supabase.com) |
-| 19 | Rama y pull request | **Listo** | Rama publicada; PR en borrador, marcado «no fusionar» |
+| 19 | Rama y pull request | **Listo** | Rama `claude/cauce-ferias-neuquen` publicada; [PR #11](https://github.com/bitflowapp/cauce/pull/11) en borrador, marcado «no fusionar» |
 
 ## Resultados de las pruebas (en este entorno)
 
