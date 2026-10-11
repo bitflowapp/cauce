@@ -45,10 +45,11 @@ export function merchantActions(order) {
       if (order.fulfillment === 'delivery') add('on_the_way', 'Salió a entregar');
       else add('delivered', 'Entregado');
       break;
-    case 'on_the_way': add('delivered', 'Entregado'); break;
+    case 'on_the_way': if (order.fulfillment === 'delivery') add('delivered', 'Entregado'); break;
     default: break;
   }
-  if (['submitted', 'accepted', 'preparing', 'ready', 'on_the_way'].includes(order.status)) {
+  const cancellable = ['submitted', 'accepted', 'preparing', 'ready', ...(order.fulfillment === 'delivery' ? ['on_the_way'] : [])];
+  if (cancellable.includes(order.status)) {
     actions.push({ next: 'canceled', label: order.status === 'submitted' ? 'Rechazar' : 'Cancelar', tone: 'danger' });
   }
   return actions;

@@ -110,6 +110,7 @@ export const CODE_MESSAGES = Object.freeze({
   PGRST303: 'Tu sesión venció. Ingresá de nuevo.',
   U0001: 'El pedido cambió mientras lo mirabas. Ya actualizamos la vista: revisalo y reintentá.',
   U0003: 'No queda stock suficiente de un producto. Revisá tu carrito.',
+  U0005: 'Los precios cambiaron mientras confirmabas. Revisá el nuevo total y confirmá de nuevo.',
   U0006: 'Tenés varios pedidos esperando respuesta. Esperá a que los atiendan antes de enviar otro.',
   U0010: 'Llegaste a un límite de tu plan.',
   P0002: 'No encontramos lo que buscabas.',

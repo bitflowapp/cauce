@@ -212,15 +212,22 @@ async function render() {
   if (chrome !== 'bare') header.innerHTML = String(await headerHtml(chrome, view.nav, session));
   if (token !== current.token) return;
   document.getElementById('bottom-nav-slot').innerHTML = String(bottomNavHtml(chrome, view.nav, view.navBadges || {}));
-  document.getElementById('footer-slot').innerHTML = chrome === 'shop' ? String(footerHtml()) : '';
-  document.getElementById('demo-slot').innerHTML = status?.features?.demo_data ? String(demoRibbon()) : '';
+  document.getElementById('footer-slot').innerHTML = String(chrome === 'shop' ? footerHtml() : '');
+  document.getElementById('demo-slot').innerHTML = String(status?.features?.demo_data ? demoRibbon() : '');
   main.className = `main${chrome === 'bare' ? ' is-bare' : ''}`;
-  main.innerHTML = String(view.html);
+  // Cada vista vive en un contenedor nuevo: sus manejadores se van con su DOM y
+  // nunca se acumulan entre navegaciones.
+  const root = document.createElement('div');
+  root.className = 'view';
+  root.innerHTML = String(view.html);
+  main.replaceChildren(root);
   document.title = view.title ? `${view.title} · CAUCE Ferias` : CONFIG.name;
   main.setAttribute('aria-busy', 'false');
-  if (!samePage) { window.scrollTo(0, 0); main.focus({ preventScroll: true }); }
+  // En la primera carga el foco queda al principio (para «Saltar al contenido»);
+  // en cada navegación pasa al contenido nuevo.
+  if (!samePage) { window.scrollTo(0, 0); if (current.path) main.focus({ preventScroll: true }); }
   current.path = path;
-  try { current.cleanup = view.mount?.(main, ctx) || null; } catch (error) { reportError('frontend_error', error); }
+  try { current.cleanup = view.mount?.(root, ctx) || null; } catch (error) { reportError('frontend_error', error); }
 }
 
 // ── manejadores globales ──
@@ -238,6 +245,8 @@ function bindGlobal() {
     }
   });
   document.addEventListener('click', async event => {
+    // «Saltar al contenido» sin tocar el hash (el enrutador lo usa para las rutas).
+    if (/** @type {HTMLElement} */ (event.target).closest('.skip')) { event.preventDefault(); main.focus(); return; }
     const el = /** @type {HTMLElement} */ (event.target).closest('[data-action]');
     if (!el) return;
     const action = el.getAttribute('data-action');
