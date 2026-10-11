@@ -26,9 +26,10 @@ export async function startPreview() {
 export const stopPreview = () => new Promise(done => (server ? server.close(() => done()) : done()));
 
 /** Lanza el motor; si no está instalado en esta máquina devuelve null (la prueba lo informa). */
+// Fuera del CI, un navegador sin instalar se omite; en el CI, falta = falla.
 export async function launch(name) {
   try { return await ENGINES[name].launch(); } catch (error) {
-    if (/Executable doesn't exist|browserType.launch/.test(String(error.message))) return null;
+    if (!process.env.CI && /Executable doesn't exist/.test(String(error.message))) return null;
     throw error;
   }
 }
