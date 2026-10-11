@@ -1,0 +1,47 @@
+{
+  "name": "cauce-ferias-neuquen",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "CAUCE · Ferias Neuquén: marketplace de artesanos, feriantes y emprendedores locales (derivación independiente de CAUCE).",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "db:start": "supabase start -x imgproxy,studio,edge-runtime,logflare,vector,supavisor,postgres-meta",
+    "db:reset": "supabase db reset",
+    "db:stop": "supabase stop",
+    "build": "node scripts/build.mjs",
+    "build:local": "node scripts/build.mjs --local",
+    "preview": "node scripts/preview-server.mjs",
+    "dev": "npm run build:local && npm run preview",
+    "seed:demo": "node scripts/seed-demo.mjs",
+    "lint": "eslint .",
+    "typecheck": "tsc -p jsconfig.json",
+    "check": "node scripts/check.mjs",
+    "test": "node --test tests/unit/*.test.mjs",
+    "test:db": "node --test tests/db/*.test.mjs",
+    "test:integration": "node --test --test-concurrency=1 --test-timeout=180000 tests/integration/*.test.mjs",
+    "e2e": "npm run build:local && node --test --test-concurrency=1 --test-timeout=1200000 tests/e2e/*.test.mjs",
+    "audit:visual": "node tests/visual/capture.mjs",
+    "verify": "npm run lint && npm run typecheck && npm run check && npm test && npm run test:db"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "2.116.0",
+    "qrcode-generator": "2.0.4"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.8",
+    "@eslint/js": "10.0.1",
+    "@fontsource-variable/inter": "5.3.0",
+    "@fontsource/caveat-brush": "5.3.0",
+    "@fontsource/lilita-one": "5.3.0",
+    "esbuild": "0.28.2",
+    "eslint": "10.11.0",
+    "globals": "17.12.0",
+    "playwright": "1.56.1",
+    "postgres": "3.4.9",
+    "supabase": "2.117.0",
+    "typescript": "7.0.2"
+  }
+}
