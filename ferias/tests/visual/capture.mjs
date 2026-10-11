@@ -27,7 +27,8 @@ const cred = role => credentials.find(c => c.rol === role);
 const status = JSON.parse((s => s.slice(s.indexOf('{')))(execFileSync('npx', ['supabase', 'status', '-o', 'json'], { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })));
 const anon = createClient(status.API_URL, status.PUBLISHABLE_KEY, { auth: { persistSession: false } });
 const taza = (await anon.from('products').select('id').eq('name', 'Taza patagónica').single()).data.id;
-const fair = (await anon.from('fairs').select('slug').eq('name', 'Feria del Parque Central').single()).data.slug;
+const fairRow = (await anon.from('fairs').select('id,slug').eq('name', 'Feria del Parque Central').single()).data;
+const fair = fairRow.slug;
 const tracking = (await (async () => {
   const merchant = createClient(status.API_URL, status.PUBLISHABLE_KEY, { auth: { persistSession: false } });
   await merchant.auth.signInWithPassword({ email: cred('raices').email, password: cred('raices').password });
@@ -45,7 +46,8 @@ const PRIVATE = {
   raices: [['panel', '#/panel'], ['panel-pedidos', '#/panel/pedidos'], ['panel-productos', '#/panel/productos'],
     ['panel-producto', '#/panel/producto/nuevo'], ['panel-inventario', '#/panel/inventario'], ['panel-tienda', '#/panel/tienda'],
     ['panel-ferias', '#/panel/ferias'], ['panel-estadisticas', '#/panel/estadisticas'], ['panel-plan', '#/panel/plan'], ['panel-equipo', '#/panel/equipo']],
-  organiza: [['organizador', '#/organizador'], ['organizador-nueva', '#/organizador/nueva']],
+  organiza: [['organizador', '#/organizador'], ['organizador-feria', `#/organizador/feria/${fairRow.id}`],
+    ['organizador-participantes', `#/organizador/feria/${fairRow.id}?tab=participantes`], ['organizador-nueva', '#/organizador/nueva']],
   admin: [['admin', '#/admin'], ['admin-tiendas', '#/admin/tiendas'], ['admin-organizadores', '#/admin/organizadores'], ['admin-comunidad', '#/admin/comunidad'], ['admin-registro', '#/admin/registro']],
 };
 
@@ -74,7 +76,7 @@ function measure() {
   const overflow = document.documentElement.scrollWidth - document.documentElement.clientWidth;
   const wide = [...document.querySelectorAll('#main *')].filter(el => {
     const r = el.getBoundingClientRect();
-    return r.width > 0 && r.right > document.documentElement.clientWidth + 1 && !el.closest('.chips,.scroller,.categories,.tabs,.table-wrap,.gallery-track,.cover,.gallery');
+    return r.width > 0 && r.right > document.documentElement.clientWidth + 1 && !el.closest('.chips,.scroller,.categories,.tabs,.segmented,.table-wrap,.gallery-track,.cover,.gallery');
   }).slice(0, 5).map(el => `${el.tagName.toLowerCase()}.${String(el.className).split(' ')[0]}`);
   const small = [...document.querySelectorAll('a[href], button, input, select, textarea')].filter(el => {
     const r = el.getBoundingClientRect();
@@ -130,6 +132,13 @@ for (const engine of BROWSERS) {
     };
     const visitor = await browser.newContext({ viewport: { width, height }, locale: 'es-AR', timezoneId: 'America/Argentina/Buenos_Aires', hasTouch: width < 900, reducedMotion: 'reduce' });
     await shoot(visitor, PUBLIC, 'visita');
+    // Carrito con un producto, para ver el checkout.
+    const buyer = await visitor.newPage();
+    await buyer.goto(`${BASE}#/producto/${taza}`);
+    await ready(buyer);
+    await buyer.click('[data-action="add"]');
+    await buyer.close();
+    await shoot(visitor, [['carrito', '#/carrito']], 'visita');
     await visitor.close();
     for (const [role, list] of Object.entries(PRIVATE)) {
       const context = await browser.newContext({ viewport: { width, height }, locale: 'es-AR', timezoneId: 'America/Argentina/Buenos_Aires', hasTouch: width < 900, reducedMotion: 'reduce' });

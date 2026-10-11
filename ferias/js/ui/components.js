@@ -11,7 +11,7 @@ export const LOGO_RAYS = raw(`<svg class="logo-rays" viewBox="0 0 16 22" aria-hi
 export function logo({ large = false, href = '#/' } = {}) {
   return html`<a class="logo${large ? ' logo-lg' : ''}" href="${href}" aria-label="CAUCE · Ferias Neuquén, inicio">
     <span class="logo-word" aria-hidden="true">CAUCE${LOGO_RAYS}</span>
-    <span class="logo-sub" aria-hidden="true">FERIAS NEUQUÉN</span>
+    <svg class="logo-sub" viewBox="0 0 108 10" aria-hidden="true" focusable="false"><text x="0" y="8.4" textLength="107" lengthAdjust="spacingAndGlyphs">FERIAS NEUQUÉN</text></svg>
   </a>`;
 }
 
@@ -33,22 +33,28 @@ export function favButton(productId, active, label = 'Guardar en favoritos') {
 }
 
 export function stockFlag(product) {
-  if (product.madeToOrder) return html`<span class="tag tag-olive product-flag">Por encargo</span>`;
-  if (product.available === false) return html`<span class="tag tag-error product-flag">No disponible</span>`;
-  if (product.trackStock && product.stock <= 0) return html`<span class="tag tag-error product-flag">Agotado</span>`;
-  if (product.trackStock && product.stock <= 2) return html`<span class="tag tag-warn product-flag">Últimas ${product.stock}</span>`;
+  if (product.madeToOrder) return html`<span class="tag tag-olive product-flag" aria-hidden="true">Por encargo</span>`;
+  if (product.available === false) return html`<span class="tag tag-error product-flag" aria-hidden="true">No disponible</span>`;
+  if (product.trackStock && product.stock <= 0) return html`<span class="tag tag-error product-flag" aria-hidden="true">Agotado</span>`;
+  if (product.trackStock && product.stock <= 2) return html`<span class="tag tag-warn product-flag" aria-hidden="true">Últimas ${product.stock}</span>`;
   return '';
+}
+
+function stockText(product) {
+  const label = product.madeToOrder ? 'Por encargo' : product.available === false ? 'No disponible'
+    : product.trackStock && product.stock <= 0 ? 'Agotado' : product.trackStock && product.stock <= 2 ? `Últimas ${product.stock}` : '';
+  return label ? html`<span class="sr-only">, ${label}</span>` : '';
 }
 
 export function productCard(product, { favorites = new Set(), showShop = true, categoryIcon = 'otros' } = {}) {
   return html`<article class="product-card reveal">
-    <a href="#/producto/${product.id}" class="product-media" aria-label="${product.name}, ${formatARS(product.price)}">
+    <a href="#/producto/${product.id}" class="product-media" tabindex="-1" aria-hidden="true">
       ${product.image ? html`<img src="${product.image}" alt="" loading="lazy" decoding="async" width="400" height="400">` : placeholderArt(categoryIcon)}
       ${stockFlag(product)}
     </a>
     ${favButton(product.id, favorites.has(product.id))}
-    <a href="#/producto/${product.id}" class="product-body" tabindex="-1">
-      <span class="product-name">${product.name}</span>
+    <a href="#/producto/${product.id}" class="product-body">
+      <span class="product-name">${product.name}</span>${stockText(product)}
       <span class="product-price">${formatARS(product.price)}</span>
       ${showShop && product.business ? html`
         <span class="product-shop">${icon('store', { size: 14 })}<span>${product.business.name}</span></span>

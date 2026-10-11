@@ -707,3 +707,15 @@ a.tag { min-height: 34px; padding: 6px 12px; text-decoration: none; }
 .qr-card .row { justify-content: center; }
 .qr-card > svg { width: min(220px, 70vw); height: auto; aspect-ratio: 1 / 1; }
 @media (min-width: 900px) { .header-locality { max-width: 220px; } }
+.header { min-height: var(--header-h); }
+svg.logo-sub { width: 86px; height: 8px; margin-top: 3px; overflow: visible; }
+svg.logo-sub text { font-family: var(--font-ui); font-weight: 800; font-size: 8.4px; fill: var(--rosa); }
+.logo-lg svg.logo-sub { width: 200px; height: 18px; }
+.org-fair-head { display: flex; align-items: center; gap: 12px; }
+.org-fair-head .store-logo { width: 60px; height: 60px; border-radius: 50%; }
+.org-tent { flex: none; }
+.segmented a { padding: 0 8px; white-space: nowrap; }
+@media (max-width: 380px) { .org-tent { display: none; } .segmented a { font-size: .82rem; } }
+.segmented { overflow-x: auto; scrollbar-width: none; }
+.segmented::-webkit-scrollbar { display: none; }
+.segmented > a, .segmented > button { flex: 1 0 auto; }
