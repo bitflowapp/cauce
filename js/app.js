@@ -319,6 +319,8 @@ async function boot() {
   }
   repo = createRepository({ client: RUNTIME_ENV.client, siteUrl: RUNTIME_ENV.siteUrl, redirectTo: RUNTIME_ENV.redirectTo,
     onError: error => { if (error.code !== 'NETWORK_ERROR') reportError('supabase_error', { code: error.technical?.code || error.code, message: error.technical?.message || error.message }); } });
+  // Los catálogos de referencia viajan en paralelo con el estado del servicio.
+  repo.referenceData().catch(() => null);
   try {
     status = await repo.appStatus();
   } catch (error) {
@@ -333,6 +335,7 @@ async function boot() {
     if (['SIGNED_IN', 'SIGNED_OUT', 'USER_UPDATED'].includes(event)) render();
   });
   bindGlobal();
+  document.getElementById('demo-slot').innerHTML = String(status?.features?.demo_data ? demoRibbon() : '');
   await repo.session({ verify: true }).catch(() => null);
   await handleAuthLink();
   app.classList.add('is-ready');

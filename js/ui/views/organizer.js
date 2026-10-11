@@ -11,6 +11,7 @@ import { icon } from '../icons.js';
 import { emptyState, banner, pageHeader, fairArt, storeLogo, initials } from '../components.js';
 
 const ORG_KEY = 'ferias:organizer:v1';
+const TENT = '<svg viewBox="0 0 64 56" width="64" height="56"><path d="M6 24 32 6l26 18" fill="none" stroke="#e8572a" stroke-width="4" stroke-linejoin="round"/><path d="M6 24h52v6c-4 4-9 4-13 0-4 4-9 4-13 0-4 4-9 4-13 0-4 4-9 4-13 0z" fill="#e8572a"/><path d="M12 30v22M52 30v22M22 52V36h20v16" fill="none" stroke="#b5432a" stroke-width="4" stroke-linecap="round"/><path d="M32 6V2" stroke="#b5432a" stroke-width="3" stroke-linecap="round"/></svg>';
 const STATUS = { draft: ['tag-warn', 'Borrador'], published: ['tag-ok', 'Publicada'], canceled: ['tag-error', 'Cancelada'] };
 function pickOrganizer(ctx) {
   const list = ctx.session.organizers;
@@ -191,8 +192,8 @@ export async function fair(ctx) {
   const requested = applications.filter(a => a.status === 'requested');
   const confirmed = applications.filter(a => a.status === 'confirmed');
   const others = applications.filter(a => ['rejected', 'withdrawn'].includes(a.status));
-  const tabLink = (key, label) => html`<a class="tab" href="#/organizador/feria/${f.id}?tab=${key}"${raw(key === tab ? ' aria-current="page"' : '')}>${label}</a>`;
-  const businessLine = a => html`${storeLogo(a.business)}<span class="grow stack gap-xs"><a href="#/tienda/${a.business.slug}"><strong>${a.business.name}</strong></a>
+  const tabLink = (key, label) => html`<a href="#/organizador/feria/${f.id}?tab=${key}"${raw(key === tab ? ' aria-current="page"' : '')}>${label}</a>`;
+  const businessLine = a => html`${storeLogo(a.business)}<span class="grow stack gap-xs"><a class="fair-link" href="#/tienda/${a.business.slug}"><strong>${a.business.name}</strong></a>
     <span class="small muted">${[a.business.category, a.business.locality].filter(Boolean).join(' · ')}</span></span>`;
   let content;
   if (tab === 'resumen') {
@@ -269,9 +270,14 @@ export async function fair(ctx) {
   return {
     chrome: 'organizer', nav: 'ferias', title: f.name,
     html: html`
-      ${pageHeader(f.name, { backHref: '#/organizador' })}
-      <p class="small muted">${longDate(f.startsAt)} · ${timeRange(f.startsAt, f.endsAt)} · ${f.venue}, ${f.locality}</p>
-      <nav class="tabs mt" aria-label="Secciones de la feria">${tabLink('resumen', 'Resumen')}${tabLink('participantes', `Participantes${requested.length ? ` (${requested.length})` : ''}`)}${tabLink('puestos', 'Puestos')}${tabLink('avisos', 'Avisos')}${tabLink('editar', 'Editar')}</nav>
+      <div class="row mb"><a class="icon-btn solid" href="#/organizador" aria-label="Volver a mis ferias">${icon('chevron-left')}</a><span class="small muted">Mis ferias</span></div>
+      <section class="card card-pad org-fair-head">
+        <span class="store-logo">${f.cover ? html`<img src="${f.cover}" alt="" width="56" height="56">` : initials(f.name)}</span>
+        <div class="grow stack gap-xs"><h1 class="panel-head-name">${f.name}</h1>
+          <span class="small muted"><span class="first-cap">${longDate(f.startsAt)}</span> · ${timeRange(f.startsAt, f.endsAt)} · ${f.locality}</span></div>
+        <span class="org-tent" aria-hidden="true">${raw(TENT)}</span>
+      </section>
+      <nav class="segmented mt" aria-label="Secciones de la feria">${tabLink('resumen', 'Resumen')}${tabLink('participantes', `Participantes${requested.length ? ` (${requested.length})` : ''}`)}${tabLink('puestos', 'Puestos')}${tabLink('avisos', 'Avisos')}${tabLink('editar', 'Editar')}</nav>
       ${content}`,
     mount(root) {
       bindLocate(root, ctx);
