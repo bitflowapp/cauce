@@ -194,3 +194,18 @@ test('planes: textos de lo que incluye cada uno y estados', () => {
   assert.equal(stateInfo('grace').tone, 'warn');
   assert.equal(stateInfo('cualquiera').label, 'Sin plan todavía');
 });
+
+test('la encuesta usa los mismos códigos que valida la base', async () => {
+  const { SURVEY, surveyFromForm, answerLabel } = await import('../../js/core/survey.js');
+  const { readFile } = await import('node:fs/promises');
+  const sql = await readFile(new URL('../../supabase/migrations/20261012120000_piloto_encuesta.sql', import.meta.url), 'utf8');
+  for (const q of SURVEY) {
+    const declared = sql.match(new RegExp(`'${q.key}'[\\s\\S]*?in \\(([^)]*)\\)`))[1].match(/'([^']+)'/g).map(v => v.slice(1, -1));
+    assert.deepEqual(q.options.map(([code]) => code).sort(), declared.sort(), q.key);
+  }
+  const form = new FormData();
+  form.append('sv-channels', 'ferias'); form.append('sv-channels', 'inventado'); form.append('sv-price', 'caro'); form.append('sv-pilot', 'on');
+  assert.deepEqual(surveyFromForm(form), { channels: ['ferias'], price: 'caro', pilot: true });
+  assert.deepEqual(surveyFromForm(new FormData()), {});
+  assert.equal(answerLabel('channels', ['ferias', 'whatsapp']), 'Ferias, WhatsApp');
+});

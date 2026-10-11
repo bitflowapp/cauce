@@ -407,7 +407,7 @@ export function createRepository({ client, siteUrl, redirectTo, onError = null }
     // ── identidad ──
     session, isPermanent,
     onAuthChange(callback) {
-      const { data } = client.auth.onAuthStateChange((event) => { invalidate(); callback(event); });
+      const { data } = client.auth.onAuthStateChange((event, session) => { invalidate(); callback(event, session); });
       return () => data.subscription.unsubscribe();
     },
     async signUp({ name, email, phone, password }) {
@@ -675,6 +675,7 @@ export function createRepository({ client, siteUrl, redirectTo, onError = null }
     adminCreateOrganizer: (name, email) => rpc('admin_create_organizer', { organizer_name: name, owner_email: email.trim() }),
     adminSetOrganizerStatus: (id, status) => rpc('admin_set_organizer_status', { organizer: id, next_status: status }),
     adminFounding: () => rpc('admin_founding_applications'),
+    adminSurveySummary: () => rpc('admin_survey_summary'),
     adminUpdateFounding: (id, status) => rpc('admin_update_founding', { application: id, next_status: status }),
     adminAudit: (limit = 80) => rpc('admin_audit_log', { max_rows: limit }),
     adminErrors: (limit = 80) => rpc('admin_client_events', { max_rows: limit }),

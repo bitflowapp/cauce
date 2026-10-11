@@ -22,6 +22,7 @@ const P = {
   'chevron-left': '<path d="m15 6-6 6 6 6"/>',
   back: '<path d="M19 12H5M11 18l-6-6 6-6"/>',
   share: '<path d="M14 4h6v6"/><path d="M20 4 11 13"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
+  download: '<path d="M12 4v12M7 11l5 5 5-5"/><path d="M5 20h14"/>',
   upload: '<path d="M12 16V4M7 9l5-5 5 5"/><path d="M5 15v4a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-4"/>',
   filter: '<path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',

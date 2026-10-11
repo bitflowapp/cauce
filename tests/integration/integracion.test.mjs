@@ -204,7 +204,7 @@ test('el repositorio de la aplicación funciona contra el backend real', async (
   const client = anonClient();
   const repo = createRepository({ client, siteUrl: 'http://127.0.0.1:4274/index.html', redirectTo: 'http://127.0.0.1:4274/index.html' });
   const status = await repo.appStatus();
-  assert.equal(status.schema, 20261011120500);
+  assert.equal(status.schema, 20261012120000);
   const store = await repo.storeBySlug(shopA.slug);
   assert.equal(store.business.id, shopA.id);
   assert.equal(store.business.takingOrders, true);

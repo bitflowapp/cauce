@@ -8,6 +8,7 @@ import { directionsUrl, mapUrl, whatsappUrl, instagramUrl, telUrl } from '../../
 import { clean, isEmail, isPhone, isName } from '../../core/validators.js';
 import { planFeatures } from '../../core/plans.js';
 import { qrSvg } from '../../core/qr.js';
+import { SURVEY, PILOT_LABEL, surveyFromForm } from '../../core/survey.js';
 import { CONFIG } from '../../config.js';
 import { icon } from '../icons.js';
 import { sofia } from '../sofia.js';
@@ -536,6 +537,15 @@ export async function favorites(ctx) {
 export async function community(ctx) {
   const ref = await ctx.repo.referenceData();
   const enabled = ctx.status?.features?.founding_community !== false;
+  const entry = ref.plans.filter(p => p.audience === 'business').sort((a, b) => a.monthly_price_ars - b.monthly_price_ars)[0];
+  const survey = html`<details class="survey">
+    <summary><strong>Encuesta breve</strong> <span class="muted">(opcional, un minuto)</span></summary>
+    <p class="small muted">Nos ayuda a armar el piloto con lo que de verdad necesitás.</p>
+    ${SURVEY.map(q => html`<fieldset class="survey-q"><legend>${q.label.replace('{price}', entry ? formatARS(entry.monthly_price_ars) : 'el plan de entrada')}</legend>
+      <div class="survey-options">${q.options.map(([value, label]) => html`<label class="check"><input type="${q.multiple ? 'checkbox' : 'radio'}" name="sv-${q.key}" value="${value}"> ${label}</label>`)}</div>
+    </fieldset>`)}
+    <label class="check"><input type="checkbox" name="sv-pilot"> <strong>${PILOT_LABEL}</strong></label>
+  </details>`;
   return {
     chrome: 'shop', nav: '', title: 'Comunidad fundadora',
     html: html`
@@ -566,6 +576,7 @@ export async function community(ctx) {
                 <span class="field-hint">Lo usamos sólo para contactarte por CAUCE.</span></div>
               <label class="check"><input type="checkbox" name="sells_at_fairs" checked> Vendo en ferias</label>
               <div class="field"><label for="fd-msg">¿Algo que quieras contarnos? <span class="muted">(opcional)</span></label><textarea id="fd-msg" name="message" class="textarea" maxlength="400" rows="3"></textarea></div>
+              ${survey}
               <label class="check"><input type="checkbox" name="consent" required> <span>Acepto que LUNA Proyectos guarde estos datos para contactarme sobre CAUCE · Ferias. Puedo pedir que los borren cuando quiera.</span></label>
               <p class="field-error" id="fd-error" role="alert" hidden></p>
               <button class="btn btn-primary btn-block" type="submit">Quiero ser parte</button>
@@ -591,7 +602,7 @@ export async function community(ctx) {
         try {
           await ctx.repo.applyFounding({ name: clean(data.get('name'), 80), business_name: clean(data.get('business_name'), 80),
             locality: data.get('locality'), category: data.get('category'), contact, sells_at_fairs: Boolean(data.get('sells_at_fairs')),
-            message: clean(data.get('message'), 400), consent: true, consent_version: CONFIG.consentVersion });
+            message: clean(data.get('message'), 400), survey: surveyFromForm(data), consent: true, consent_version: CONFIG.consentVersion });
           root.querySelector('#founding-area').innerHTML = String(emptyState({ scene: 'celebrando', title: '¡Gracias por sumarte!',
             text: 'Recibimos tus datos. Te vamos a escribir para contarte los próximos pasos.', action: html`<a class="btn btn-primary" href="#/alta">Abrir mi tienda ahora</a>` }));
         } catch (caught) {

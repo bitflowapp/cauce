@@ -52,6 +52,27 @@ test('la comunidad fundadora se puede pausar desde la base', async () => {
   await w.root("update private.platform_features set enabled = true where key = 'founding_community'");
 });
 
+test('encuesta del piloto: sólo códigos conocidos, resumen exclusivo de administración', async () => {
+  await w.as('stranger', 'select public.apply_founding($1::jsonb)', [application({ survey: {
+    channels: ['ferias', 'whatsapp', 'ferias', 'tiktok'], fairs_per_month: '2-3', main_need: 'pedidos', price: 'razonable', pilot: true,
+    extra: '<script>', } })]);
+  await w.as('stranger', 'select public.apply_founding($1::jsonb)', [application({ survey: { fairs_per_month: '99', price: 'gratis', pilot: 'si' } })]);
+  await w.as('stranger', 'select public.apply_founding($1::jsonb)', [application({ survey: 'no es un objeto' })]);
+  const list = (await w.one('admin', 'select public.admin_founding_applications() as l')).l;
+  const surveys = list.slice(0, 3).map(a => a.survey);
+  assert.deepEqual(surveys[2], { channels: ['ferias', 'whatsapp'], fairs_per_month: '2-3', main_need: 'pedidos', price: 'razonable', pilot: true });
+  assert.deepEqual(surveys[1], {});
+  assert.deepEqual(surveys[0], {});
+  await denied(assert, w.as('merchantA', 'select public.admin_survey_summary()'));
+  await denied(assert, w.as('anon', 'select public.admin_survey_summary()'));
+  const summary = (await w.one('admin', 'select public.admin_survey_summary() as s')).s;
+  assert.equal(summary.answered, 1);
+  assert.equal(summary.applications, list.length);
+  assert.deepEqual(summary.answers.channels, { ferias: 1, whatsapp: 1 });
+  assert.deepEqual(summary.answers.pilot, { true: 1 });
+  assert.deepEqual(summary.answers.price, { razonable: 1 });
+});
+
 test('alta: faltantes claros, envío a revisión, devolución con motivo y aprobación con prueba', async () => {
   const shop = (await w.one('merchantA', "select public.create_business('Velas del Valle', 'cipolletti', null) as r")).r;
   let missing = (await w.one('merchantA', 'select public.business_missing_requirements($1) as m', [shop.id])).m;
@@ -100,6 +121,6 @@ test('las altas de comercios se pueden cerrar desde la base', async () => {
   await denied(assert, w.as('stranger', "select public.create_business('Cerrado', 'neuquen', null)"));
   await w.root("update private.platform_features set enabled = true where key = 'merchant_signup'");
   const status = (await w.one('anon', 'select public.app_status() as s')).s;
-  assert.equal(status.schema, 20261011120500);
+  assert.equal(status.schema, 20261012120000);
   assert.equal(status.features.merchant_signup, true);
 });

@@ -50,6 +50,7 @@ after(async () => {
       await sql`delete from public.organizers where id = any(${orgs.map(o => o.organizer_id)})`;
     }
     if (ids.length) await sql`delete from public.orders where customer_id = any(${ids})`;
+    await sql`delete from private.founding_applications where name like ${`% ${run}`}`;
     for (const id of ids) await admin.auth.admin.deleteUser(id);
   } finally {
     await sql.end();
@@ -240,6 +241,44 @@ for (const engine of browsersToRun) {
       await visitor.page.getByText('Puesto C3').waitFor();
       await shot(visitor.page, `${engine}-feria-publica`);
       assert.deepEqual([...org.problems, ...seller.problems, ...visitor.problems], []);
+    } finally { await browser.close(); }
+  });
+
+  test(`[${engine}] comunidad fundadora con encuesta; administración ve el resumen, filtra el piloto y descarga el CSV`, async t => {
+    const browser = await launch(engine);
+    if (!browser) { t.skip(`${engine} no está instalado en esta máquina (corre en CI)`); return; }
+    const visitor = await person(browser, { label: `fundadora-${engine}` });
+    const reviewerUi = await person(browser, { width: 1280, height: 900, label: `admin-com-${engine}` });
+    const name = `Ana ${engine} ${run}`;
+    try {
+      await open(visitor.page, '#/comunidad');
+      await visitor.page.fill('#fd-name', name);
+      await visitor.page.fill('#fd-contact', '299 4778899');
+      await visitor.page.click('.survey > summary');
+      await visitor.page.check('input[name="sv-channels"][value="ferias"]');
+      await visitor.page.check('input[name="sv-channels"][value="whatsapp"]');
+      await visitor.page.check('input[name="sv-fairs_per_month"][value="2-3"]');
+      await visitor.page.check('input[name="sv-main_need"][value="pedidos"]');
+      await visitor.page.check('input[name="sv-price"][value="razonable"]');
+      await visitor.page.check('input[name="sv-pilot"]');
+      await visitor.page.check('input[name="consent"]');
+      await visitor.page.click('[data-form="founding"] button[type="submit"]');
+      await visitor.page.getByText('¡Gracias por sumarte!').waitFor();
+
+      await signIn(reviewerUi.page, reviewer);
+      await go(reviewerUi.page, '#/admin/comunidad?piloto=1');
+      const card = reviewerUi.page.locator('article', { hasText: name });
+      await card.waitFor();
+      assert.match(await card.textContent(), /Ferias, WhatsApp/);
+      assert.match(await card.textContent(), /Ordenar pedidos y encargos/);
+      assert.match(await reviewerUi.page.locator('#main').textContent(), /respondieron/);
+      await shot(reviewerUi.page, `${engine}-admin-comunidad-encuesta`);
+      const [download] = await Promise.all([reviewerUi.page.waitForEvent('download'), reviewerUi.page.click('[data-action="founding-csv"]')]);
+      assert.match(download.suggestedFilename(), /^cauce-ferias-comunidad-\d{4}-\d{2}-\d{2}\.csv$/);
+      const csv = await (await import('node:fs/promises')).readFile(await download.path(), 'utf8');
+      assert.match(csv, new RegExp(name));
+      assert.match(csv, /"Ferias, WhatsApp"/);
+      assert.deepEqual([...visitor.problems, ...reviewerUi.problems], []);
     } finally { await browser.close(); }
   });
 

@@ -719,3 +719,15 @@ svg.logo-sub text { font-family: var(--font-ui); font-weight: 800; font-size: 8.
 .segmented { overflow-x: auto; scrollbar-width: none; }
 .segmented::-webkit-scrollbar { display: none; }
 .segmented > a, .segmented > button { flex: 1 0 auto; }
+
+/* ───────── encuesta de la comunidad fundadora ───────── */
+.survey { border: 1.5px solid var(--borde); border-radius: var(--r-md); padding: 12px 16px; background: var(--superficie); }
+.survey > summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.survey[open] > summary { margin-bottom: 6px; }
+.survey-q { border: 0; padding: 0; margin: 14px 0 0; min-width: 0; }
+.survey-q legend { font-weight: 700; padding: 0; margin-bottom: 8px; }
+.survey-options { display: grid; gap: 10px; }
+@media (min-width: 560px) { .survey-options { grid-template-columns: 1fr 1fr; } }
+.survey > .check { margin-top: 16px; }
+.survey-bar { display: grid; grid-template-columns: minmax(0, 1fr) 3rem; gap: 8px; align-items: center; font-size: .92rem; }
+.survey-bar meter { width: 100%; height: 10px; }

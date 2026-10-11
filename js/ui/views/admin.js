@@ -7,6 +7,7 @@ import { formatARS } from '../../core/money.js';
 import { longDate, dateTime, relative } from '../../core/dates.js';
 import { stateInfo } from '../../core/plans.js';
 import { clean, isEmail } from '../../core/validators.js';
+import { SURVEY, answerLabel } from '../../core/survey.js';
 import { icon } from '../icons.js';
 import { emptyState, banner, pageHeader, storeLogo } from '../components.js';
 
@@ -15,6 +16,38 @@ const BUSINESS_STATUS = { draft: ['', 'Borrador'], pending_review: ['tag-warn', 
 const FOUNDING_STATUS = { new: ['tag-warn', 'Nueva'], contacted: ['tag-info', 'Contactada'], joined: ['tag-ok', 'Se sumó'], declined: ['', 'No sigue'] };
 const SECTIONS = [['', 'Resumen', 'resumen'], ['tiendas', 'Tiendas', 'tiendas'], ['organizadores', 'Ferias y organizadores', 'organizadores'],
   ['comunidad', 'Comunidad', 'comunidad'], ['registro', 'Registro', 'registro']];
+
+// CSV para contactar a quienes se preinscribieron (se abre en planillas). Las
+// celdas que empiezan con = + - @ se neutralizan: nadie puede inyectar fórmulas.
+const csvCell = value => {
+  const text = String(value ?? '').replace(/^[=+\-@\t\r]/, "'$&");
+  return /[",\n;]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+};
+function foundingCsv(list) {
+  const head = ['Fecha', 'Nombre', 'Emprendimiento', 'Contacto', 'Localidad', 'Rubro', 'Vende en ferias', 'Estado', 'Mensaje',
+    ...SURVEY.map(q => q.key), 'pilot'];
+  const rows = list.map(a => [a.created_at, a.name, a.business_name, a.contact, a.locality, a.category, a.sells_at_fairs ? 'sí' : 'no',
+    FOUNDING_STATUS[a.status][1], a.message, ...SURVEY.map(q => a.survey?.[q.key] === undefined ? '' : answerLabel(q.key, a.survey[q.key])),
+    a.survey?.pilot ? 'sí' : '']);
+  return [head, ...rows].map(row => row.map(csvCell).join(',')).join('\r\n');
+}
+
+function surveySummary(summary, entryPrice) {
+  const total = summary.answered || 0;
+  const block = (key, label, options) => {
+    const counts = summary.answers?.[key] || {};
+    return html`<div class="stack gap-xs"><strong>${label}</strong>${options.map(([code, text]) => {
+      const n = Number(counts[code] || 0);
+      return html`<div class="survey-bar"><span class="stack gap-xs"><span>${text}</span><meter min="0" max="${Math.max(total, 1)}" value="${n}" aria-label="${text}: ${n} de ${total}"></meter></span><span class="right">${n}</span></div>`;
+    })}</div>`;
+  };
+  return html`<section class="card card-pad stack mt">
+    <h2 class="section-title">Encuesta</h2>
+    <p class="small muted">${total} de ${summary.applications || 0} preinscripciones respondieron. Cada respuesta cuenta una vez; «Dónde vendés» admite varias.</p>
+    <div class="grid-2">${SURVEY.map(q => block(q.key, q.label.replace('{price}', entryPrice), q.options))}
+      ${block('pilot', 'Quieren entrar al piloto', [['true', 'Sí']])}</div>
+  </section>`;
+}
 
 const plusDays = days => { const d = new Date(Date.now() + days * 86400000); return d.toISOString().slice(0, 10); };
 
@@ -46,6 +79,7 @@ export async function home(ctx) {
   const nav = SECTIONS.find(([key]) => key === sectionName)?.[2] || 'resumen';
   const tabs = html`<nav class="tabs mt" aria-label="Secciones de administración">${SECTIONS.map(([key, label]) => html`<a class="tab" href="#/admin${key ? `/${key}` : ''}"${raw(key === sectionName ? ' aria-current="page"' : '')}>${label}</a>`)}</nav>`;
   let body;
+  let foundingList = [];
 
   if (!sectionName) {
     const [o, businesses] = await Promise.all([ctx.repo.adminOverview(), ctx.repo.adminBusinesses()]);
@@ -134,13 +168,23 @@ export async function home(ctx) {
   }
 
   if (sectionName === 'comunidad') {
-    const list = await ctx.repo.adminFounding();
+    const [all, summary, ref] = await Promise.all([ctx.repo.adminFounding(), ctx.repo.adminSurveySummary(), ctx.repo.referenceData()]);
+    const entry = ref.plans.filter(p => p.audience === 'business').sort((a, b) => a.monthly_price_ars - b.monthly_price_ars)[0];
+    const pilotOnly = ctx.query.piloto === '1';
+    const list = pilotOnly ? all.filter(a => a.survey?.pilot) : all;
+    foundingList = list;
     body = html`
       <p class="small muted mt">Preinscripciones con consentimiento (versión registrada). Si alguien pide que borren sus datos, usá «Borrar».</p>
+      ${surveySummary(summary, entry ? formatARS(entry.monthly_price_ars) : 'el plan de entrada')}
+      <div class="row between wrap mt">
+        <div class="segmented"><a href="#/admin/comunidad"${raw(pilotOnly ? '' : ' aria-current="page"')}>Todas (${all.length})</a><a href="#/admin/comunidad?piloto=1"${raw(pilotOnly ? ' aria-current="page"' : '')}>Quieren el piloto (${all.filter(a => a.survey?.pilot).length})</a></div>
+        ${list.length ? html`<button type="button" class="btn btn-secondary btn-sm" data-action="founding-csv">${icon('download', { size: 16 })}Descargar CSV</button>` : ''}
+      </div>
       ${list.length ? html`<div class="stack mt">${list.map(a => html`<article class="card card-pad stack gap-sm">
         <div class="row between wrap"><strong>${a.name}${a.business_name ? ` · ${a.business_name}` : ''}</strong><span class="tag ${FOUNDING_STATUS[a.status][0]}">${FOUNDING_STATUS[a.status][1]}</span></div>
         <div class="kv"><dt>Contacto</dt><dd>${a.contact}</dd><dt>Localidad</dt><dd>${a.locality || '—'}</dd><dt>Rubro</dt><dd>${a.category || '—'}</dd>
-          <dt>Vende en ferias</dt><dd>${a.sells_at_fairs ? 'Sí' : 'No'}</dd><dt>Fecha</dt><dd>${dateTime(a.created_at)}</dd><dt>Consentimiento</dt><dd>${a.consent_version}</dd></div>
+          <dt>Vende en ferias</dt><dd>${a.sells_at_fairs ? 'Sí' : 'No'}</dd><dt>Fecha</dt><dd>${dateTime(a.created_at)}</dd><dt>Consentimiento</dt><dd>${a.consent_version}</dd>
+          ${Object.entries(a.survey || {}).map(([key, value]) => html`<dt>${key === 'pilot' ? 'Piloto' : SURVEY.find(q => q.key === key)?.label.replace(/[¿?…]|\{price\}/g, '').trim() || key}</dt><dd>${answerLabel(key, value)}</dd>`)}</div>
         ${a.message ? html`<p class="pre-line small">${a.message}</p>` : ''}
         <div class="row wrap">${['contacted', 'joined', 'declined'].filter(s => s !== a.status).map(s => html`<button type="button" class="btn btn-secondary btn-sm" data-action="founding" data-id="${a.id}" data-next="${s}">${FOUNDING_STATUS[s][1]}</button>`)}
           <button type="button" class="btn btn-ghost btn-sm" data-action="founding" data-id="${a.id}" data-next="deleted">${icon('trash', { size: 16 })}Borrar</button></div>
@@ -186,6 +230,15 @@ export async function home(ctx) {
       }
       if (action === 'reactivate') await run(() => ctx.repo.adminSetBusinessStatus(id, 'active', ''), 'Tienda rehabilitada');
       if (action === 'org-status') await run(() => ctx.repo.adminSetOrganizerStatus(id, el.getAttribute('data-next')), 'Organización actualizada');
+      if (action === 'founding-csv') {
+        const blob = new Blob(['\ufeff', foundingCsv(foundingList)], { type: 'text/csv;charset=utf-8' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `cauce-ferias-comunidad-${new Date().toISOString().slice(0, 10)}.csv`;
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+        return;
+      }
       if (action === 'founding') {
         const next = el.getAttribute('data-next');
         if (next === 'deleted' && !await ctx.dialog({ title: 'Borrar preinscripción', text: 'Se borran los datos de esta persona. No se puede deshacer.', confirm: 'Borrar', tone: 'danger' })) return;

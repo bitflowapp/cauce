@@ -331,7 +331,11 @@ async function boot() {
     fatal('Estamos actualizando CAUCE', 'Volvé a intentar en unos minutos.');
     return;
   }
-  repo.onAuthChange(event => {
+  repo.onAuthChange((event, session) => {
+    // La sesión anónima la abre la propia pantalla (compra o preinscripción) en
+    // medio de un envío: volver a dibujar ahí borraría su confirmación. La
+    // próxima navegación ya la toma.
+    if (event === 'SIGNED_IN' && session?.user?.is_anonymous) return;
     if (['SIGNED_IN', 'SIGNED_OUT', 'USER_UPDATED'].includes(event)) render();
   });
   bindGlobal();
