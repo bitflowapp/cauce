@@ -39,6 +39,7 @@ export async function person(browser, { width = 390, height = 844, label = 'pers
     hasTouch: width < 900, reducedMotion, permissions: [] });
   const page = await context.newPage();
   const problems = [];
+  problemsOf.set(page, problems);
   page.on('pageerror', error => problems.push(`[${label}] pageerror: ${error.message}`));
   page.on('console', message => {
     if (message.type() !== 'error') return;
@@ -79,7 +80,16 @@ export async function expectToast(page, pattern) {
     throw new Error(`No apareció el aviso ${regex}: ${seen}`, { cause: error });
   }
 }
+const problemsOf = new WeakMap();
+// Al capturar, Playwright inyecta una hoja de estilos (oculta el cursor y frena
+// animaciones); en WebKit la CSP de la aplicación la bloquea, y está bien. Sólo
+// esos avisos, emitidos durante la captura, no cuentan como problemas.
 export async function shot(page, name) {
+  const problems = problemsOf.get(page) || [];
+  const before = problems.length;
   await page.screenshot({ path: resolve(EVIDENCE, `${name}.png`), animations: 'disabled' });
+  await new Promise(done => setTimeout(done, 150));
+  const during = problems.splice(before);
+  problems.push(...during.filter(text => !/Refused to apply a stylesheet/.test(text)));
 }
 export const textOf = async (page, selector) => (await page.locator(selector).first().textContent() || '').trim();
