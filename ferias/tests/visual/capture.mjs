@@ -123,7 +123,13 @@ for (const engine of BROWSERS) {
         await ready(page).catch(() => problems.push('timeout'));
         const metrics = await page.evaluate(measure);
         await mkdir(resolve(OUT, engine, String(width)), { recursive: true });
+        // La hoja que Playwright inyecta al capturar la bloquea la CSP en
+        // WebKit: ese aviso, emitido durante la captura, no es de la aplicación.
+        const before = problems.length;
         await page.screenshot({ path: resolve(OUT, engine, String(width), `${name}.png`), fullPage: false, animations: 'disabled' });
+        await new Promise(done => setTimeout(done, 150));
+        const during = problems.splice(before);
+        problems.push(...during.filter(text => !/Refused to apply a stylesheet/.test(text)));
         report.push({ engine, width, name, who: label, ...metrics, problems: [...problems] });
         const flag = metrics.overflow > 0 || metrics.wide.length || problems.length ? '✗' : '✓';
         console.log(`${flag} ${engine} ${String(width).padStart(4)} ${name.padEnd(20)} desborde=${metrics.overflow} ${metrics.wide.join(' ')} ${problems.join(' | ')}`);
