@@ -1,7 +1,30 @@
 # Informe de entrega · CAUCE · Ferias Neuquén
 
-Rama `claude/cauce-ferias-neuquen` del repositorio `bitflowapp/cauce`, carpeta
-`ferias/`. Fecha: 11 de octubre de 2026.
+Etapa 1 (11/10/2026): rama `claude/cauce-ferias-neuquen` de `bitflowapp/cauce`,
+carpeta `ferias/` (PR #11, sin fusionar). Etapa 2 (11/10/2026): repositorio
+independiente y preparación del piloto, ver la sección siguiente.
+
+## Etapa 2 · Repositorio independiente y preparación del piloto
+
+| Pedido | Estado | Evidencia |
+| --- | --- | --- |
+| Separar el repositorio conservando el historial | **Listo localmente** | `git subtree split --prefix=ferias`: los 7 commits de `ferias/` con sus migraciones, pruebas, docs y evidencia, más el CI en la raíz |
+| Crear `bitflowapp/cauce-ferias` | **Bloqueado** | La integración de GitHub de esta sesión no puede crear repositorios (403). Hace falta crearlo vacío y dar acceso a la app de Claude |
+| CI independiente | **Verde** | Corrida 38175319784 en una rama temporal de `bitflowapp/cauce` que contiene sólo el historial del repo nuevo: verificación, integración, E2E Chromium + WebKit y auditoría visual en 11 min |
+| Preparar Supabase independiente sin crear nada | **Listo** | `operacion` (estado, migrar con ensayo, auth, admin, respaldo con restauración) probado contra el stack local; [DESPLIEGUE.md](DESPLIEGUE.md), [OPERACION.md](OPERACION.md) |
+| Costos verificables | **Listo, con salvedad** | [COSTOS.md](COSTOS.md): fuentes secundarias recientes; las páginas oficiales no abren desde este entorno |
+| Demo completa sin gastos | **Listo** | `npm run demo` (y `demo:generico`) |
+| Personaje: no publicar a Sofía sin autorización | **Listo** | Builds remotos con personaje genérico por defecto; el build falla si encuentra a Sofía; «Publicar sitio» exige `FERIAS_SOFIA_AUTORIZADA=si` |
+| Piloto: encuestas y Comunidad Fundadora | **Listo** | Encuesta breve opcional, resumen, filtro y CSV en Administración (SQL + E2E) |
+| Checklist del piloto | **Listo** | [PILOTO.md](PILOTO.md) |
+
+Defecto encontrado y corregido en esta etapa: la sesión anónima que abre la
+preinscripción volvía a dibujar la página y borraba el «¡Gracias por sumarte!»
+(la persona veía el formulario de nuevo). Lo detectó el recorrido E2E nuevo.
+
+Faltan, por decisión o autorización: política de privacidad y términos
+revisados (hay un [borrador](legal/BORRADOR-PRIVACIDAD.md) sin publicar),
+proyecto Supabase Pro, dominio, publicación y autorización de Sofía.
 
 ## Resumen
 
