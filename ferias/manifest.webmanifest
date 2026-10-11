@@ -1,0 +1,22 @@
+{
+  "name": "CAUCE · Ferias Neuquén",
+  "short_name": "CAUCE Ferias",
+  "description": "Productos únicos de artesanos, feriantes y emprendedores de Neuquén, y las próximas ferias.",
+  "lang": "es-AR",
+  "start_url": "./index.html#/",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#faf2e8",
+  "theme_color": "#faf2e8",
+  "categories": ["shopping", "lifestyle"],
+  "icons": [
+    { "src": "assets/brand/favicon.svg", "sizes": "any", "type": "image/svg+xml" },
+    { "src": "assets/brand/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "assets/brand/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "assets/brand/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Ferias cerca", "url": "./index.html#/ferias" },
+    { "name": "Mi tienda", "url": "./index.html#/panel" }
+  ]
+}

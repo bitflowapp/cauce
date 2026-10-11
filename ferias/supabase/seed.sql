@@ -1,0 +1,3 @@
+-- CAUCE · Ferias: sin identidades ni datos de ejemplo en la base.
+-- Las localidades, rubros y planes son datos de referencia de las migraciones.
+-- Los datos de demostración se cargan aparte con `npm run seed:demo` y quedan marcados como DEMO.
