@@ -76,8 +76,8 @@ tests/        unit, db (PGlite), integration (Supabase real), e2e (Playwright), 
 | `npm test` | Unitarias (núcleo, paridad de estados con SQL, todo error SQL traducido, componentes escapados, Sofía) | 15/15 |
 | `npm run test:db` | Migraciones y RLS en PostgreSQL embebido: multi-vendedor, precios, stock, idempotencia, planes, ferias, comunidad, auditoría | 54/54 |
 | `npm run test:integration` | GoTrue con correo real (Mailpit), recuperación, Storage, concurrencia, Realtime, ferias y el repositorio de la app | 11/11 |
-| `npm run e2e` | Recorridos en navegador: compra con retiro en feria, alta guiada con foto y aprobación, pedido en vivo hasta el cobro, organizador, accesos, anchos y teclado | 6/6 en Chromium (×4 corridas); WebKit en CI |
-| `npm run audit:visual` | 7 anchos (320–1440): desborde, errores, objetivos táctiles, contraste | 245 capturas sin hallazgos (Chromium) |
+| `npm run e2e` | Recorridos en navegador: compra con retiro en feria, alta guiada con foto y aprobación, pedido en vivo hasta el cobro, organizador, accesos, anchos y teclado | Chromium 6/6 (local, ×4, y CI) · WebKit 6/6 (CI) |
+| `npm run audit:visual` | 7 anchos (320–1440): desborde, errores, objetivos táctiles, contraste | Chromium 245 capturas (local) · Chromium + WebKit 490 capturas (CI), sin hallazgos |
 
 CI propio: [`.github/workflows/ferias-ci.yml`](../.github/workflows/ferias-ci.yml)
 (sólo corre con cambios en `ferias/`; instala Chromium y WebKit).

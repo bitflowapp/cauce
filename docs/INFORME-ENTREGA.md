@@ -47,7 +47,10 @@ proyecto remoto ni se publicó nada**: esas dos acciones requieren autorización
 | 18 | Estimación de costos | **Listo, con salvedad** | `COSTOS.md` (cuotas a confirmar en supabase.com) |
 | 19 | Rama y pull request | **Listo** | Rama `claude/cauce-ferias-neuquen` publicada; [PR #11](https://github.com/bitflowapp/cauce/pull/11) en borrador, marcado «no fusionar» |
 
-## Resultados de las pruebas (en este entorno)
+## Resultados de las pruebas
+
+En el entorno de desarrollo y en el CI de la rama (`ferias-ci.yml`, verde en el
+último commit del PR; el CI de Aluminé también queda verde con la rama).
 
 | Suite | Resultado |
 | --- | --- |
@@ -55,9 +58,9 @@ proyecto remoto ni se publicó nada**: esas dos acciones requieren autorización
 | Unitarias | 15/15 |
 | SQL embebido (migraciones, RLS, pedidos, ferias, planes, comunidad) | 54/54 (y una mutación deliberada se detecta) |
 | Integración contra Supabase real | 11/11 |
-| E2E Chromium | 6/6 en cuatro corridas seguidas |
-| E2E WebKit | **No ejecutado en este entorno** (no hay navegador WebKit instalado y no se descargan navegadores aquí). Configurado en el CI (`ferias-ci.yml`), que instala Chromium y WebKit. |
-| Auditoría visual (Chromium, 320/360/390/430/768/1280/1440 px, 35 pantallas) | 245 capturas: 0 desbordes, 0 errores de consola o 5xx, 0 controles táctiles chicos en móvil, 0 textos con contraste insuficiente |
+| E2E Chromium | 6/6 en cuatro corridas seguidas (local) y en el CI |
+| E2E WebKit | 6/6 en el CI (en este entorno no hay WebKit y no se descargan navegadores). En el CI, un navegador que no arranca hace fallar la suite: no se omite. |
+| Auditoría visual (320/360/390/430/768/1280/1440 px, 35 pantallas) | Chromium local: 245 capturas · Chromium + WebKit en el CI: 490 capturas. En ambos: 0 desbordes, 0 errores de consola o 5xx, 0 controles táctiles chicos en móvil, 0 textos con contraste insuficiente |
 | Lighthouse móvil (build local con compresión) | Inicio: rendimiento 90, accesibilidad 100, buenas prácticas 100 · Producto: 93/100/100 · Ferias: 97/100/100 · SEO 92 con build de producción (el local lleva `noindex` a propósito) |
 
 ## Defectos que encontraron las pruebas y se corrigieron
@@ -70,13 +73,16 @@ proyecto remoto ni se publicó nada**: esas dos acciones requieren autorización
 - WhatsApp con «15» después de un código de área de 3 cifras (299).
 - Desbordes en «Mi tienda» a 320–390 px, contraste de etiquetas verdes y
   áreas táctiles chicas.
+- (CI) Con Realtime recién iniciado, un pedido creado en los segundos previos a
+  que Realtime empiece a entregar cambios de Postgres no aparecía en vivo. Ahora
+  el panel y «Mis pedidos» vuelven a consultar cuando Realtime confirma la
+  suscripción (y tras cada reconexión). Reproducido reiniciando Realtime.
 
 ## Pendiente (no se declara terminado)
 
 | Tema | Por qué | Qué hace falta |
 | --- | --- | --- |
 | Proyecto Supabase remoto y publicación | Requieren autorización y, para operar, un plan pago | Aprobación de LUNA; pasos en `INSTALACION.md §3` |
-| E2E en WebKit | Sin WebKit en este entorno | Ver el resultado del CI de la rama |
 | Correo/WhatsApp automático al comercio por pedido nuevo | Necesita un proveedor (correo transaccional o API de WhatsApp) y credenciales | Hoy: aviso en vivo con sonido y vibración en el panel, y botón «Avisar por WhatsApp» para quien compra |
 | Notificaciones push | Requiere servidor de push y claves VAPID | — |
 | Cobro de suscripciones y pagos online | Pedido explícito: no antes de una integración segura | Ver `SUSCRIPCIONES.md` |
