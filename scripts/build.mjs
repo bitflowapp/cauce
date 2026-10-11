@@ -4,7 +4,8 @@
 //   npm run build        → proyecto remoto propio (variables FERIAS_*) en dist/
 //
 // Variables para el build remoto: FERIAS_SUPABASE_URL, FERIAS_SUPABASE_PUBLISHABLE_KEY,
-// FERIAS_SITE_URL y, opcional, FERIAS_RELEASE / FERIAS_OUT_DIR / FERIAS_PERSONAJE. Falla si falta algo,
+// FERIAS_SITE_URL y, opcional, FERIAS_RELEASE / FERIAS_OUT_DIR / FERIAS_PERSONAJE /
+// FERIAS_INDEXAR (sólo «si» deja que los buscadores indexen: las vistas previas no). Falla si falta algo,
 // si la clave no es pública o si en el bundle aparece una credencial privilegiada.
 // Nunca apunta al proyecto de CAUCE · Aluminé.
 import { build } from 'esbuild';
@@ -49,6 +50,7 @@ if (!siteUrl) fail('Falta FERIAS_SITE_URL (la dirección pública del sitio).');
 // build remoto usa por defecto el personaje genérico.
 const character = process.env.FERIAS_PERSONAJE || (local ? 'sofia' : 'generico');
 if (!['sofia', 'generico'].includes(character)) fail('FERIAS_PERSONAJE debe ser "sofia" o "generico".');
+const indexable = !local && process.env.FERIAS_INDEXAR === 'si';
 
 function keyRole(key) {
   if (key.startsWith('sb_publishable_')) return 'publishable';
@@ -162,12 +164,33 @@ replace(/<meta name="description" content="[^"]*">/, `$&
   <meta property="og:url" content="${siteUrl}/">
   <meta property="og:image" content="${siteUrl}/assets/brand/og.png">
   <meta property="og:locale" content="es_AR">
-  <meta name="robots" content="${local ? 'noindex' : 'index, follow'}">`, 'la descripción');
+  <meta name="robots" content="${indexable ? 'index, follow' : 'noindex'}">`, 'la descripción');
 await writeFile(resolve(output, 'index.html'), page);
 
 const manifest = JSON.parse(await readFile(resolve(root, 'manifest.webmanifest'), 'utf8'));
 await writeFile(resolve(output, 'manifest.webmanifest'), `${JSON.stringify(manifest, null, 2)}\n`);
-await writeFile(resolve(output, 'robots.txt'), local ? 'User-agent: *\nDisallow: /\n' : 'User-agent: *\nAllow: /\n');
+await writeFile(resolve(output, 'robots.txt'), indexable ? 'User-agent: *\nAllow: /\n' : 'User-agent: *\nDisallow: /\n');
+// Encabezados para Cloudflare Pages (otros hostings los ignoran). Lo que una
+// meta CSP no puede expresar: no se embebe en marcos ajenos, HSTS, permisos.
+await writeFile(resolve(output, '_headers'), `/*
+  X-Frame-Options: DENY
+  Content-Security-Policy: frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), payment=(), usb=(), geolocation=(self)
+  Strict-Transport-Security: max-age=31536000
+${indexable ? '' : '  X-Robots-Tag: noindex\n'}
+/js/*
+  Cache-Control: public, max-age=31536000, immutable
+/styles/*
+  Cache-Control: public, max-age=31536000, immutable
+/assets/fonts/*
+  Cache-Control: public, max-age=31536000, immutable
+/service-worker.js
+  Cache-Control: no-cache
+/index.html
+  Cache-Control: no-cache
+`);
 await writeFile(resolve(output, '404.html'), `<!doctype html><html lang="es-AR"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex">
 <title>CAUCE · Ferias — página no encontrada</title><link rel="stylesheet" href="${new URL(siteUrl).pathname.replace(/\/?$/, '/')}${cssName}"></head>
@@ -189,5 +212,5 @@ await writeFile(resolve(output, 'service-worker.js'), worker);
 for (const file of shellFiles.filter(f => f !== './')) {
   try { await stat(resolve(output, file)); } catch { fail(`Falta ${file} en la salida.`); }
 }
-console.log(`BUILD PASS · ${local ? 'stack local' : parsed.hostname} · personaje ${character} · release ${release} · esquema ${CONFIG.requiredSchema}`
+console.log(`BUILD PASS · ${local ? 'stack local' : parsed.hostname} · personaje ${character} · ${indexable ? 'indexable' : 'noindex'} · release ${release} · esquema ${CONFIG.requiredSchema}`
   + ` · JS inicial ${Math.round(bundle.length / 1024)} KB (+${chunkNames.length} partes, ${Math.round((allCode.length - bundle.length) / 1024)} KB) · CSS ${Math.round(css.length / 1024)} KB · ${relOut}`);

@@ -24,7 +24,12 @@
     "test:integration": "node --test --test-concurrency=1 --test-timeout=180000 tests/integration/*.test.mjs",
     "e2e": "npm run build:local && node --test --test-concurrency=1 --test-timeout=1200000 tests/e2e/*.test.mjs",
     "audit:visual": "node tests/visual/capture.mjs",
-    "verify": "npm run lint && npm run typecheck && npm run check && npm test && npm run test:db"
+    "verify": "npm run lint && npm run typecheck && npm run check && npm test && npm run test:db",
+    "operacion": "node scripts/operacion.mjs",
+    "operacion:local": "node scripts/operacion.mjs estado --local",
+    "demo": "npm run db:start && npm run db:reset && npm run seed:demo && npm run build:local && npm run preview",
+    "demo:generico": "npm run db:start && npm run db:reset && npm run seed:demo && FERIAS_PERSONAJE=generico npm run build:local && npm run preview",
+    "personaje:hoja": "node scripts/sofia-sheet.mjs && node scripts/sofia-sheet.mjs --generico"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.116.0",

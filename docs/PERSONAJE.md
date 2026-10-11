@@ -18,8 +18,30 @@ requiere la autorización expresa de Sofía** (idealmente por escrito, indicando
 alcance: sitio, redes, material impreso, plazos). Hasta tenerla, el personaje
 se usa sólo en entornos de desarrollo y demostración privada.
 
-Si la autorización no llega, se puede reemplazar por un personaje genérico
-cambiando sólo `js/ui/sofia.js` (todas las pantallas usan la función `sofia()`).
+### Personaje genérico para todo lo público
+
+Mientras no esté la autorización, cualquier build remoto usa un **personaje
+genérico**: un jarrito de barro con cara (`js/ui/personaje-generico.js`), con
+las mismas 9 escenas y animaciones. Ver la hoja en
+[evidencia/personaje-generico.png](evidencia/personaje-generico.png).
+
+| Build | Personaje |
+| --- | --- |
+| `npm run build:local`, `npm run demo` (sólo en la máquina) | Sofía |
+| `npm run demo:generico` o `FERIAS_PERSONAJE=generico npm run build:local` | Genérico |
+| `npm run build` (remoto, vista previa o producción) | **Genérico por defecto** |
+| `FERIAS_PERSONAJE=sofia npm run build` | Sofía: sólo con la autorización archivada |
+
+- El build **reemplaza el módulo**: en el build genérico los dibujos de Sofía
+  ni siquiera viajan en el JavaScript, y el build falla si encuentra rastros
+  de ella. La imagen para compartir también cambia (`og-generico.png`).
+- El workflow «Publicar sitio» rechaza `sofia` salvo que la variable del
+  repositorio `FERIAS_SOFIA_AUTORIZADA` valga `si`.
+- Los recursos de Sofía siguen en el repositorio (privado) y en la evidencia
+  interna; no se usan en material comercial hasta la autorización.
+
+Si la autorización no llega, alcanza con dejar el genérico; si llega, se activa
+con la variable y se vuelve a publicar.
 
 ## Escenas
 
@@ -38,4 +60,5 @@ cambiando sólo `js/ui/sofia.js` (todas las pantallas usan la función `sofia()`
 Las animaciones son CSS sobre grupos del SVG (`transform`/`opacity`), no
 afectan el rendimiento y se desactivan con `prefers-reduced-motion: reduce`
 (probado en E2E). La hoja con todas las escenas se regenera con
-`node scripts/sofia-sheet.mjs` → `docs/evidencia/sofia-escenas.png`.
+`npm run personaje:hoja` → `docs/evidencia/sofia-escenas.png` y
+`docs/evidencia/personaje-generico.png`.

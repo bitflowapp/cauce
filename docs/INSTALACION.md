@@ -2,7 +2,7 @@
 
 ## 1. Entorno local (desarrollo y demostración)
 
-Requisitos: Node.js 22 o posterior, Docker en marcha. Todo se corre desde `ferias/`.
+Requisitos: Node.js 22 o posterior, Docker en marcha. Todo se corre desde la raíz del repositorio.
 
 ```bash
 npm ci
@@ -74,36 +74,8 @@ Playwright (`npx playwright install --with-deps webkit`); el CI los instala.
 
 ## 3. Pasar a un proyecto remoto (requiere autorización)
 
-Nada de esto se hizo: crear el proyecto y publicar el sitio son acciones
-externas que necesitan la aprobación de LUNA Proyectos. Pasos previstos:
-
-1. **Proyecto Supabase nuevo y propio** (nunca el de Aluminé,
-   `ygqbcvxdrewcnzedfcyo`; el build lo rechaza). Región recomendada: São Paulo
-   (`sa-east-1`). Para operar con comercios reales conviene el plan Pro (el
-   gratuito se pausa por inactividad; ver [COSTOS.md](COSTOS.md)).
-2. **Migraciones:** `npx supabase link --project-ref <ref>` y `npx supabase db push`.
-3. **Auth** (Dashboard → Authentication):
-   - Site URL = dirección pública del sitio; Redirect URLs = `<sitio>/index.html`.
-   - Confirmación de correo obligatoria; contraseñas de 10+ con letras y números;
-     rechazar contraseñas filtradas (Pro).
-   - Sesiones anónimas habilitadas (compra sin cuenta), con límite por IP.
-   - SMTP propio (por ejemplo Resend con un dominio verificado) y las plantillas
-     de `supabase/templates/` (los asuntos están en `supabase/config.toml`).
-4. **Build:**
-   ```bash
-   FERIAS_SUPABASE_URL=https://<ref>.supabase.co \
-   FERIAS_SUPABASE_PUBLISHABLE_KEY=sb_publishable_… \
-   FERIAS_SITE_URL=https://<dominio> npm run build      # → dist/
-   ```
-   El build valida que la clave sea pública, genera la CSP con el dominio de
-   Supabase, nombra los archivos por contenido y versiona el service worker.
-5. **Hosting estático** con HTTPS y compresión (GitHub Pages, Cloudflare Pages o
-   Netlify): se publica la carpeta `dist/`.
-6. **Primera administración:** la persona se registra en el sitio publicado y
-   se le otorga el rol con la consulta SQL de arriba (SQL editor del proyecto).
-7. **Sacar la marca de demostración:** el proyecto remoto nunca debe recibir
-   `npm run seed:demo` (el script sólo corre en local) y `demo_data` queda en
-   `false`.
+Nada se hizo todavía. Pasos, secretos, publicación y recuperación:
+[DESPLIEGUE.md](DESPLIEGUE.md); comandos de operación: [OPERACION.md](OPERACION.md).
 
 ## 4. Operación diaria del piloto
 

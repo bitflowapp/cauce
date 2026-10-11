@@ -1,0 +1,77 @@
+name: Publicar sitio (manual)
+
+# Publica el sitio estático en Cloudflare Pages (subida directa, plan gratuito).
+# Sólo corre a mano, desde Actions → «Publicar sitio» → Run workflow, y sólo
+# después de que LUNA Proyectos autorice la publicación (docs/DESPLIEGUE.md).
+# Sin los secretos y variables del entorno «produccion» falla sin hacer nada.
+#
+# Personaje: por defecto el genérico. Sofía sólo si la variable de repositorio
+# FERIAS_SOFIA_AUTORIZADA vale «si» (con su autorización escrita archivada).
+on:
+  workflow_dispatch:
+    inputs:
+      confirmar:
+        description: Para publicar, repetir la dirección del sitio (FERIAS_SITE_URL)
+        type: string
+        required: true
+      personaje:
+        description: Personaje del sitio
+        type: choice
+        options: [generico, sofia]
+        default: generico
+      indexar:
+        description: Permitir que los buscadores indexen (sólo para el lanzamiento)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publicar
+  cancel-in-progress: false
+
+jobs:
+  publicar:
+    name: Verificar, compilar y publicar
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: produccion
+    env:
+      FERIAS_SUPABASE_URL: ${{ vars.FERIAS_SUPABASE_URL }}
+      FERIAS_SUPABASE_PUBLISHABLE_KEY: ${{ vars.FERIAS_SUPABASE_PUBLISHABLE_KEY }}
+      FERIAS_SITE_URL: ${{ vars.FERIAS_SITE_URL }}
+      FERIAS_CF_PROJECT: ${{ vars.FERIAS_CF_PROJECT }}
+      FERIAS_SOFIA_AUTORIZADA: ${{ vars.FERIAS_SOFIA_AUTORIZADA }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CONFIRMAR: ${{ inputs.confirmar }}
+      PERSONAJE: ${{ inputs.personaje }}
+      INDEXAR: ${{ inputs.indexar }}
+    steps:
+      - name: Configuración presente (sólo nombres, nunca valores)
+        run: |
+          missing=0
+          for name in FERIAS_SUPABASE_URL FERIAS_SUPABASE_PUBLISHABLE_KEY FERIAS_SITE_URL FERIAS_CF_PROJECT CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID; do
+            if [ -n "${!name}" ]; then echo "✔ $name"; else echo "✘ $name"; missing=1; fi
+          done
+          [ "$missing" = "0" ] || { echo "::error::Falta configuración del entorno «produccion» (ver docs/DESPLIEGUE.md)."; exit 1; }
+          [ "$CONFIRMAR" = "$FERIAS_SITE_URL" ] || { echo "::error::La confirmación no coincide con FERIAS_SITE_URL."; exit 1; }
+          if [ "$PERSONAJE" = "sofia" ] && [ "$FERIAS_SOFIA_AUTORIZADA" != "si" ]; then
+            echo "::error::Sofía requiere su autorización escrita (variable FERIAS_SOFIA_AUTORIZADA=si)."; exit 1
+          fi
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Compuertas y pruebas rápidas
+        run: npm run verify
+      - name: Build
+        run: |
+          export FERIAS_PERSONAJE="$PERSONAJE"
+          [ "$INDEXAR" = "true" ] && export FERIAS_INDEXAR=si
+          npm run build
+      - name: Publicar en Cloudflare Pages
+        run: npx --yes wrangler@4.136.0 pages deploy dist --project-name "$FERIAS_CF_PROJECT" --branch main --commit-dirty=true

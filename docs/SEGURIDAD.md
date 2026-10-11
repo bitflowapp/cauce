@@ -68,6 +68,12 @@ está probado (`user_metadata.role = admin` no da acceso).
   img-src 'self' data: blob: <supabase>; connect-src 'self' <supabase> (https/wss);
   font-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'`.
   Sin scripts, estilos ni manejadores en línea (compuerta `npm run check`).
+- **Encabezados del hosting** (`_headers`, Cloudflare Pages): no embebible en
+  marcos (`X-Frame-Options` y `frame-ancestors 'none'`), HSTS, `nosniff`,
+  `Referrer-Policy` y `Permissions-Policy`; las vistas previas llevan
+  `noindex` (sólo `FERIAS_INDEXAR=si` habilita la indexación).
+- **CSV de administración:** las celdas que empiezan con `= + - @` se
+  neutralizan para que nadie pueda inyectar fórmulas en una planilla.
 - **XSS:** todo dato se inserta con la plantilla `html\`…\`` que escapa; sólo
   el markup propio (íconos, Sofía) entra con `raw()`. La compuerta exige que
   todo `innerHTML` reciba una plantilla escapada.

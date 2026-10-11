@@ -6,3 +6,4 @@ evidence/
 .env.*
 !.env.example
 *.log
+backup/
