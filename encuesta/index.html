@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#123e37">
+  <meta name="description" content="Queremos conocer la opinión de comercios, emprendimientos y servicios de Aluminé antes de lanzar CAUCE.">
+  <link rel="canonical" href="https://bitflowapp.github.io/cauce/encuesta/">
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="es_AR">
+  <meta property="og:title" content="CAUCE · Aluminé | Encuesta para emprendedores">
+  <meta property="og:description" content="Queremos conocer la opinión de comercios, emprendimientos y servicios de Aluminé antes de lanzar CAUCE.">
+  <meta property="og:url" content="https://bitflowapp.github.io/cauce/encuesta/">
+  <meta property="og:image" content="https://bitflowapp.github.io/cauce/encuesta/assets/images/og-cauce.jpg">
+  <meta property="og:image:alt" content="Ilustración de CAUCE · Aluminé con montañas, araucarias y río patagónico">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" type="image/svg+xml" href="assets/icons/favicon.svg">
+  <link rel="preload" href="assets/illustrations/alumine-landscape.svg" as="image" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css?v=1">
+  <title>CAUCE · Aluminé | Encuesta para emprendedores</title>
+  <script defer src="analytics.js?v=1"></script>
+  <script defer src="app.js?v=1"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Saltar al contenido</a>
+  <header class="site-header">
+    <a class="brand" href="#inicio" aria-label="CAUCE, volver al inicio">
+      <svg class="brand-mark" viewBox="0 0 44 36" aria-hidden="true" focusable="false">
+        <path class="wave wave-one" d="M3 10c5.3 0 5.3-5 10.7-5s5.3 5 10.6 5S29.6 5 35 5s5.3 5 8 5" />
+        <path class="wave wave-two" d="M1 19c5.3 0 5.3-5 10.7-5s5.3 5 10.6 5 5.3-5 10.7-5 5.3 5 10 5" />
+        <path class="wave wave-three" d="M3 28c5.3 0 5.3-5 10.7-5s5.3 5 10.6 5 5.3-5 10.7-5 5.3 5 8 5" />
+      </svg>
+      <span>CAUCE <span class="brand-dot">·</span> Aluminé</span>
+    </a>
+    <span class="header-note">Una idea hecha acá</span>
+  </header>
+
+  <main id="main">
+    <section class="hero" id="inicio" aria-labelledby="hero-title">
+      <div class="hero-copy">
+        <p class="eyebrow"><span class="eyebrow-dot" aria-hidden="true"></span>Aluminé, Neuquén</p>
+        <h1 id="hero-title">CAUCE <span>· Aluminé</span></h1>
+        <p class="hero-slogan">TODO LO LOCAL.<br><span>MÁS CERCA.</span></p>
+        <p class="hero-intro">Estamos pensando una nueva forma de conectar comercios, emprendimientos y servicios de Aluminé con vecinos y visitantes.</p>
+        <p class="hero-intro hero-intro-secondary">Antes de avanzar queremos escuchar a quienes emprenden todos los días acá.</p>
+        <button class="button button-primary hero-cta" id="start-survey" type="button">
+          <span>Responder encuesta</span>
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10h11M10 5l5 5-5 5" /></svg>
+        </button>
+        <p class="time-note"><svg viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="7"/><path d="M9 5v4l2.5 1.5"/></svg>Te lleva menos de 2 minutos.</p>
+        <p class="privacy-note">No pedimos datos personales. Solo queremos conocer tu mirada.</p>
+      </div>
+      <figure class="landscape-wrap">
+        <img class="landscape" src="assets/illustrations/alumine-landscape.svg" width="760" height="570" alt="Ilustración de montañas, araucarias y un río en Aluminé">
+        <figcaption class="landscape-caption"><span class="caption-line"></span>Un lugar. Muchas formas de crecer.</figcaption>
+      </figure>
+      <div class="hero-bottom-mark" aria-hidden="true">HECHO CON LA COMUNIDAD DE ALUMINÉ</div>
+    </section>
+
+    <section class="survey-section" id="encuesta" aria-labelledby="survey-heading" hidden>
+      <div class="section-kicker"><span class="eyebrow-dot" aria-hidden="true"></span>Tu experiencia importa</div>
+      <div class="survey-shell">
+        <div class="survey-topline">
+          <a class="mini-brand" href="#inicio">CAUCE <span>·</span> Aluminé</a>
+          <span class="survey-step" id="step-label">Pregunta 1 de 9</span>
+        </div>
+        <div class="progress-track" id="progress-track" role="progressbar" aria-label="Progreso de la encuesta" aria-valuemin="0" aria-valuemax="9" aria-valuenow="0">
+          <span class="progress-fill" id="progress-fill"></span>
+        </div>
+        <form class="question-card" id="survey-form" novalidate>
+          <div id="question-content" aria-live="polite" aria-atomic="true"></div>
+          <p class="form-error" id="form-error" role="alert" hidden>Elegí al menos una opción para continuar.</p>
+          <div class="question-actions">
+            <button class="button button-back" id="back-button" type="button" hidden>
+              <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M16 10H5m5 5-5-5 5-5" /></svg>
+              <span>Volver</span>
+            </button>
+            <button class="button button-primary button-next" id="next-button" type="submit">
+              <span>Continuar</span>
+              <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10h11m-5-5 5 5-5 5" /></svg>
+            </button>
+          </div>
+        </form>
+        <p class="survey-footnote"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5 13 3.4v3.8c0 3.2-2.2 5.8-5 7.3-2.8-1.5-5-4.1-5-7.3V3.4L8 1.5Z"/><path d="m5.7 7.8 1.5 1.5 3.1-3.2"/></svg>Tus respuestas quedan en este dispositivo y son anónimas.</p>
+      </div>
+    </section>
+
+    <section class="completion-section" id="final" aria-labelledby="completion-title" hidden>
+      <div class="completion-card">
+        <div class="completion-icon" aria-hidden="true">
+          <svg viewBox="0 0 52 52"><circle cx="26" cy="26" r="23"/><path d="m15 26 7 7 15-16"/></svg>
+        </div>
+        <p class="eyebrow"><span class="eyebrow-dot" aria-hidden="true"></span>Una comunidad que escucha</p>
+        <h2 id="completion-title" tabindex="-1">Gracias por ayudarnos.</h2>
+        <p class="completion-copy">CAUCE se está construyendo para conectar y fortalecer la actividad local de Aluminé.</p>
+        <p class="completion-copy">Tus respuestas nos ayudan a decidir cómo debería funcionar antes de lanzarlo.</p>
+        <div class="completion-signoff"><span>CAUCE <i>·</i> Aluminé</span><small>Comercio local. Comunidad real.</small></div>
+        <div class="completion-actions">
+          <button class="button button-primary" id="share-button" type="button">
+            <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="15" cy="4" r="2.3"/><circle cx="5" cy="10" r="2.3"/><circle cx="15" cy="16" r="2.3"/><path d="m7 9 5.8-3.8M7 11l5.8 3.8"/></svg>
+            <span>Compartir encuesta</span>
+          </button>
+          <a class="button button-whatsapp" id="pilot-button" href="https://wa.me/?text=Hola%2C%20vi%20la%20encuesta%20de%20CAUCE%20%C2%B7%20Alumin%C3%A9%20y%20me%20interesa%20conocer%20m%C3%A1s%20sobre%20la%20prueba%20inicial." target="_blank" rel="noopener noreferrer" hidden>
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M17 9.7a7 7 0 0 1-10.4 6.1L3 17l1.2-3.4A7 7 0 1 1 17 9.7Z"/><path d="M7 7.2c.2-.4.5-.4.7-.4h.4c.2 0 .3.1.4.4l.6 1.4c.1.2 0 .4-.1.5l-.5.6c-.1.2-.2.3-.1.5.4.7 1 1.3 1.7 1.7.2.1.4.1.5-.1l.7-.8c.1-.2.3-.2.5-.1l1.4.7c.2.1.3.2.3.4 0 .4-.2 1-.6 1.3-.4.4-1 .6-1.6.5-1-.1-2.3-.7-3.6-1.8-1.1-1-1.9-2.3-2-3.2 0-.6.2-1.1.5-1.6Z"/></svg>
+            <span>Quiero participar del piloto</span>
+          </a>
+        </div>
+        <p class="share-status" id="share-status" role="status" aria-live="polite"></p>
+        <a class="restart-button" id="restart-button" href="?restart=1">Volver a empezar</a>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <span>CAUCE <span>·</span> Aluminé</span>
+    <span>Una idea para encontrarnos más cerca.</span>
+  </footer>
+</body>
+</html>

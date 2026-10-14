@@ -13,6 +13,10 @@ export default [
     languageOptions: { ecmaVersion: 2023, sourceType: 'module', globals: { ...globals.browser } },
   },
   {
+    files: ['encuesta/**/*.js'],
+    languageOptions: { ecmaVersion: 2023, sourceType: 'script', globals: { ...globals.browser } },
+  },
+  {
     files: ['service-worker.js'],
     languageOptions: { ecmaVersion: 2023, sourceType: 'script', globals: { ...globals.serviceworker } },
   },
