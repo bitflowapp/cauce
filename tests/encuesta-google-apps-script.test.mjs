@@ -119,7 +119,7 @@ test('frontend and Apps Script question IDs and options stay in sync', () => {
   const frontendQuestionIds = [...questionSource.matchAll(/id: "([a-z_]+)",\s*kind:/g)].map(match => match[1]).sort();
   assert.deepEqual(frontendQuestionIds, serverQuestionIds);
 
-  const blocks = [...questionSource.matchAll(/id: "([a-z_]+)",\s*kind: "[a-z]+",[\s\S]*?(?=\n    \},?\n    \{|\n  \];)/g)];
+  const blocks = [...questionSource.matchAll(/id: "([a-z_]+)",\s*kind: "[a-z]+",[\s\S]*?(?=\n {4}\},?\n {4}\{|\n {2}\];)/g)];
   const frontendOptions = new Map();
   for (const block of blocks) {
     frontendOptions.set(block[1], [...block[0].matchAll(/\["([a-z0-9_]+)",\s*"[^"]+"\]/g)].map(match => match[1]).sort());
