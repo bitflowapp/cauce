@@ -72,6 +72,12 @@ jobs:
             npm run build:offline
             echo "folder=dist" >> "$GITHUB_OUTPUT"
           fi
+      - name: Incluir encuesta estática de CAUCE
+        env:
+          SITE_FOLDER: ${{ steps.pick.outputs.folder }}
+        run: |
+          mkdir -p "$SITE_FOLDER/encuesta"
+          cp -R encuesta/. "$SITE_FOLDER/encuesta/"
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

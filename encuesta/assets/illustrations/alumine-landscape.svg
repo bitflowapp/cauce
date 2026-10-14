@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 570" role="img" aria-labelledby="title desc">
+  <title id="title">Paisaje de Aluminé</title>
+  <desc id="desc">Montañas y araucarias reflejadas en un río patagónico.</desc>
+  <defs>
+    <clipPath id="scene"><rect x="15" y="15" width="730" height="520" rx="170 170 28 28"/></clipPath>
+  </defs>
+  <g clip-path="url(#scene)">
+    <rect x="15" y="15" width="730" height="520" fill="#e7eee7"/>
+    <circle cx="576" cy="112" r="49" fill="#d6b77f" opacity=".85"/>
+    <path d="m0 300 132-160 82 89 123-150 125 164 83-105 165 169v150H0Z" fill="#91a99a"/>
+    <path d="m80 258 54-118 36 45 42 44-32-8-22 7-18-14-22 13-15-3Z" fill="#f7f4ec" opacity=".9"/>
+    <path d="m232 228 105-149 50 67 80 98-54-16-24 10-37-25-37 16-34-11-31 15Z" fill="#f7f4ec" opacity=".92"/>
+    <path d="m496 249 49-111 43 53 64 74-37-8-26 8-30-13-29 9-18-9Z" fill="#f7f4ec" opacity=".86"/>
+    <path d="M0 315c93-43 145-9 229-19 108-13 183-41 285-21 86 17 158 0 246-24v128H0Z" fill="#5f796e"/>
+    <path d="M0 339c108-36 186 15 286-3 139-25 191-39 298-14 50 12 112-2 176-24v113H0Z" fill="#385c4d"/>
+    <g fill="#234b3e">
+      <path d="m73 344 21-93 20 93Zm-8-40h58v7H65Zm17-22h25v6H82Zm-8 42h42v7H74Z"/>
+      <path d="m137 344 28-128 27 128Zm-12-51h80v7h-80Zm18-33h45v7h-45Zm-9 57h64v7h-64Z"/>
+      <path d="m564 329 25-116 24 116Zm-12-47h72v7h-72Zm17-30h42v7h-42Zm-8 54h59v7h-59Z"/>
+      <path d="m624 339 21-98 21 98Zm-9-39h61v7h-61Zm14-24h35v7h-35Zm-6 45h51v7h-51Z"/>
+      <path d="m690 339 24-109 23 109Zm-11-44h69v7h-69Zm16-27h40v7h-40Zm-7 50h58v7h-58Z"/>
+    </g>
+    <path d="M-20 408c88-35 138 18 230-5s135-15 207 12 141 12 196-10 110-16 177 8v142H-20Z" fill="#9dc3c2"/>
+    <path d="M-12 446c87-34 151-19 228 1 87 22 140 19 228-8 88-28 152-23 249 8" fill="none" stroke="#f2f2e9" stroke-width="8" stroke-linecap="round" opacity=".88"/>
+    <path d="M-15 482c74-27 151-12 229 8 83 21 144 14 222-10 91-28 149-20 252 8" fill="none" stroke="#75a3a3" stroke-width="4" stroke-linecap="round" opacity=".9"/>
+    <path d="M-12 515c92-22 149-5 228 12 92 19 157 11 239-11 86-23 142-12 233 7" fill="none" stroke="#d8e8df" stroke-width="6" stroke-linecap="round" opacity=".8"/>
+    <path d="M97 399c65-10 119-7 168 3m244-6c52-11 90-9 129 2" fill="none" stroke="#456b55" stroke-width="3" stroke-linecap="round" opacity=".68"/>
+  </g>
+  <path d="M93 68c26-18 50-17 75-2m-49 15c17-10 33-10 48 0" fill="none" stroke="#fffaf1" stroke-width="3" stroke-linecap="round" opacity=".8"/>
+  <circle cx="93" cy="67" r="4" fill="#fffaf1"/>
+</svg>

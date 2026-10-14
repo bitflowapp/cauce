@@ -33,6 +33,7 @@ function loadWorker() {
     self: {
       addEventListener: (name, handler) => listeners.set(name, handler),
       location: { origin: ORIGIN },
+      registration: { scope: `${ORIGIN}/cauce/` },
       skipWaiting: async () => {},
       clients: { claim: async () => {} },
     },
@@ -79,20 +80,33 @@ test('una petición con credenciales o token nunca pasa por la caché', () => {
 
 test('el enlace de recuperación no se intercepta ni se guarda', () => {
   const { handle, stored } = loadWorker();
-  assert.equal(handle(request(`${ORIGIN}/index.html?token_hash=secreto&type=recovery`, { mode: 'navigate' })), null);
+  assert.equal(handle(request(`${ORIGIN}/cauce/index.html?token_hash=secreto&type=recovery`, { mode: 'navigate' })), null);
+  assert.equal(stored.size, 0);
+});
+
+test('la encuesta bajo el subdirectorio de Pages queda fuera de la caché de CAUCE', () => {
+  const { handle, stored } = loadWorker();
+  for (const url of [
+    `${ORIGIN}/cauce/encuesta`,
+    `${ORIGIN}/cauce/encuesta/`,
+    `${ORIGIN}/cauce/encuesta/app.js`,
+  ]) {
+    const mode = url.endsWith('/') || url.endsWith('encuesta') ? 'navigate' : 'no-cors';
+    assert.equal(handle(request(url, { mode })), null, `La encuesta debe ir a la red: ${url}`);
+  }
   assert.equal(stored.size, 0);
 });
 
 test('sólo la cáscara estática se guarda, y el documento va primero a la red', async () => {
   const { handle, fetched, stored } = loadWorker();
-  assert.equal(handle(request(`${ORIGIN}/api/orders`)), null);
-  assert.equal(handle(request(`${ORIGIN}/algo/privado`)), null);
-  const asset = handle(request(`${ORIGIN}/styles/cauce.css`));
+  assert.equal(handle(request(`${ORIGIN}/cauce/api/orders`)), null);
+  assert.equal(handle(request(`${ORIGIN}/cauce/algo/privado`)), null);
+  const asset = handle(request(`${ORIGIN}/cauce/styles/cauce.css`));
   assert.ok(asset, 'Una hoja de estilos propia sí se cachea');
   await asset;
-  const document = handle(request(`${ORIGIN}/index.html`, { mode: 'navigate' }));
+  const document = handle(request(`${ORIGIN}/cauce/index.html`, { mode: 'navigate' }));
   assert.ok(document, 'El documento lo sirve el worker');
   await document;
-  assert.deepEqual(fetched, [`${ORIGIN}/styles/cauce.css`, `${ORIGIN}/index.html`]);
-  assert.deepEqual([...stored.keys()].sort(), [`${ORIGIN}/styles/cauce.css`, './index.html'].sort());
+  assert.deepEqual(fetched, [`${ORIGIN}/cauce/styles/cauce.css`, `${ORIGIN}/cauce/index.html`]);
+  assert.deepEqual([...stored.keys()].sort(), [`${ORIGIN}/cauce/styles/cauce.css`, './index.html'].sort());
 });

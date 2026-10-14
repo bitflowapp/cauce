@@ -56,6 +56,10 @@ self.addEventListener('fetch', event => {
   const url = new URL(request.url);
   // Supabase (Auth, REST, Storage y Realtime) es otro origen: no se intercepta.
   if (url.origin !== self.location.origin) return;
+  // La encuesta tiene su propio documento y recursos. Dejarla en la red evita
+  // que su navegación reemplace el index.html de CAUCE en la caché offline.
+  const surveyPath = new URL('./encuesta/', self.registration.scope).pathname;
+  if (url.pathname === surveyPath.slice(0, -1) || url.pathname.startsWith(surveyPath)) return;
   // Las llamadas al backend local nunca se cachean ni se responden desde caché:
   // una respuesta vieja aparentaría una operación que no ocurrió.
   if (url.pathname.includes('/api/')) return;
