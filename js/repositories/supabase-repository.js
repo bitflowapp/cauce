@@ -294,7 +294,7 @@ export function createSupabaseRepository({ client, redirectTo, storage, onError 
   // ── adaptadores de forma ──
   const publicBusinessColumns = '*,open_now,business_categories(slug,name),business_hours(weekday,opens,closes)';
   const memberBusinessColumns = `${publicBusinessColumns},business_contacts(owner_name,phone,email,reference),`
-    + 'business_review_events(note,to_status,created_at)';
+    + 'business_review_events(note,to_status,created_at),payments_pilot';
   const mapBusiness = row => {
     const contact = Array.isArray(row.business_contacts) ? row.business_contacts[0] : row.business_contacts;
     const reviews = (row.business_review_events || []).slice()
@@ -323,6 +323,8 @@ export function createSupabaseRepository({ client, redirectTo, storage, onError 
       contactEmail: contact?.email || '', reference: contact?.reference || '',
       reviewNote: reviews.find(event => ['returned', 'suspended'].includes(event.to_status))?.note || '',
       reviewedAt: reviews[0]?.created_at || '',
+      // Comercio piloto del pago online (sólo lo ve su titular o encargado/a).
+      paymentsPilot: row.payments_pilot === true,
       createdAt: row.created_at, updatedAt: row.updated_at,
     };
   };

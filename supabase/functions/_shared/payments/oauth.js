@@ -25,9 +25,16 @@ export async function pkcePair() {
   return { verifier, challenge: toBase64Url(digest) };
 }
 
+// El stack local de Supabase sirve las funciones por http (kong, 127.0.0.1):
+// sólo ahí se admite. El proyecto real siempre es https.
+const LOCAL_HOSTS = new Set(['127.0.0.1', 'localhost', 'kong', 'host.docker.internal']);
+
 export function authorizationUrl({ clientId, redirectUri, state, challenge }) {
   if (!clientId || !redirectUri || !state || !challenge) throw new Error('Faltan datos para autorizar.');
-  if (new URL(redirectUri).protocol !== 'https:') throw new Error('La URL de retorno tiene que ser https.');
+  const target = new URL(redirectUri);
+  if (target.protocol !== 'https:' && !LOCAL_HOSTS.has(target.hostname)) {
+    throw new Error('La URL de retorno tiene que ser https.');
+  }
   const url = new URL(AUTH_BASE);
   url.searchParams.set('client_id', clientId);
   url.searchParams.set('response_type', 'code');
@@ -40,10 +47,13 @@ export function authorizationUrl({ clientId, redirectUri, state, challenge }) {
 }
 
 // Canje del código. Va del servidor al proveedor; nunca desde el navegador.
-export function tokenRequest({ clientId, clientSecret, code, redirectUri, verifier }) {
+// Sin `test_token`: esas credenciales (TEST-…) la API de Orders las rechaza
+// (401 invalid_credentials). El sandbox de Orders son cuentas de PRUEBA con
+// credenciales productivas; qué cuenta es se verifica después (accountRequest).
+export function tokenRequest({ clientId, clientSecret, code, redirectUri, verifier, apiBase = API_BASE }) {
   if (!clientId || !clientSecret || !code || !redirectUri || !verifier) throw new Error('Faltan datos para el canje.');
   return {
-    url: `${API_BASE}/oauth/token`,
+    url: `${apiBase}/oauth/token`,
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: { client_id: clientId, client_secret: clientSecret, grant_type: 'authorization_code', code,
@@ -51,10 +61,24 @@ export function tokenRequest({ clientId, clientSecret, code, redirectUri, verifi
   };
 }
 
-export function refreshRequest({ clientId, clientSecret, refreshToken }) {
+// Quién es la cuenta que acaba de autorizar, según el proveedor.
+export function accountRequest(accessToken, apiBase = API_BASE) {
+  if (!accessToken) throw new Error('Falta el token.');
+  return { url: `${apiBase}/users/me`, method: 'GET', headers: { Authorization: `Bearer ${accessToken}` } };
+}
+
+// Las cuentas de prueba las marca el proveedor: etiqueta `test_user` y correo
+// @testuser.com (su dominio). Un piloto en sandbox sólo guarda cuentas de
+// prueba y un comercio real sólo cuentas reales: nunca se mezclan.
+export function isTestAccount(user) {
+  const tags = Array.isArray(user?.tags) ? user.tags.map(String) : [];
+  return tags.includes('test_user') || /@testuser\.com$/i.test(String(user?.email || ''));
+}
+
+export function refreshRequest({ clientId, clientSecret, refreshToken, apiBase = API_BASE }) {
   if (!clientId || !clientSecret || !refreshToken) throw new Error('Faltan datos para renovar.');
   return {
-    url: `${API_BASE}/oauth/token`,
+    url: `${apiBase}/oauth/token`,
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: { client_id: clientId, client_secret: clientSecret, grant_type: 'refresh_token', refresh_token: refreshToken },

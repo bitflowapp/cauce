@@ -5,7 +5,7 @@ import globals from 'globals';
 
 export default [
   // De supabase/ se revisan sólo las Edge Functions (JavaScript para Deno).
-  { ignores: ['node_modules/**', 'dist/**', 'dist-production/**', '.local/**', 'evidence/**', 'supabase/*',
+  { ignores: ['node_modules/**', 'dist/**', 'dist-production/**', '.local/**', 'supabase/functions/.local/**', 'evidence/**', 'supabase/*',
     '!supabase/functions', 'CAUCE-demo.html'] },
   js.configs.recommended,
   {

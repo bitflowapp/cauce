@@ -2,7 +2,7 @@
 
 Complementa [PAGOS-ONLINE.md](PAGOS-ONLINE.md). Acá están las funciones, parámetros, respuestas y errores exactos que usan la interfaz, la base y las Edge Functions.
 
-**Todo esto existe y está probado, con el interruptor `payments_online` apagado.**
+**Todo esto existe y está probado, con el interruptor `payments_online` apagado.** Un comercio puede cobrar online como piloto (`private.payment_pilot_businesses`, en sandbox o real) sin encender el interruptor: donde abajo dice "habilitado", es interruptor encendido **o** comercio piloto.
 
 Convenciones:
 
@@ -32,7 +32,7 @@ Rol: `anon`, `authenticated`. Devuelve las formas de pago que el checkout puede 
 ```
 
 - El efectivo aparece según las modalidades del comercio.
-- `online` aparece sólo con `payments_online` encendido **y** la cuenta del comercio `connected`.
+- `online` aparece sólo con el comercio habilitado (interruptor o piloto) **y** su cuenta `connected`. En un piloto en sandbox, además, la cuenta tiene que ser de prueba (`live_mode = false`).
 - Un comercio no publicado devuelve `[]`.
 
 **Interfaz:** `checkoutPaymentMethods(methods, fulfillment)` (`js/core/payment.js`) se queda con el efectivo de la modalidad elegida y con `online` si vino con proveedor. Nunca agrega una forma que no vino. Si la consulta falla, la interfaz usa `cashOnlyMethods(fulfillment)`.
@@ -56,6 +56,7 @@ Rol: `authenticated`, **sólo quien compró el pedido**. Crea o devuelve el inte
 ```
 
 - Un doble toque o un reintento devuelven el mismo `attempt_id` mientras siga `pending`/`processing`.
+- Un intento `pending` vencido (30 minutos; 10 más si ya tiene orden en el proveedor) se cierra como `expired` (`local_expiry`) y se crea otro, con otra clave. Uno `processing` nunca vence acá.
 - El importe es `orders.total_ars`: el cliente no manda ningún importe.
 
 | Error | Cuándo |
@@ -66,7 +67,7 @@ Rol: `authenticated`, **sólo quien compró el pedido**. Crea o devuelve el inte
 | `23514 Payment not required` | Es efectivo. |
 | `23514 Order canceled` | El pedido está cancelado. |
 | `23514 Order already paid` | El pago ya está aprobado, devuelto o devuelto en parte. |
-| `23514 Payment method not available` | Interruptor apagado o cuenta desconectada. |
+| `23514 Payment method not available` | Comercio no habilitado o cuenta desconectada. |
 
 ### `payment_status(reference uuid) → jsonb | null`
 
@@ -103,7 +104,7 @@ Sin cambios para el efectivo. Para online:
 Rol: titular y encargado/a del comercio (`42501` para cualquier otro).
 
 ```json
-{ "enabled": false,
+{ "enabled": false, "sandbox": false,
   "providers": [{ "provider": "mercadopago", "label": "Mercado Pago" }],
   "accounts": [{ "provider": "mercadopago", "status": "connected", "status_reason": "",
                  "provider_user_id": "123", "live_mode": false, "scopes": ["…"],
@@ -112,8 +113,13 @@ Rol: titular y encargado/a del comercio (`42501` para cualquier otro).
   "to_review": 0, "last_synced_at": null, "day_start": "…" }
 ```
 
+- `enabled`: interruptor o piloto; `sandbox`: piloto de prueba (la interfaz muestra el aviso de modo de prueba).
 - Nunca incluye tokens ni ningún secreto.
 - "Hoy" se cuenta desde las 00:00 en la hora de la localidad.
+
+### Columna calculada `businesses.payments_pilot`
+
+Rol: titular y encargado/a ven `true`/`false` en sus comercios (`memberBusinessColumns`); cualquier otra persona, `null`. La interfaz muestra la sección Pagos con el interruptor encendido o con el comercio piloto.
 
 ### `disconnect_payment_account(business uuid, provider text) → void`
 
@@ -121,7 +127,9 @@ Rol: **sólo titular**. Borra las credenciales en el acto y deja la cuenta `not_
 
 ## 2. Edge Functions
 
-Todas responden JSON con `Cache-Control: no-store`. Todas devuelven `503 {"error":"not_configured"}` si falta un secreto y `503 {"error":"payments_disabled"}` con el interruptor apagado.
+Todas responden JSON con `Cache-Control: no-store`. Todas devuelven `503 {"error":"not_configured"}` si falta un secreto y `503 {"error":"payments_disabled"}` si no hay interruptor ni piloto.
+
+`payments-checkout` y `payments-oauth` responden el preflight `OPTIONS` (`204`) y todas sus respuestas llevan `Access-Control-Allow-Origin: *` (el sitio las llama con `functions.invoke`; la autorización es el JWT, sin cookies).
 
 ### `POST /functions/v1/payments-checkout`
 
@@ -138,9 +146,16 @@ Errores:
 | --- | --- |
 | `400 invalid_order` | `order_id` no es un UUID. |
 | `409 payment_not_available` | `start_payment` rechazó el pedido. |
-| `409 account_not_connected` | La cuenta del comercio no está conectada. |
-| `409 attempt_closed` | El intento ya no está abierto. |
-| `502 provider_error` | El proveedor respondió con un error. |
+| `409 account_not_connected` | La cuenta del comercio no está conectada (o es real en un piloto de prueba). |
+| `409 account_reconnect_required` | El proveedor rechazó el token o su renovación: la cuenta pasó a `reconnect_required`. |
+| `409 attempt_closed` | El intento ya no está abierto o venció. |
+| `409 live_order_refused` | Piloto en sandbox y el proveedor devolvió una orden que no es de prueba (`ORDTST…`): no se redirige. |
+| `503 provider_unavailable` | No se pudo obtener un token vigente (el proveedor no respondió la renovación). |
+| `503 provider_busy` | El proveedor respondió `429` o `409`; con `Retry-After: 5`. El reintento usa la misma clave. |
+| `504 provider_timeout` | El proveedor no respondió en 10 s. Nada se guardó; el reintento usa la misma clave. |
+| `502 provider_error` | Otro error del proveedor, o una orden sin `checkout_url` https. |
+
+**Verificación de idempotencia (sólo operación, sólo sandbox):** `{ "action": "replay_order", "attempt_id": "uuid" }` con `Authorization: Bearer <clave de servicio>` reenvía el pedido idéntico (misma clave, mismo cuerpo) de un intento abierto que ya tiene orden de prueba, y responde `200 { "http_status", "same_order", "provider_code" }` (nunca tokens ni direcciones). Sin la clave de servicio, `401 service_only`; fuera de un piloto en sandbox o sin orden de prueba, `403 sandbox_only` / `409 no_provider_order`.
 
 **Interfaz:** comando `payment.start` del repositorio, que devuelve `{ checkoutUrl }` y lleva al navegador ahí. Si el pedido ya tenía checkout, vuelve la misma URL sin llamar otra vez al proveedor.
 
@@ -159,7 +174,9 @@ Errores:
 | `401 sign_in_required` | Sin sesión, o con una sesión de compra sin cuenta. |
 | `400 invalid_business` | `business` no es un UUID. |
 | `400 unsupported_provider` | El proveedor no es el del adaptador. |
-| `403 not_allowed` | No es titular, o el interruptor está apagado. |
+| `403 not_allowed` | No es titular, o el comercio no está habilitado. |
+
+**Renovación programada (sólo operación):** `{ "action": "refresh_due", "within_days": 30 }` con `Authorization: Bearer <clave de servicio>` renueva las cuentas conectadas cuyo token vence dentro de ese plazo (1–200 días) y responde `200 { "checked", "refreshed", "reconnect_required", "unavailable" }`. Sin la clave de servicio, `401 service_only`.
 
 ### `GET /functions/v1/payments-oauth?code&state`
 
@@ -170,9 +187,11 @@ Es la vuelta del proveedor. Redirige a `<sitio>/index.html#panel/<id>/pagos?cone
 | `ok` | Cuenta conectada. |
 | `cancelada` | La persona canceló en el proveedor, o no vino `code`. |
 | `vencida` | `state` desconocido, usado o vencido (10 minutos). |
-| `error` | Falló el canje de código o el guardado. |
+| `cuenta_real` | Piloto en sandbox y el proveedor dice que la cuenta es real: tokens descartados. |
+| `cuenta_prueba` | Comercio que cobra de verdad y la cuenta es de prueba: tokens descartados. |
+| `error` | Falló el canje, la consulta de la cuenta (`/users/me`) o el guardado. |
 
-**Interfaz:** `connectionResult(hash)` acepta sólo esos cuatro valores.
+En todos los casos que no son `ok` el `state` queda quemado. **Interfaz:** `connectionResult(hash)` acepta sólo esos seis valores.
 
 ### `POST /functions/v1/payments-webhook`
 
@@ -195,13 +214,18 @@ Rol: **sólo `service_role`**. Tienen revocado `execute` para `public`, `anon` y
 
 | Función | Para qué |
 | --- | --- |
-| `payment_oauth_begin(business, provider, requested_by, state, code_verifier)` | Abre una conexión. La base exige el interruptor encendido y que `requested_by` sea titular. Deja la cuenta `connecting`. |
-| `payment_oauth_lookup(state) → jsonb` | `{business_id, provider, code_verifier}` de un `state` vigente y sin usar, o `null`. |
-| `payment_oauth_complete(state, provider_user_id, scopes, live_mode, token_expires_at, access_ciphertext, refresh_ciphertext, key_version) → jsonb` | Canjea el `state` una sola vez y guarda la cuenta conectada con sus credenciales cifradas. |
+| `payments_enabled(business)`, `payments_sandbox(business)` | Comercio habilitado (interruptor o piloto) y piloto de prueba. |
+| `payments_accepting()` | Hay algo encendido (interruptor o algún piloto): la compuerta de las tres funciones. |
+| `payment_oauth_begin(business, provider, requested_by, state, code_verifier)` | Abre una conexión. La base exige comercio habilitado, titular, `code_verifier` de 43–128 y `state` de 32+. Deja la cuenta `connecting`. |
+| `payment_oauth_lookup(state) → jsonb` | `{business_id, provider, code_verifier, enabled, sandbox}` de un `state` vigente y sin usar, o `null`. |
+| `payment_oauth_discard(state) → jsonb` | Quema un `state` (vuelta cancelada, vencida o con error). |
+| `payment_oauth_complete(state, provider_user_id, scopes, live_mode, token_expires_at, access_ciphertext, refresh_ciphertext, key_version) → jsonb` | Canjea el `state` una sola vez y guarda la cuenta conectada con sus credenciales cifradas. En un piloto en sandbox rechaza `live_mode` distinto de `false`. |
+| `payment_account_rotate(account, access_ciphertext, refresh_ciphertext, new_key_version, new_expires_at)` | Guarda el token renovado y su vencimiento juntos, sólo en una cuenta conectada. |
+| `payment_accounts_expiring(within_days) → jsonb` | Cuentas conectadas cuyo token vence dentro del plazo (para la renovación programada). |
 | `payment_account_mark(business, provider, status, reason)` | Cambia el estado de la cuenta (por ejemplo, `reconnect_required`). |
-| `payment_account_credentials(business, provider) → jsonb` | Credenciales cifradas de la cuenta de un comercio. |
-| `payment_seller_credentials(provider, seller_id) → jsonb` | Credenciales cifradas del vendedor que avisa un webhook. |
-| `payment_checkout_context(attempt_id) → jsonb` | Intento, pedido, comercio, ítems, importe, clave de idempotencia y vencimiento. |
+| `payment_account_credentials(business, provider) → jsonb` | Credenciales cifradas de la cuenta de un comercio, con `live_mode`, `sandbox` y vencimiento. |
+| `payment_seller_credentials(provider, seller_id) → jsonb` | Lo mismo, del vendedor que avisa un webhook. |
+| `payment_checkout_context(attempt_id) → jsonb` | Intento, pedido, comercio, ítems, importe, clave de idempotencia, vencimiento y creación (la duración de la orden sale de esas dos fechas). |
 | `payment_attempt_set_checkout(attempt_id, provider_order_id, checkout_url)` | Guarda lo que devolvió el proveedor. El intento tiene que estar abierto, y un id distinto del ya guardado se rechaza. |
 | `payment_record_event(provider, event_key, resource_type, resource_id, action, live_mode) → jsonb` | Ver abajo. |
 | `payment_mark_event(event_id, outcome, detail)` | `ignored`, `failed` o `flagged`, con motivo. |
@@ -216,7 +240,7 @@ Respuestas de `payment_record_event`:
 Respuestas de `payment_apply_update`:
 
 - `{outcome: 'applied', status}`
-- `{outcome: 'flagged', status}`: importe distinto o pago repetido.
+- `{outcome: 'flagged', status, detail}`: `amount_mismatch` (no se aprueba), `approved_after_close` (aprobado sobre un intento cerrado: se aplica), `duplicate_payment` (otro intento del pedido ya pagado) o `provider_order_mismatch` (otra orden para el mismo intento).
 - `{outcome: 'ignored', reason}`, con `reason` = `unknown_attempt`, `seller_mismatch` o `transition`.
 
 `transactions` es un arreglo de movimientos:

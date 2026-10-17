@@ -104,7 +104,7 @@ after(async () => { await db.close(); });
 // ───────────────── actualización ─────────────────
 test('la migración corre sobre datos de producción sin tocar pedidos ni pagos en efectivo', async () => {
   assert.equal(Number((await one('anon', 'select public.app_status() as s')).s.schema), PAYMENTS);
-  assert.equal(PAYMENTS, REQUIRED_SCHEMA, 'el contrato que exige este frontend');
+  assert.ok(REQUIRED_SCHEMA >= PAYMENTS, 'este frontend exige esta migración o una posterior');
   assert.deepEqual(rows(await db.query(`select id, code, status, version, payment_method, payment_status, total_ars
     from public.orders order by code`)), legacy.orders);
   assert.equal(rows(await db.query('select count(*)::int as n from public.order_events'))[0].n, legacy.events);
@@ -120,11 +120,12 @@ test('el interruptor de pagos online existe y está apagado', async () => {
   assert.equal(rows(await db.query("select enabled from private.platform_features where key='payments_online'"))[0].enabled, false);
 });
 
-test('la máquina de estados del pago es la misma en la base y en la aplicación', async () => {
+test('la máquina de estados de esta migración está contenida en la de la aplicación', async () => {
+  // La igualdad exacta, con todas las migraciones, se prueba en payments-sandbox.
   const sql = rows(await db.query("select from_status || '>' || to_status as t from private.payment_status_transitions order by 1"))
     .map(row => row.t);
-  const js = Object.entries(PAYMENT_TRANSITIONS).flatMap(([from, list]) => list.map(to => `${from}>${to}`)).sort();
-  assert.deepEqual(sql, js);
+  const js = Object.entries(PAYMENT_TRANSITIONS).flatMap(([from, list]) => list.map(to => `${from}>${to}`));
+  for (const transition of sql) assert.ok(js.includes(transition), transition);
 });
 
 // ───────────────── interruptor apagado ─────────────────

@@ -27,6 +27,11 @@ export const PAYMENT_TRANSITIONS = Object.freeze({
   processing: Object.freeze(['approved', 'rejected', 'cancelled', 'expired']),
   approved: Object.freeze(['refunded', 'partially_refunded']),
   partially_refunded: Object.freeze(['refunded']),
+  // Un aprobado que el proveedor informa después de cerrar el intento es plata
+  // cobrada: se refleja, y la base lo deja para revisar (nunca en silencio).
+  rejected: Object.freeze(['approved']),
+  expired: Object.freeze(['approved']),
+  cancelled: Object.freeze(['approved']),
 });
 
 export function canTransitionPayment(from, to) {
@@ -150,7 +155,9 @@ export function paymentReturnReference(hash = '', search = '') {
 }
 
 // Resultado de conectar la cuenta del comercio (#panel/<id>/pagos?conexion=…).
-export const CONNECTION_RESULTS = Object.freeze(['ok', 'cancelada', 'vencida', 'error']);
+// cuenta_real / cuenta_prueba: el proveedor dijo que la cuenta no corresponde al
+// modo del comercio (sandbox o real) y no se guardó nada.
+export const CONNECTION_RESULTS = Object.freeze(['ok', 'cancelada', 'vencida', 'cuenta_real', 'cuenta_prueba', 'error']);
 export function connectionResult(hash = '') {
   const value = new URLSearchParams(String(hash).split('?')[1] || '').get('conexion') || '';
   return CONNECTION_RESULTS.includes(value) ? value : '';

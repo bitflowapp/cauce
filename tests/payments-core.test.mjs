@@ -23,8 +23,10 @@ test('la máquina de estados admite lo que el proveedor puede informar y nada m�
   assert.equal(canTransitionPayment('approved', 'partially_refunded'), true);
   assert.equal(canTransitionPayment('partially_refunded', 'refunded'), true);
   assert.equal(canTransitionPayment('approved', 'approved'), true, 'la misma noticia dos veces no es un salto');
-  for (const [from, to] of [['approved', 'pending'], ['rejected', 'approved'], ['refunded', 'approved'],
-    ['expired', 'approved'], ['cancelled', 'approved'], ['pending', 'refunded'], ['pending', 'not_required']]) {
+  // Un aprobado después de cerrar el intento es plata cobrada: se refleja (y se revisa).
+  for (const from of ['rejected', 'expired', 'cancelled']) assert.equal(canTransitionPayment(from, 'approved'), true, from);
+  for (const [from, to] of [['approved', 'pending'], ['refunded', 'approved'], ['rejected', 'pending'],
+    ['expired', 'processing'], ['cancelled', 'refunded'], ['pending', 'refunded'], ['pending', 'not_required']]) {
     assert.equal(canTransitionPayment(from, to), false, `${from} → ${to}`);
   }
   assert.equal(canTransitionPayment('approved', 'accredited'), false, 'un estado del proveedor no es un estado de CAUCE');
