@@ -283,6 +283,10 @@ a { color: inherit; }
 .completion-card .eyebrow { justify-content: center; margin-bottom: 13px; font-size: .72rem; }
 .completion-card h2 { margin: 0 0 19px; color: var(--forest-deep); font-size: clamp(1.8rem, 5vw, 2.5rem); font-weight: 720; letter-spacing: -.055em; }
 .completion-copy { max-width: 475px; margin: 0 auto 9px; color: #56655e; font-size: 1rem; line-height: 1.65; }
+.submission-status { max-width: 470px; margin: 17px auto 12px; color: var(--forest-mid); font-size: .92rem; line-height: 1.55; }
+.submission-status[data-state="error"] { color: #9f3a2f; }
+.retry-submit { margin: 3px auto 14px; }
+.completion-actions[hidden], .retry-submit[hidden] { display: none; }
 .completion-signoff { margin: 27px 0 27px; display: flex; flex-direction: column; gap: 5px; }
 .completion-signoff span { color: var(--forest); font-size: 1.08rem; font-weight: 760; letter-spacing: -.025em; }
 .completion-signoff i { color: var(--river); font-style: normal; }

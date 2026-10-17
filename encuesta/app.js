@@ -3,6 +3,9 @@
 
   const CONFIG = Object.freeze({
     storageKey: "cauceEncuestaStateV1",
+    surveyVersion: "2026-10-14-v1",
+    // Set this to the deployed Google Apps Script web app URL ending in /exec.
+    appsScriptUrl: "",
     whatsappNumber: "5492942597276", // 2942597276 con prefijo móvil de Argentina para wa.me
     priceRanges: [
       { id: "up_to_10000", label: "Hasta $10.000" },
@@ -25,7 +28,12 @@
     answers: {},
     currentQuestionId: "activity",
     surveyStarted: false,
-    surveyCompleted: false
+    surveyCompleted: false,
+    responseId: "",
+    submissionStatus: "idle",
+    startRecorded: false,
+    completionTracked: false,
+    submissionError: ""
   };
 
   if (new URLSearchParams(window.location.search).get("restart") === "1") {
@@ -179,7 +187,12 @@
     next: document.getElementById("next-button"),
     share: document.getElementById("share-button"),
     shareStatus: document.getElementById("share-status"),
-    pilot: document.getElementById("pilot-button")
+    pilot: document.getElementById("pilot-button"),
+    submissionStatus: document.getElementById("submission-status"),
+    retrySubmit: document.getElementById("retry-submit"),
+    restart: document.getElementById("restart-button"),
+    completionTitle: document.getElementById("completion-title"),
+    completionActions: document.querySelector(".completion-actions")
   };
 
   let state = readState();
@@ -196,7 +209,12 @@
         ...saved,
         answers: saved.answers,
         surveyStarted: Boolean(saved.surveyStarted),
-        surveyCompleted: Boolean(saved.surveyCompleted)
+        surveyCompleted: Boolean(saved.surveyCompleted),
+        responseId: typeof saved.responseId === "string" ? saved.responseId : "",
+        submissionStatus: typeof saved.submissionStatus === "string" ? saved.submissionStatus : "idle",
+        startRecorded: Boolean(saved.startRecorded),
+        completionTracked: Boolean(saved.completionTracked),
+        submissionError: typeof saved.submissionError === "string" ? saved.submissionError : ""
       };
     } catch {
       return { ...DEFAULT_STATE, answers: {} };
@@ -337,9 +355,12 @@
       state.surveyStarted = true;
       state.surveyCompleted = false;
       state.currentQuestionId = "activity";
+      state.responseId = createId();
+      state.submissionStatus = "in_progress";
       track("survey_start");
     }
     saveState();
+    recordStart();
     showSurvey();
   }
 
@@ -368,9 +389,11 @@
     if (!nextQuestion) {
       state.surveyCompleted = true;
       state.currentQuestionId = question.id;
+      state.responseId = state.responseId || createId();
+      state.submissionStatus = "pending";
       saveState();
-      track("survey_complete");
       showCompletion();
+      submitResponse();
       return;
     }
 
@@ -402,7 +425,21 @@
     elements.hero.hidden = true;
     elements.survey.hidden = true;
     elements.final.hidden = false;
-    elements.pilot.hidden = !PILOT_INTEREST.has(state.answers.pilot_interest);
+    const confirmed = state.submissionStatus === "confirmed";
+    elements.completionTitle.textContent = confirmed ? "Gracias por ayudarnos." : "Guardando tus respuestas";
+    elements.submissionStatus.hidden = false;
+    elements.submissionStatus.dataset.state = confirmed ? "confirmed" : state.submissionStatus === "error" ? "error" : "pending";
+    elements.submissionStatus.textContent = confirmed
+      ? "Respuestas recibidas y verificadas en el almacenamiento privado."
+      : state.submissionStatus === "error"
+        ? state.submissionError === "not_configured"
+          ? "La integración de almacenamiento todavía no está configurada. Tus respuestas siguen guardadas en este dispositivo; no se enviarán hasta configurar el endpoint."
+          : "Todavía no pudimos verificar el guardado. Tus respuestas siguen guardadas en este dispositivo y volveremos a intentar cuando haya conexión."
+        : "Estamos enviando tus respuestas y verificando que se hayan guardado. No cierres esta página todavía.";
+    elements.retrySubmit.hidden = confirmed || state.submissionStatus !== "error";
+    elements.completionActions.hidden = !confirmed;
+    elements.restart.hidden = !confirmed;
+    elements.pilot.hidden = !confirmed || !PILOT_INTEREST.has(state.answers.pilot_interest);
     configurePilotLink();
     elements.shareStatus.textContent = "";
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -474,16 +511,166 @@
     track("pilot_whatsapp_click");
   }
 
+  function createId() {
+    if (window.crypto && typeof window.crypto.randomUUID === "function") return window.crypto.randomUUID();
+    const bytes = new Uint8Array(16);
+    window.crypto.getRandomValues(bytes);
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    return [...bytes].map((byte, index) => `${[4, 6, 8, 10].includes(index) ? "-" : ""}${byte.toString(16).padStart(2, "0")}`).join("");
+  }
+
+  function sendBridgeRequest(fields, timeoutMs = 25000) {
+    return new Promise((resolve, reject) => {
+      if (!CONFIG.appsScriptUrl || !/^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/.test(CONFIG.appsScriptUrl)) {
+        reject(new Error("La URL de Google Apps Script todavía no está configurada."));
+        return;
+      }
+
+      const nonce = createId();
+      const frame = document.createElement("iframe");
+      const form = document.createElement("form");
+      const targetName = `cauce-submit-${nonce}`;
+      frame.name = targetName;
+      frame.title = "Confirmación del envío";
+      frame.hidden = true;
+      frame.setAttribute("aria-hidden", "true");
+      form.method = "POST";
+      form.action = CONFIG.appsScriptUrl;
+      form.target = targetName;
+      form.hidden = true;
+      for (const [name, value] of Object.entries(fields)) {
+        const input = document.createElement("input");
+        input.type = "hidden";
+        input.name = name;
+        input.value = typeof value === "string" ? value : JSON.stringify(value);
+        form.append(input);
+      }
+
+      let settled = false;
+      let activeScript = null;
+      let pollTimer = null;
+      const callbackName = `cauceSurveyReceive_${nonce.replace(/-/g, "")}`;
+      const finish = (error, message) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timeout);
+        window.clearTimeout(pollTimer);
+        if (activeScript) activeScript.remove();
+        delete window[callbackName];
+        form.remove();
+        frame.remove();
+        if (error) reject(error);
+        else resolve(message);
+      };
+      const callback = (message) => {
+        if (!message || message.nonce !== nonce || message.responseId !== fields.responseId) return;
+        if (message.ok) finish(null, message);
+        else poll();
+      };
+      window[callbackName] = callback;
+      const confirmAction = fields.action === "start" ? "confirm_start" : "confirm";
+      const poll = () => {
+        if (settled) return;
+        window.clearTimeout(pollTimer);
+        if (activeScript) activeScript.remove();
+        const script = document.createElement("script");
+        activeScript = script;
+        script.async = true;
+        script.src = `${CONFIG.appsScriptUrl}?action=${confirmAction}&responseId=${encodeURIComponent(fields.responseId)}&nonce=${encodeURIComponent(nonce)}&callback=${callbackName}`;
+        script.onerror = () => {
+          script.remove();
+          if (!settled) {
+            window.clearTimeout(pollTimer);
+            pollTimer = window.setTimeout(poll, 1200);
+          }
+        };
+        document.head.append(script);
+        pollTimer = window.setTimeout(poll, 1200);
+      };
+      const timeout = window.setTimeout(() => finish(new Error("No llegó la confirmación del servidor.")), timeoutMs);
+      document.body.append(frame, form);
+      try {
+        form.submit();
+        pollTimer = window.setTimeout(poll, 400);
+      } catch (error) {
+        finish(error);
+      }
+    });
+  }
+
+  async function recordStart() {
+    if (state.startRecorded || !state.responseId) return;
+    try {
+      const ack = await sendBridgeRequest({ action: "start", responseId: state.responseId, surveyVersion: CONFIG.surveyVersion });
+      if (!ack.ok || ack.responseId !== state.responseId) throw new Error("El inicio no fue confirmado.");
+      state.startRecorded = true;
+      saveState();
+    } catch {
+      // El envío final también registra el inicio si esta llamada no llega.
+    }
+  }
+
+  async function submitResponse() {
+    if (state.submissionStatus === "sending" || state.submissionStatus === "confirmed") return;
+    if (!state.responseId) state.responseId = createId();
+    state.submissionStatus = "sending";
+    saveState();
+    showCompletion();
+    try {
+      const ack = await sendBridgeRequest({
+        action: "submit",
+        responseId: state.responseId,
+        surveyVersion: CONFIG.surveyVersion,
+        answers: state.answers
+      });
+      if (!ack.ok || !ack.verified || !ack.receipt || ack.responseId !== state.responseId) throw new Error("Google Sheets no confirmó la recepción.");
+      state.submissionStatus = "confirmed";
+      state.receipt = ack.receipt;
+      state.startRecorded = true;
+      if (!state.completionTracked) {
+        track("survey_complete");
+        state.completionTracked = true;
+      }
+      saveState();
+      showCompletion();
+    } catch {
+      state.submissionStatus = "error";
+      state.submissionError = CONFIG.appsScriptUrl ? "unconfirmed" : "not_configured";
+      saveState();
+      showCompletion();
+      if (CONFIG.appsScriptUrl) {
+        window.setTimeout(() => {
+          if (state.surveyCompleted && state.submissionStatus === "error") submitResponse();
+        }, 30000);
+      }
+    }
+  }
+
   elements.start.addEventListener("click", startSurvey);
   elements.form.addEventListener("submit", advanceSurvey);
   elements.form.addEventListener("change", handleChoiceChange);
   elements.back.addEventListener("click", goBack);
   elements.share.addEventListener("click", shareSurvey);
   elements.pilot.addEventListener("click", handlePilotClick);
+  elements.retrySubmit.addEventListener("click", submitResponse);
+  window.addEventListener("online", () => {
+    if (state.surveyCompleted && state.submissionStatus !== "confirmed") submitResponse();
+    else if (state.surveyStarted && !state.startRecorded) recordStart();
+  });
 
   track("survey_view");
-  if (state.surveyCompleted) showCompletion();
-  else if (state.surveyStarted) showSurvey();
+  if (state.surveyCompleted) {
+    if (state.submissionStatus === "sending") state.submissionStatus = "pending";
+    showCompletion();
+    if (state.submissionStatus !== "confirmed") submitResponse();
+  }
+  else if (state.surveyStarted) {
+    if (!state.responseId) state.responseId = createId();
+    saveState();
+    recordStart();
+    showSurvey();
+  }
   else showHero();
 })();
 
