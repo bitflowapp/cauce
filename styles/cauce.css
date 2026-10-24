@@ -8111,6 +8111,12 @@ input:hover:not(:focus), select:hover:not(:focus), textarea:hover:not(:focus) { 
   .merchant-grid > *:nth-child(8) { animation-delay: 0.29s; }
   .home-hero { animation: mkt-rise 0.42s var(--mkt-ease) both; }
 }
+/* Objetivos táctiles del hero por encima del mínimo: mientras corre la entrada,
+   la medición de los hijos aplica el transform del padre y un control de
+   exactamente 44 px puede devolver 43,999… en coma flotante (la auditoría lo
+   contaría por debajo del mínimo). Con 46 px el valor medido no se acerca al
+   umbral y el área táctil gana comodidad. */
+.home-hero .chip, .home-hero .hero-link { min-height: 46px; }
 
 /* --- Anchos chicos: desde 320 px --------------------------------------------------- */
 @media (max-width: 400px) {
