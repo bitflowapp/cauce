@@ -7893,6 +7893,10 @@ input:hover:not(:focus), select:hover:not(:focus), textarea:hover:not(:focus) { 
   border-radius: var(--radius-pill);
   box-shadow: 0 8px 16px -10px rgba(0, 0, 0, 0.7);
 }
+/* Margen sobre el mínimo de 44 px: el buscador del hero es el control más
+   usado del inicio, y con unos píxeles de reserva el objetivo táctil sigue
+   cómodo sin depender de subpíxeles. */
+.home-search input, .home-search .button { min-height: 48px; }
 .home-search .button:hover { transform: translateY(-1px); }
 
 /* Rubros del inicio: los que realmente tienen comercios publicados. Sobre el
