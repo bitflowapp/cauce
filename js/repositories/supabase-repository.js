@@ -5,6 +5,7 @@ import { quoteCart, changeQuantity, emptyCart, MAX_QUANTITY } from '../core/cart
 import { validateTripRequest } from '../core/taxi-dispatch.js';
 import { sanitizeText, validateCustomerName, isValidArgentinePhone } from '../core/validators.js';
 import { validateHours, DEFAULT_TIMEZONE } from '../core/business-hours.js';
+import { sanitizeCapabilities } from '../core/rubros.js';
 import { mapPilotMetrics } from '../core/pilot-metrics.js';
 import { optimizeImage, IMAGE_SIDES } from './image-prep.js';
 
@@ -307,6 +308,7 @@ export function createSupabaseRepository({ client, redirectTo, storage, onError 
       open: openNow, acceptingOrders: row.open === true, active: row.status === 'active',
       categoryId: row.category_id || '', category: row.business_categories?.name || '',
       categorySlug: row.business_categories?.slug || '',
+      capabilities: sanitizeCapabilities(row.capabilities || []),
       description: row.description || '', address: row.address || '', hoursLabel: row.hours_label || '',
       hours: (row.business_hours || []).map(item => ({ weekday: item.weekday, opens: item.opens, closes: item.closes })),
       timezone: DEFAULT_TIMEZONE,
@@ -498,8 +500,9 @@ export function createSupabaseRepository({ client, redirectTo, storage, onError 
     async appStatus() { return read(client.rpc('app_status')); },
     async localities() { return read(client.from('localities').select('id,slug,name,active,timezone')); },
     async businessCategories() {
-      return (await read(client.from('business_categories').select('id,slug,name').eq('active', true).order('position')))
-        .map(row => ({ id: row.id, slug: row.slug, name: row.name }));
+      return (await read(client.from('business_categories').select('id,slug,name,capabilities').eq('active', true).order('position')))
+        .map(row => ({ id: row.id, slug: row.slug, name: row.name,
+          capabilities: sanitizeCapabilities(row.capabilities || []) }));
     },
     async publicBusinesses() {
       const rows = await read(client.from('businesses').select(publicBusinessColumns).eq('status', 'active').order('name'));
@@ -775,14 +778,19 @@ export function createSupabaseRepository({ client, redirectTo, storage, onError 
       await ensureProfile(await requireAccount('Ingresá con tu cuenta para registrar tu comercio.'));
       const name = text(payload?.name, 120);
       requireValue(name.length >= 2, 'INVALID_BUSINESS_NAME', 'El nombre del comercio necesita al menos 2 caracteres.');
+      // El rubro viaja al servidor: el borrador nace con rubro y capacidades en
+      // una sola transacción, y nunca se aprueba a sí mismo.
+      const categorySlug = await resolveCategorySlug(payload?.category);
       const id = await read(client.rpc('create_business', { business_name: name,
-        business_slug: `${slugify(name, 'comercio')}-${crypto.randomUUID().slice(0, 8)}`, locality_slug: LOCALITY }));
-      await read(client.from('business_contacts').insert({ business_id: id,
-        owner_name: text(payload?.ownerName, 120), phone: text(payload?.contactPhone, 24) }));
-      if (payload?.category) {
+        business_slug: `${slugify(name, 'comercio')}-${crypto.randomUUID().slice(0, 8)}`, locality_slug: LOCALITY,
+        category_slug: categorySlug || null }));
+      // Texto libre legado (sin rubro de la taxonomía): se aplica después, si existe.
+      if (!categorySlug && text(payload?.category, 60)) {
         const categoryId = await resolveBusinessCategory(payload.category);
         if (categoryId) await read(client.from('businesses').update({ category_id: categoryId }).eq('id', id));
       }
+      await read(client.from('business_contacts').insert({ business_id: id,
+        owner_name: text(payload?.ownerName, 120), phone: text(payload?.contactPhone, 24) }));
       invalidate();
       return { id };
     },
@@ -801,6 +809,7 @@ export function createSupabaseRepository({ client, redirectTo, storage, onError 
       }
       if ('categoryId' in patch) columns.category_id = patch.categoryId || null;
       if ('category' in patch && !('categoryId' in patch)) columns.category_id = await resolveBusinessCategory(patch.category);
+      if ('capabilities' in patch) columns.capabilities = sanitizeCapabilities(patch.capabilities);
       if ('description' in patch) columns.description = text(patch.description, 280);
       if ('address' in patch) columns.address = text(patch.address, 200);
       if ('hoursLabel' in patch) columns.hours_label = text(patch.hoursLabel, 120);
@@ -1216,6 +1225,17 @@ export function createSupabaseRepository({ client, redirectTo, storage, onError 
     const match = rows.find(row => row.slug === wanted)
       || rows.find(row => row.name.toLowerCase() === wanted.toLowerCase());
     return match?.id || null;
+  }
+
+  // Slug del rubro de la taxonomía, para el alta atómica: '' si el rubro no
+  // pertenece a la lista vigente (queda para la resolución legado).
+  async function resolveCategorySlug(value) {
+    const wanted = text(value, 60).toLowerCase();
+    if (!wanted) return '';
+    const rows = await read(client.from('business_categories').select('slug,name').eq('active', true));
+    const match = rows.find(row => row.slug === wanted)
+      || rows.find(row => row.name.toLowerCase() === wanted.toLowerCase());
+    return match?.slug || '';
   }
 
   async function resolveProductCategory(businessId, name) {

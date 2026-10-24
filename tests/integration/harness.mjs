@@ -11,13 +11,18 @@ import { createClient } from '@supabase/supabase-js';
 import postgres from 'postgres';
 
 function localStatus() {
-  try {
-    const raw = execFileSync(process.platform === 'win32' ? 'npx.cmd' : 'npx', ['supabase', 'status', '-o', 'json'],
-      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
-    return JSON.parse(raw.slice(raw.indexOf('{')));
-  } catch {
-    throw new Error('No hay stack Supabase local. Ejecutá `npx supabase start` antes de estas pruebas.');
+  // Node ≥24 en Windows se niega a lanzar .cmd sin shell (`EINVAL`): se intenta
+  // el ejecutable real `supabase` y, como respaldo, npx con shell.
+  for (const [command, options] of [['supabase', {}], ['npx', { shell: true }]]) {
+    try {
+      const args = [...command === 'npx' ? ['supabase'] : [], 'status', '-o', 'json'];
+      const raw = execFileSync(process.platform === 'win32' && command === 'npx'
+        ? 'npx.cmd' : command, args,
+        { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], ...options });
+      return JSON.parse(raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1));
+    } catch { /* se prueba el próximo lanzador */ }
   }
+  throw new Error('No hay stack Supabase local. Ejecutá `npx supabase start` antes de estas pruebas.');
 }
 
 const status = process.env.CAUCE_TEST_SUPABASE_URL ? null : localStatus();

@@ -104,7 +104,10 @@ after(async () => { await db.close(); });
 // ───────────────── actualización ─────────────────
 test('la migración corre sobre datos de producción sin tocar pedidos ni pagos en efectivo', async () => {
   assert.equal(Number((await one('anon', 'select public.app_status() as s')).s.schema), PAYMENTS);
-  assert.equal(PAYMENTS, REQUIRED_SCHEMA, 'el contrato que exige este frontend');
+  // En su momento el contrato vigente era exactamente la migración de pagos.
+  // Desde la taxonomía multirrubro (fase 1 del marketplace) el contrato sigue
+  // por delante: el backend histórico no puede quedarse atrás del exigido.
+  assert.ok(PAYMENTS <= REQUIRED_SCHEMA, 'el contrato de pagos no corre por detrás del vigente');
   assert.deepEqual(rows(await db.query(`select id, code, status, version, payment_method, payment_status, total_ars
     from public.orders order by code`)), legacy.orders);
   assert.equal(rows(await db.query('select count(*)::int as n from public.order_events'))[0].n, legacy.events);

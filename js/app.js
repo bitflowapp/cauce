@@ -10,6 +10,7 @@ import { createRepository } from './repositories/repository-factory.js';
 import { isNetworkError } from './core/network.js';
 import { CauceError } from './core/errors.js';
 import { REQUIRED_SCHEMA } from './core/contract.js';
+import { capabilityLabel } from './core/rubros.js';
 import { createTelemetry, classify } from './core/telemetry.js';
 import { MAX_RANGES_PER_DAY } from './core/business-hours.js';
 import { ROLE_LABELS } from './core/accounts.js';
@@ -1713,6 +1714,30 @@ function merchantCatalogTab(business, products, { canManage = true, categories =
       : `<p class="quiet">Todavía no cargaste productos.${canManage ? ' Empezá por el formulario de arriba.' : ''}</p>`}`;
 }
 
+// Qué ofrece el comercio: los códigos habilitados salen del rubro elegido; la
+// base valida que la selección sea un subconjunto y rechaza el resto.
+function capabilitiesEditor(business, categories, disabled) {
+  const category = categories.find(item => item.slug === business.categorySlug);
+  const allowed = category?.capabilities || [];
+  const active = Array.isArray(business.capabilities) ? business.capabilities : [];
+  if (!allowed.length) {
+    return category ? ''
+      : '<p class="microcopy">Elegí el rubro para definir qué puede ofrecer el comercio.</p>';
+  }
+  const boxes = allowed.map(code => {
+    const checked = active.includes(code) ? 'checked' : '';
+    return `<label class="check-label">
+      <input type="checkbox" name="capability-${esc(code)}" value="${esc(code)}" ${checked} ${disabled}>
+      <span>${esc(capabilityLabel(code))}</span>
+    </label>`;
+  }).join('');
+  return `<fieldset class="field capability-field">
+    <legend class="visually-hidden">Qué ofrece el comercio</legend>
+    ${boxes}
+    <p class="microcopy">Las opciones dependen del rubro del comercio: la base no acepta capacidades fuera del rubro.</p>
+  </fieldset>`;
+}
+
 function merchantDataTab(business, missing, categories = []) {
   const editable = !['pending_review', 'suspended'].includes(business.status);
   const media = Boolean(app.repository.capabilities.media);
@@ -1721,6 +1746,7 @@ function merchantDataTab(business, missing, categories = []) {
   // Un comercio que ya opera cambia a diario envío, mínimo y tiempos: van
   // arriba, con su propio botón. Uno nuevo empieza por sus datos.
   const operationFirst = ['active', 'paused'].includes(business.status);
+  const capabilitiesField = connected ? capabilitiesEditor(business, categories, disabled) : '';
   const details = `
         <h2 class="checkout-section-title">Datos del comercio</h2>
         <div class="field">
@@ -1735,6 +1761,7 @@ function merchantDataTab(business, missing, categories = []) {
           </select>`
           : `<input id="b-category" name="category" type="text" maxlength="40" value="${esc(business.category || '')}" ${disabled}>`}
         </div>
+        ${capabilitiesField}
         ${connected ? `<div class="field">
           <label for="b-description">Descripción corta</label>
           <input id="b-description" name="description" type="text" maxlength="280" value="${esc(business.description || '')}"
@@ -3042,6 +3069,11 @@ const FORMS = {
     if (isConnected()) {
       Object.assign(patch, { description: data.get('description'), publicPhone: data.get('publicPhone'),
         whatsapp: data.get('whatsapp'), prepMinutes: data.get('prepMinutes'), deliveryMinutes: data.get('deliveryMinutes') });
+    }
+    // Qué ofrece el comercio: sólo cuando el formulario incluye la sección.
+    const capabilityBoxes = form.querySelectorAll('input[name^="capability-"]');
+    if (capabilityBoxes.length) {
+      patch.capabilities = [...capabilityBoxes].filter(box => box.checked).map(box => box.value);
     }
     await runCommand('business.update', { businessId: form.dataset.business, patch });
     toast('Datos guardados.');
