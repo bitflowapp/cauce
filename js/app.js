@@ -278,6 +278,14 @@ const sectionHeading = (eyebrow, title, extra = '') => `
     ${extra}
   </div>`;
 
+// Chips de rubro armados con los rubros que realmente tienen comercios en la
+// lista que se está mostrando: no hay rubros inventados ni vacíos. En el
+// inicio elegir uno lleva al listado filtrado; adentro del listado filtra en
+// el lugar (lo decide `set-category` según la vista actual).
+const rubroChips = categories => categories.length > 1 ? `<div class="chip-row" role="group" aria-label="Rubros">${
+  categories.map(category => `<button class="chip chip-soft${app.search.category === category ? ' is-active' : ''}" type="button"
+    aria-pressed="${app.search.category === category}" data-action="set-category" data-category="${esc(category)}">${esc(category)}</button>`).join('')}</div>` : '';
+
 // Aviso obligatorio antes de confirmar: ninguna operación llega a un comercio real.
 const confirmNotice = ({ online = false } = {}) => `
   <p class="confirm-notice">${renderIcon('shield-check', 15)}
@@ -495,6 +503,7 @@ async function viewHome() {
             autocomplete="off" enterkeyhint="search">
           <button class="button" type="submit">Buscar</button>
         </form>
+        ${rubroChips([...new Set(businesses.map(business => business.category).filter(Boolean))])}
         <div class="home-hero-links">
           <a class="hero-link" href="#comercios">${renderIcon('store', 16)} Ver comercios</a>
           ${taxi ? `<a class="hero-link" href="#taxi">${renderIcon('taxi', 16)} Pedir un taxi</a>` : ''}
@@ -588,11 +597,7 @@ async function viewBusinesses() {
     </form>
 
     <div class="chip-row" role="group" aria-label="Filtrar comercios">${quickFilters()}</div>
-    ${categories.length > 2 ? `<div class="chip-row" role="group" aria-label="Rubros">
-      ${categories.map(category => `
-        <button class="chip chip-soft ${app.search.category === category ? 'is-active' : ''}" type="button"
-          aria-pressed="${app.search.category === category}" data-action="set-category" data-category="${esc(category)}">${esc(category)}</button>`).join('')}
-    </div>` : ''}
+    ${rubroChips(categories)}
 
     ${businesses.length && filtersActive() ? `<p class="results-line quiet" role="status">${pluralize(visible.length, 'resultado', 'resultados')}
       <button class="link-button" type="button" data-action="clear-filters">Quitar filtros</button></p>` : ''}
@@ -2620,6 +2625,8 @@ const ACTIONS = {
   },
   'set-category'(element) {
     app.search.category = element.dataset.category;
+    // Los chips del inicio llevan al listado con el rubro elegido.
+    if (route().page !== 'comercios') { go('#comercios'); return undefined; }
     return render();
   },
   // Abiertos, con envío o con retiro. Desde el inicio llevan al listado.
