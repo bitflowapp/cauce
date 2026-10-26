@@ -14,6 +14,10 @@ const ROUTES = [
   ['inicio', '#inicio'],
   ['comercios', '#comercios'],
   ['comercio', '#comercio/orilla'],
+  ['producto', '#producto/taller-malva/camisa-lino'],
+  ['favoritos', '#favoritos'],
+  ['ferias', '#ferias'],
+  ['publicar', '#publicar'],
   ['carrito', '#carrito/orilla'],
   ['confirmar', '#carrito/orilla/confirmar'],
   ['taxi', '#taxi'],
@@ -82,7 +86,7 @@ const AUDIT = `(() => {
     })
     .map(element => ({
       tag: element.tagName.toLowerCase(),
-      text: (element.textContent || element.value || '').trim().slice(0, 32),
+      text: (element.innerText || element.value || '').trim().slice(0, 32),
       height: Math.round(element.getBoundingClientRect().height),
       width: Math.round(element.getBoundingClientRect().width),
     }));
@@ -100,7 +104,7 @@ const AUDIT = `(() => {
       const bold = Number(style.fontWeight) >= 700;
       const large = size >= 24 || (size >= 18.66 && bold);
       const ratio = contrast(color, effectiveBackground(element));
-      return { ratio: Math.round(ratio * 100) / 100, required: large ? 3 : 4.5, text: element.textContent.trim().slice(0, 40) };
+      return { ratio: Math.round(ratio * 100) / 100, required: large ? 3 : 4.5, text: element.innerText.trim().slice(0, 40) };
     })
     .filter(entry => entry && entry.ratio < entry.required);
 
@@ -136,7 +140,9 @@ const AUDIT = `(() => {
   // normal. Lo que no puede pasar es que el final del contenido quede tapado
   // cuando ya no se puede seguir bajando.
   const overlapped = (() => {
-    if (!nav || !lastMainChild) return false;
+    // En escritorio la barra está oculta (display:none): un rectángulo de 0 px
+    // no puede tapar nada y no tiene sentido compararlo con el contenido.
+    if (!nav || !navHeight || !lastMainChild) return false;
     window.scrollTo(0, document.documentElement.scrollHeight);
     const navTop = nav.getBoundingClientRect().top;
     const bottom = lastMainChild.getBoundingClientRect().bottom;

@@ -89,8 +89,8 @@ for (const file of ['assets/images/icon-192.png', 'assets/images/icon-512.png', 
 const hash = content => createHash('sha256').update(content).digest('hex').slice(0, 10);
 
 // ── CSS con nombre por contenido ──
-const css = await readFile(resolve(root, 'styles/cauce.css'), 'utf8');
-const cssName = `styles/cauce.${hash(css)}.css`;
+const css = `${await readFile(resolve(root, 'styles/cauce.css'), 'utf8')}\n${await readFile(resolve(root, 'styles/mifav.css'), 'utf8')}`;
+const cssName = `styles/mifav.${hash(css)}.css`;
 await writeFile(resolve(output, cssName), css);
 
 // ── JavaScript ──
@@ -98,8 +98,8 @@ const runtimeModule = `
   import { createClient } from '@supabase/supabase-js';
   const base = location.href.split('#')[0].split('?')[0];
   export const RUNTIME_ENV = Object.freeze({
-    environment: 'supabase', label: 'CAUCE', release: ${JSON.stringify(release)},
-    description: 'Comercios de Aluminé, pedidos y seguimiento en un solo lugar.',
+    environment: 'supabase', label: 'MiFav', release: ${JSON.stringify(release)},
+    description: 'Marketplace de Neuquén Capital: productos de comercios y emprendimientos locales.',
     sharedPersistence: true, passwordAuth: true,
     supabaseUrl: ${JSON.stringify(supabaseUrl)}, siteUrl: ${JSON.stringify(siteUrl)},
     redirectTo: new URL('index.html', base).href,
@@ -144,7 +144,10 @@ for (const token of bundle.match(/eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-
 const inputs = Object.keys(result.metafile.inputs);
 const leaked = inputs.filter(file => /js\/(data\/demo|domain\/|repositories\/(local|http)-repository)/.test(file));
 if (leaked.length) fail(`Código de la demostración en el bundle: ${leaked.join(', ')}`);
-const BUDGET = 520 * 1024;
+// El marketplace multirrubro sumó vidriera, ficha de producto, favoritos y
+// publicación: ~36 KB minificados sobre el presupuesto anterior de 520 KB.
+// El nuevo tope es explícito y sigue exigiendo dividir el bundle si se supera.
+const BUDGET = 600 * 1024;
 if (bundle.length > BUDGET) fail(`El bundle pesa ${Math.round(bundle.length / 1024)} KB (tope ${BUDGET / 1024} KB).`);
 
 // ── documento ──
@@ -161,37 +164,40 @@ const replace = (pattern, value, label) => {
   html = next;
 };
 replace(/<meta http-equiv="Content-Security-Policy" content="[^"]*">/, `<meta http-equiv="Content-Security-Policy" content="${csp}">`, 'la CSP');
-replace(/<meta name="description" content="[^"]*">/, `<meta name="description" content="Comprá en comercios de Aluminé con retiro en el local o envío del propio comercio, y seguí tu pedido en vivo.">
+replace(/<meta name="description" content="[^"]*">/, `<meta name="description" content="MiFav · marketplace de Neuquén Capital: productos nuevos y usados de comercios y emprendimientos locales, con retiro o envío coordinado con el vendedor.">
   <meta name="referrer" content="no-referrer">
   <meta name="robots" content="index, follow">
   <link rel="canonical" href="${siteUrl}/">
   <meta property="og:type" content="website">
-  <meta property="og:site_name" content="CAUCE · Aluminé">
-  <meta property="og:title" content="CAUCE · Aluminé — comercios locales">
-  <meta property="og:description" content="Pedí a comercios de Aluminé: retiro en el local o envío del comercio, con seguimiento del pedido.">
+  <meta property="og:site_name" content="MiFav · Neuquén Capital">
+  <meta property="og:title" content="MiFav — marketplace de Neuquén Capital">
+  <meta property="og:description" content="Encontrá productos nuevos y usados de emprendimientos y comercios de Neuquén Capital. Retiro o envío coordinado con el vendedor.">
   <meta property="og:url" content="${siteUrl}/">
-  <meta property="og:image" content="${siteUrl}/assets/images/territory/alumine-hero-panoramica.webp">
+  <meta property="og:image" content="${siteUrl}/assets/images/icon-512.png">
   <meta property="og:locale" content="es_AR">
   <meta name="twitter:card" content="summary_large_image">`, 'la descripción');
 replace('href="styles/cauce.css"', `href="${cssName}"`, 'la hoja de estilos');
+replace(/\s*<link rel="stylesheet" href="styles\/mifav\.css">/, '', 'la hoja de estilos de MiFav');
 replace(/\s*<link rel="modulepreload"[^>]*>/g, '', 'los modulepreload de la demo');
 replace('<script type="module" src="js/app.js"></script>', `<script type="module" src="${jsName}"></script>`, 'el script');
 replace(/(<span class="env-chip" id="env-chip")[^>]*>[^<]*<\/span>/, '$1 hidden></span>', 'el indicador de entorno');
 replace('<main id="main" tabindex="-1" aria-busy="false">', '<main id="main" tabindex="-1" aria-busy="true">', 'el estado inicial del contenido');
 replace(/<p class="footer-note" id="footer-env">[^<]*<\/p>/,
-  '<p class="footer-note" id="footer-env">CAUCE · plataforma local de LUNA para comercios de Aluminé.</p>', 'la nota del pie');
+  '<p class="footer-note" id="footer-env">MiFav · plataforma local de LUNA para comercios y emprendimientos de Neuquén Capital.</p>', 'la nota del pie');
 replace(/\s*<a class="link-button" href="#taxista">[^<]*<\/a>/, '', 'el enlace de taxistas del pie');
-replace(/\s*<a href="#taxi" class="bottom-nav-item" id="bnav-taxi">[\s\S]*?<\/a>/, '', 'la pestaña de taxi');
-replace('<span class="footer-sub">Comprá local. Movete por Aluminé.</span>', '<span class="footer-sub">Comprá local en Aluminé.</span>', 'el lema del pie');
+replace('<span class="footer-sub">Comprá cerca. Comprá en Neuquén.</span>', '<span class="footer-sub">Comprá cerca. Comprá en Neuquén Capital.</span>', 'el lema del pie');
 await writeFile(resolve(output, 'index.html'), html);
 
 // ── manifest, robots, 404 ──
 const manifest = JSON.parse(await readFile(resolve(root, 'manifest.webmanifest'), 'utf8'));
-manifest.description = 'Comprá en comercios de Aluminé con retiro o envío del comercio.';
-manifest.categories = ['shopping', 'food'];
+manifest.name = 'MiFav · Neuquén Capital';
+manifest.short_name = 'MiFav';
+manifest.description = 'Marketplace de Neuquén Capital: productos nuevos y usados de comercios y emprendimientos locales.';
+manifest.categories = ['shopping', 'lifestyle'];
 manifest.shortcuts = [
-  { name: 'Ver comercios', url: './index.html#comercios' },
-  { name: 'Mis pedidos', url: './index.html#actividad' },
+  { name: 'Explorar productos', url: './index.html#comercios' },
+  { name: 'Publicar un producto', url: './index.html#publicar' },
+  { name: 'Mis favoritos', url: './index.html#favoritos' },
 ];
 await writeFile(resolve(output, 'manifest.webmanifest'), `${JSON.stringify(manifest, null, 2)}\n`);
 await writeFile(resolve(output, 'robots.txt'), `User-agent: *\nAllow: /\n`);
@@ -200,12 +206,12 @@ await writeFile(resolve(output, '.nojekyll'), '');
 const basePath = new URL(siteUrl).pathname.replace(/\/?$/, '/');
 await writeFile(resolve(output, '404.html'), `<!doctype html>
 <html lang="es-AR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="robots" content="noindex"><title>CAUCE · página no encontrada</title>
+<meta name="robots" content="noindex"><title>MiFav · página no encontrada</title>
 <link rel="stylesheet" href="${basePath}${cssName}"></head>
 <body><main class="main" style="padding:48px 16px;max-width:560px;margin:0 auto">
 <h1 class="page-title">No encontramos esa página</h1>
 <p class="quiet">El enlace puede estar incompleto o haber cambiado.</p>
-<p><a class="button" href="${siteUrl}/index.html#inicio">Ir a CAUCE</a></p></main></body></html>
+<p><a class="button" href="${siteUrl}/index.html#inicio">Ir a MiFav</a></p></main></body></html>
 `);
 
 // ── service worker con versión por contenido ──

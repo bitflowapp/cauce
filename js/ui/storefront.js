@@ -41,7 +41,7 @@ export function businessFacts(business) {
   const facts = [];
   if (business.pickupEnabled) facts.push({ icon: 'store', text: 'Retiro' });
   if (business.deliveryEnabled) {
-    facts.push({ icon: 'delivery', text: business.deliveryFee > 0 ? `Envío ${money(business.deliveryFee)}` : 'Envío sin costo' });
+    facts.push({ icon: 'delivery', text: business.deliveryFee > 0 ? `Envío ${money(business.deliveryFee)}` : 'Envío coordinado con el vendedor' });
     if (business.minimumOrder > 0) facts.push({ icon: '', text: `Mínimo ${money(business.minimumOrder)}` });
   }
   const minutes = Number(business.prepMinutes) || 0;
@@ -95,6 +95,8 @@ export function storeHeader(business, { connected = false, contact = '', times =
     </div>
     ${times ? `<p class="store-header-line">${renderIcon('clock', 14)} ${esc(times)}</p>` : ''}
     ${business.address ? `<p class="store-header-line">${renderIcon('pin', 14)} ${esc(business.address)}</p>` : ''}
+    ${business.ownerName && !/^Responsable de /.test(business.ownerName)
+  ? `<p class="store-header-line">${renderIcon('user', 14)} Vende: ${esc(business.ownerName)}</p>` : ''}
     ${business.deliveryEnabled && business.deliveryZone ? `<p class="microcopy">Envíos en: ${esc(business.deliveryZone)}.</p>` : ''}
     ${contact}
   </section>`;
@@ -113,7 +115,7 @@ export function unavailableReason(product) {
   return 'No disponible';
 }
 
-function quantityControl({ businessId, product, variant = null, quantity, max }) {
+export function quantityControl({ businessId, product, variant = null, quantity, max }) {
   const variantAttr = variant ? ` data-variant="${esc(variant.id)}"` : '';
   const label = variant ? `${product.name} ${variant.name}` : product.name;
   return `<div class="qty-control" role="group" aria-label="Cantidad de ${esc(label)}">
@@ -126,7 +128,7 @@ function quantityControl({ businessId, product, variant = null, quantity, max })
   </div>`;
 }
 
-const addButton = ({ businessId, product, variant = null }) => `<button class="button add-btn" type="button"
+export const addButton = ({ businessId, product, variant = null }) => `<button class="button add-btn" type="button"
   data-action="set-quantity" data-business="${esc(businessId)}" data-product="${esc(product.id)}"${variant
     ? ` data-variant="${esc(variant.id)}"` : ''} data-quantity="1">Agregar</button>`;
 
@@ -151,6 +153,7 @@ export function productCard(product, { businessId, lines }) {
       <div class="product-body">
         <h3>${esc(product.name)}</h3>
         ${product.description ? `<p class="quiet product-desc">${esc(product.description)}</p>` : ''}
+        ${product.condition === 'used' ? '<p class="product-condition">Usado</p>' : ''}
         <p class="product-price">${varies ? '<span class="quiet">desde</span> ' : ''}${money(lowest)}</p>
         ${available ? '' : `<p class="product-flag">${esc(unavailableReason(product))}</p>`}
       </div>

@@ -16,42 +16,48 @@ import { QUERIES } from '../js/domain/queries.js';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const read = file => readFile(resolve(root, file), 'utf8');
 
-test('la primera pantalla ofrece las dos acciones principales', async () => {
+test('la primera pantalla ofrece la búsqueda y la vidriera como acciones principales', async () => {
   const app = await read('js/app.js');
   const home = app.slice(app.indexOf('async function viewHome'), app.indexOf('async function viewBusinesses'));
-  const hero = home.slice(home.indexOf('<section class="home-hero">'), home.indexOf('${operation}'));
-  assert.match(hero, /Comprá local/);
-  assert.match(hero, /Movete por Aluminé/);
-  assert.match(hero, /href="#comercios">.*Ver comercios/s, 'Falta el acceso a comercios');
-  assert.match(hero, /href="#taxi">.*Pedir un taxi/s, 'Falta el acceso a taxi');
+  const hero = home.slice(home.indexOf('<section class="mifav-hero"'), home.indexOf('${operation}'));
+  assert.match(hero, /MIFAV · NEUQUÉN CAPITAL/);
+  assert.match(hero, /data-form="home-search"/, 'Falta la búsqueda principal');
+  assert.match(hero, /href="#ferias"/, 'Falta el acceso a ferias');
+  assert.match(home, /href="#comercios">Ver todo/, 'Falta el acceso a la vidriera');
+  assert.match(home, /categoryTiles/);
+  assert.match(home, /marketplaceProductCard/);
+  assert.match(home, /marketplaceBusinessCard/);
 });
 
 test('los accesos para prestadores son secundarios, no principales', async () => {
   const app = await read('js/app.js');
   const home = app.slice(app.indexOf('async function viewHome'), app.indexOf('async function viewBusinesses'));
-  const hero = home.slice(home.indexOf('<section class="home-hero">'), home.indexOf('${operation}'));
-  assert.equal(/Sumar mi comercio|taxista/i.test(hero), false,
+  const hero = home.slice(home.indexOf('<section class="mifav-hero"'), home.indexOf('${operation}'));
+  assert.equal(/Sumar mi comercio|taxista|#taxi/i.test(hero), false,
     'El alta de prestadores no debe competir con las acciones principales');
-  assert.match(home, /href="#alta-comercio"[\s\S]*Sumar mi comercio/);
+  assert.match(home, /href="#alta-comercio"[\s\S]*Abrir mi comercio/);
   assert.match(home, /href="#taxista"[\s\S]*Registrarme como taxista/);
 });
 
-test('la navegación móvil es Inicio, Comercios, Taxi y Mi actividad', async () => {
+test('la navegación móvil es Inicio, Explorar, Publicar, Favoritos y Cuenta', async () => {
   const html = await read('index.html');
-  const nav = html.slice(html.indexOf('<nav class="bottom-nav"'), html.indexOf('</nav>'));
+  const navStart = html.indexOf('<nav class="bottom-nav');
+  const nav = html.slice(navStart, html.indexOf('</nav>', navStart));
   for (const [id, label] of [
     ['bnav-inicio', 'Inicio'],
-    ['bnav-comercios', 'Comercios'],
-    ['bnav-taxi', 'Taxi'],
-    ['bnav-actividad', 'Mi actividad'],
+    ['bnav-comercios', 'Explorar'],
+    ['bnav-publicar', 'Publicar'],
+    ['bnav-favoritos', 'Favoritos'],
+    ['bnav-cuenta', 'Cuenta'],
   ]) {
     assert.match(nav, new RegExp(`id="${id}"`), `Falta el acceso ${label}`);
     assert.ok(nav.includes(`>${label}<`), `Falta la etiqueta ${label}`);
   }
-  // El carrito aparece sólo cuando tiene contenido.
-  assert.match(nav, /id="bnav-carrito"[^>]*hidden/, 'El carrito debe empezar oculto');
+  // El carrito vive en la cabecera; el contador aparece sólo cuando tiene contenido.
+  assert.match(html, /id="header-cart"/);
+  assert.match(html, /class="cart-badge js-cart-badge" hidden/);
   const app = await read('js/app.js');
-  assert.match(app, /cartItem\.hidden = cartCount === 0/);
+  assert.match(app, /badge\.hidden = cartCount === 0/);
 });
 
 test('la información institucional vive en una ruta aparte', async () => {
@@ -85,6 +91,24 @@ test('el alta de comercio es un circuito propio con revisión, no un enlace exte
   assert.match(app, /data-form="business-create"/);
   assert.match(app, /data-action="submit-business"/);
   assert.match(app, /data-form="review"/);
+});
+
+test('la publicación de un producto tiene formulario, revisión y aviso de moderación', async () => {
+  const app = await read('js/app.js');
+  const publish = app.slice(app.indexOf('async function viewPublish'), app.indexOf('async function viewBusiness('));
+  assert.match(app, /publicar: viewPublish/);
+  assert.match(publish, /data-form="publish-review"/, 'Falta el formulario de publicación');
+  assert.match(publish, /name="image"/, 'Falta la foto del producto');
+  assert.match(publish, /name="condition"/, 'Falta la condición nuevo/usado');
+  assert.match(publish, /name="category"/, 'Falta la categoría');
+  assert.match(publish, /data-action="publish-confirm"/, 'Falta la confirmación');
+  assert.match(publish, /Revisá tu publicación/, 'Falta el paso de revisión');
+  assert.match(publish, /No prometemos publicación instantánea/,
+    'El alta nueva no puede prometer publicación inmediata');
+  assert.match(publish, /no se muestra en la vidriera pública hasta que administración apruebe/,
+    'La revisión del comercio debe explicarse antes de confirmar');
+  // El formulario no permite editar el comercio ajeno: sale de myBusinesses.
+  assert.match(publish, /app\.repository\.query\('myBusinesses'\)/);
 });
 
 test('el catálogo se gestiona desde el panel del propio comercio', async () => {

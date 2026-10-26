@@ -1,4 +1,4 @@
-// CAUCE · Aluminé — shell de la aplicación.
+// MiFav · Neuquén Capital — shell de la aplicación.
 //
 // Enrutador por hash (funciona igual servido desde GitHub Pages o desde el
 // backend local), vistas que piden sus datos al repositorio del entorno y un
@@ -30,8 +30,8 @@ import {
 } from './ui/business-panel.js';
 import { riderHome, riderUnlinked } from './ui/rider.js';
 import {
-  productThumb, merchantAvatar, availabilityText as storeAvailability, businessCard as storeCard, storeHeader, productCard,
-  catalogJump, cartBar, cartSubtotal, cartLines, fulfillmentSwitch, totalsList,
+  productThumb, merchantAvatar, availabilityText as storeAvailability, storeHeader, productCard,
+  catalogJump, cartBar, cartSubtotal, cartLines, fulfillmentSwitch, totalsList, addButton, quantityControl,
 } from './ui/storefront.js';
 import { orderStatusHero, deliveryCodeCard, orderTimeline, cancellationNotice, orderDetails } from './ui/order-status.js';
 import {
@@ -49,7 +49,16 @@ import {
   fulfillmentLabel, businessStatusLabel, tripStatusLabel, pluralize, initialsOf,
 } from './ui/format.js';
 import { BUSINESS_STATUS_HINTS, missingPublicationRequirements } from './core/merchant-status.js';
-import { PRODUCT_CATEGORIES_SUGGESTED } from './core/catalog-rules.js';
+import { PRODUCT_CATEGORIES_SUGGESTED, validateProductInput, validateImageData } from './core/catalog-rules.js';
+import {
+  MARKETPLACE_CATEGORIES, MARKETPLACE_CATEGORY_NAMES, PRODUCT_CONDITIONS, conditionLabel,
+  categoryForBusiness, localityFor, localityLabel, normalizeProductCondition, productCondition,
+} from './core/marketplace.js';
+import { readFavorites, toggleFavorite, favoriteKey } from './core/favorites.js';
+import {
+  marketplaceProductCard, marketplaceBusinessCard, categoryTiles, favoriteButton, emptyFavorites, feriaBanner,
+} from './ui/marketplace.js';
+import { optimizeImage } from './repositories/image-prep.js';
 import { DISPATCH_POLICY, DRIVER_STATUS_LABELS } from './core/taxi-dispatch.js';
 import { isTaxiActive, isTaxiCancelable, getDriverNextAction } from './core/taxi-workflow.js';
 import { allowedActions } from './core/workflow-policy.js';
@@ -78,11 +87,21 @@ const askReason = options => whileAsking(askReasonDialog(options));
 /** @param {Parameters<typeof askConfirmDialog>[0]} options */
 const askConfirm = options => whileAsking(askConfirmDialog(options));
 
+// La vidriera crece por tandas: no abruma en el teléfono ni obliga a dibujar
+// decenas de tarjetas antes de que la persona elija un rubro.
+const PRODUCT_PAGE_SIZE = 24;
+
 const app = {
   repository: null,
   session: null,
   online: typeof navigator === 'undefined' ? true : navigator.onLine !== false,
-  search: { query: '', category: 'Todos', onlyOpen: false, mode: '' },
+  search: {
+    query: '', category: 'Todos', onlyOpen: false, mode: '', condition: '',
+    locality: '', sort: 'relevance', shown: PRODUCT_PAGE_SIZE,
+  },
+  // Borrador de publicación: se confirma en un segundo paso, después de la
+  // revisión. Vive sólo en memoria para no guardar archivos ni datos a medias.
+  publishReview: null,
   accountTab: 'ingresar',
   activityTab: 'pedidos',
   // Panel del comercio: filtro de pedidos por estado (la sección va en la URL)
@@ -107,11 +126,25 @@ const app = {
 };
 
 const isShared = () => Boolean(app.repository?.capabilities?.sharedPersistence);
-// El entorno conectado es el que habla con CAUCE real: sus errores se muestran.
+// El entorno conectado es el que habla con MiFav real: sus errores se muestran.
 const isConnected = () => app.repository?.environment === 'supabase';
 const actor = () => app.session?.actor || null;
 const isSignedIn = () => actor()?.kind === 'account';
 const hasRole = role => Boolean(actor()?.roles?.includes(role));
+// Favoritos locales. La lista se cachea para no leer el almacenamiento en cada
+// tarjeta; cualquier cambio de la interfaz actualiza la caché.
+const favoriteStorage = (() => {
+  try { return globalThis.localStorage || null; } catch { return null; }
+})();
+let favoriteCache = null;
+const favoriteIds = () => {
+  if (favoriteCache === null) favoriteCache = readFavorites(favoriteStorage);
+  return favoriteCache;
+};
+const isProductFavorite = (businessId, productId) => {
+  try { return favoriteIds().includes(favoriteKey(businessId, productId)); } catch { return false; }
+};
+const favoriteCount = () => favoriteIds().length;
 // Verticales: en la demostración todo sigue encendido; en el entorno conectado
 // decide la base (app_status), para habilitar o apagar sin tocar código.
 const feature = name => !isConnected() || app.features?.[name] === true;
@@ -119,7 +152,7 @@ const feature = name => !isConnected() || app.features?.[name] === true;
 // demostración nunca ofrece un pago online.
 const paymentsOnline = () => isConnected() && app.features?.payments_online === true;
 
-// Lo que ve la persona: el mensaje de CAUCE, nunca el texto técnico de una
+// Lo que ve la persona: el mensaje de MiFav, nunca el texto técnico de una
 // excepción. El detalle queda en el registro de errores.
 function userMessage(error) {
   if (error instanceof CauceError || error?.name === 'CauceError') return error.message;
@@ -208,6 +241,12 @@ const ROUTE_ALIASES = Object.freeze({
   presentacion: 'institucional',
   'taxi-driver': 'taxista',
   rider: 'entregas',
+  explorar: 'comercios',
+  busqueda: 'comercios',
+  product: 'producto',
+  publish: 'publicar',
+  favorites: 'favoritos',
+  feria: 'ferias',
 });
 
 // La ruta es lo que está antes de `?` en el hash; lo de después son
@@ -278,21 +317,13 @@ const sectionHeading = (eyebrow, title, extra = '') => `
     ${extra}
   </div>`;
 
-// Chips de rubro armados con los rubros que realmente tienen comercios en la
-// lista que se está mostrando: no hay rubros inventados ni vacíos. En el
-// inicio elegir uno lleva al listado filtrado; adentro del listado filtra en
-// el lugar (lo decide `set-category` según la vista actual).
-const rubroChips = categories => categories.length > 1 ? `<div class="chip-row" role="group" aria-label="Rubros">${
-  categories.map(category => `<button class="chip chip-soft${app.search.category === category ? ' is-active' : ''}" type="button"
-    aria-pressed="${app.search.category === category}" data-action="set-category" data-category="${esc(category)}">${esc(category)}</button>`).join('')}</div>` : '';
-
 // Aviso obligatorio antes de confirmar: ninguna operación llega a un comercio real.
 const confirmNotice = ({ online = false } = {}) => `
   <p class="confirm-notice">${renderIcon('shield-check', 15)}
     <span>${app.repository?.capabilities?.orders
       ? online
-        ? 'El comercio recibe este pedido y lo prepara. En efectivo le pagás al comercio; el pago online va a la cuenta del comercio. CAUCE no cobra nada.'
-        : 'El comercio recibe este pedido y lo prepara. El pago se coordina con el comercio: CAUCE no cobra nada.'
+        ? 'El comercio recibe este pedido y lo prepara. En efectivo le pagás al comercio; el pago online va a la cuenta del comercio. MiFav no cobra nada.'
+        : 'El comercio recibe este pedido y lo prepara. El pago se coordina con el comercio: MiFav no cobra nada.'
       : `Esta confirmación no genera un servicio ni un cobro real. Queda registrada sólo en ${
         isShared() ? 'el entorno de pruebas' : 'este navegador'}.`}</span>
   </p>`;
@@ -347,7 +378,7 @@ function errorView(error) {
     ? '<button class="button secondary" type="button" data-action="retry">Reintentar</button>'
     : '';
   return `<section class="notice error" role="alert">
-    <h2>${offline ? 'Sin conexión con CAUCE' : slow ? 'La conexión está lenta' : 'No pudimos abrir esta vista'}</h2>
+    <h2>${offline ? 'Sin conexión con MiFav' : slow ? 'La conexión está lenta' : 'No pudimos abrir esta vista'}</h2>
     <p>${esc(userMessage(error))}</p>
     <div class="modal-actions">${retry}<a class="button secondary" href="#inicio">Volver al inicio</a></div>
   </section>`;
@@ -380,22 +411,35 @@ function updateShell() {
   const accountLink = document.querySelector('#account-link');
   if (accountLink) {
     accountLink.textContent = signedIn ? initialsOf(actor().name) : 'Ingresar';
-    accountLink.setAttribute('aria-label', signedIn ? `Cuenta de ${actor().name}` : 'Ingresar a CAUCE');
+    accountLink.setAttribute('aria-label', signedIn ? `Cuenta de ${actor().name}` : 'Ingresar a MiFav');
     accountLink.classList.toggle('is-signed', signedIn);
   }
 
   const cartCount = app.cartCount || 0;
-  const cartItem = /** @type {HTMLElement|null} */ (document.querySelector('#bnav-carrito'));
+  const cartItem = /** @type {HTMLElement|null} */ (document.querySelector('#header-cart'));
   if (cartItem) {
-    cartItem.hidden = cartCount === 0;
-    const badge = /** @type {HTMLElement|null} */ (cartItem.querySelector('.bnav-badge'));
+    cartItem.hidden = false;
+    const badge = /** @type {HTMLElement|null} */ (cartItem.querySelector('.cart-badge'));
     if (badge) { badge.textContent = String(cartCount); badge.hidden = cartCount === 0; }
+    cartItem.setAttribute('aria-label', cartCount ? `Ver carrito, ${cartCount} productos` : 'Ver carrito');
+  }
+  for (const badge of /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('.js-cart-badge'))) {
+    badge.textContent = String(cartCount);
+    badge.hidden = cartCount === 0;
+  }
+  const favoriteItem = /** @type {HTMLElement|null} */ (document.querySelector('#bnav-favoritos'));
+  if (favoriteItem) {
+    const count = favoriteCount();
+    const badge = /** @type {HTMLElement|null} */ (favoriteItem.querySelector('.bnav-badge'));
+    if (badge) { badge.textContent = String(count); badge.hidden = count === 0; }
+    favoriteItem.setAttribute('aria-label', count ? `Favoritos, ${count} guardados` : 'Favoritos');
   }
 
   const active = {
     inicio: 'bnav-inicio', comercios: 'bnav-comercios', comercio: 'bnav-comercios',
-    taxi: 'bnav-taxi', viaje: 'bnav-taxi', actividad: 'bnav-actividad', pedido: 'bnav-actividad',
-    carrito: 'bnav-carrito',
+    producto: 'bnav-comercios', favoritos: 'bnav-favoritos', publicar: 'bnav-publicar',
+    cuenta: 'bnav-cuenta', actividad: 'bnav-cuenta',
+    taxi: 'bnav-taxi', viaje: 'bnav-taxi', carrito: 'bnav-carrito',
   }[page];
   for (const item of document.querySelectorAll('.bottom-nav-item')) {
     item.classList.toggle('active', item.id === active);
@@ -414,7 +458,11 @@ const AREAS = Object.freeze({ panel: 'comercio', entregas: 'reparto', admin: 'ad
 // ───────────────────────── vistas públicas ─────────────────────────
 
 const availabilityText = business => storeAvailability(business, { connected: isConnected() });
-const businessCard = business => storeCard(business, { connected: isConnected() });
+
+// La localidad visible es Neuquén Capital, pero los datos históricos conservan
+// el id `alumine`. Se compara siempre por la localidad normalizada para que el
+// filtro siga funcionando sin migrar pedidos ni sesiones.
+const sameLocality = (a, b) => localityFor(a).id === localityFor(b).id;
 
 function filterBusinesses(businesses, catalogs = {}) {
   const query = app.search.query.trim().toLowerCase();
@@ -422,10 +470,53 @@ function filterBusinesses(businesses, catalogs = {}) {
     if (app.search.onlyOpen && !business.open) return false;
     if (app.search.mode === 'delivery' && !business.deliveryEnabled) return false;
     if (app.search.mode === 'pickup' && !business.pickupEnabled) return false;
-    if (app.search.category !== 'Todos' && business.category !== app.search.category) return false;
+    if (app.search.locality && !sameLocality(business.localityId, app.search.locality)) return false;
+    if (app.search.category !== 'Todos'
+      && categoryForBusiness(business) !== app.search.category
+      && business.category !== app.search.category) return false;
     if (!query) return true;
     return [business.name, business.category, business.subtitle, business.description, catalogs[business.id]]
       .filter(Boolean).some(field => field.toLowerCase().includes(query));
+  });
+}
+
+// Productos publicados de una lista de comercios. La lectura es por comercio
+// para respetar el aislamiento de cada tienda; en la demostración son pocos y
+// en el piloto se reemplaza por una búsqueda del servidor cuando haga falta.
+async function loadProductsFor(businesses) {
+  const rows = await Promise.all(businesses.map(async business => {
+    try {
+      const products = await app.repository.query('products', { businessId: business.id });
+      return products.filter(product => !product.archived);
+    } catch {
+      return [];
+    }
+  }));
+  return rows.flatMap((products, index) => products.map(product => ({ product, business: businesses[index] })));
+}
+
+function productMatchesSearch(product, business, query) {
+  if (!query) return true;
+  const needle = query.trim().toLowerCase();
+  if (!needle) return true;
+  return [product.name, product.description, product.category, business?.name, business?.category,
+    categoryForBusiness(business), productCondition(product) === 'used' ? 'usado'
+      : productCondition(product) === 'new' ? 'nuevo' : '']
+    .filter(Boolean).some(field => String(field).toLowerCase().includes(needle));
+}
+
+function visibleMarketplaceProducts(entries) {
+  const query = app.search.query.trim();
+  return entries.filter(({ product, business }) => {
+    if (app.search.onlyOpen && !business.open) return false;
+    if (app.search.mode === 'delivery' && !business.deliveryEnabled) return false;
+    if (app.search.mode === 'pickup' && !business.pickupEnabled) return false;
+    if (app.search.locality && !sameLocality(business.localityId, app.search.locality)) return false;
+    if (app.search.category !== 'Todos'
+      && product.category !== app.search.category
+      && categoryForBusiness(business) !== app.search.category) return false;
+    if (app.search.condition && productCondition(product) !== app.search.condition) return false;
+    return productMatchesSearch(product, business, query);
   });
 }
 
@@ -438,7 +529,97 @@ const QUICK_FILTERS = Object.freeze([
 const quickFilterActive = key => (key === 'open' ? app.search.onlyOpen : app.search.mode === key);
 const quickFilters = () => QUICK_FILTERS.map(filter => `<button class="chip ${quickFilterActive(filter.key) ? 'is-active' : ''}"
   type="button" data-action="quick-filter" data-filter="${filter.key}" aria-pressed="${quickFilterActive(filter.key)}">${esc(filter.label)}</button>`).join('');
-const filtersActive = () => Boolean(app.search.query.trim() || app.search.onlyOpen || app.search.mode || app.search.category !== 'Todos');
+const filtersActive = () => Boolean(app.search.query.trim() || app.search.onlyOpen || app.search.mode
+  || app.search.category !== 'Todos' || app.search.condition || app.search.locality);
+
+const marketplaceNotice = () => `<p class="mifav-demo-note">
+  <span aria-hidden="true">●</span> Demostración: los comercios, productos y precios son ficticios y no representan
+  negocios reales de Neuquén capital. No hay pagos reales.
+</p>`;
+
+// Condición del artículo. "Todos" es el estado inicial, no un valor de datos.
+const conditionChips = () => [['', 'Todos'], ['new', 'Nuevos'], ['used', 'Usados']].map(([value, label]) =>
+  `<button class="chip ${app.search.condition === value ? 'is-active' : ''}" type="button"
+    data-action="set-condition" data-condition="${value}" aria-pressed="${app.search.condition === value}">${label}</button>`).join('');
+
+const SORT_OPTIONS = Object.freeze([
+  Object.freeze({ value: 'relevance', label: 'Destacados' }),
+  Object.freeze({ value: 'price-asc', label: 'Menor precio' }),
+  Object.freeze({ value: 'price-desc', label: 'Mayor precio' }),
+]);
+const sortChips = () => SORT_OPTIONS.map(option => `<button class="chip chip-quiet ${app.search.sort === option.value ? 'is-active' : ''}"
+  type="button" data-action="sort-products" data-sort="${option.value}"
+  aria-pressed="${app.search.sort === option.value}">${option.label}</button>`).join('');
+
+// Orden de la vidriera. Los destacados son una selección editorial del catálogo
+// (tener una insignia o estar abierto), no una métrica de ventas inventada.
+function sortProductEntries(entries) {
+  const rows = [...entries];
+  if (app.search.sort === 'price-asc') return rows.sort((a, b) => a.product.price - b.product.price
+    || a.product.name.localeCompare(b.product.name));
+  if (app.search.sort === 'price-desc') return rows.sort((a, b) => b.product.price - a.product.price
+    || a.product.name.localeCompare(b.product.name));
+  return rows.sort((a, b) => Number(Boolean(b.product.badge)) - Number(Boolean(a.product.badge))
+    || Number(Boolean(b.business.open)) - Number(Boolean(a.business.open))
+    || a.product.name.localeCompare(b.product.name));
+}
+
+// La portada muestra variedad de rubros, no ocho platos del mismo comercio.
+// Se toma el primer artículo de cada categoría y después se completa.
+function featuredProductEntries(entries, limit = 8) {
+  const picked = [];
+  const seen = new Set();
+  for (const entry of entries) {
+    const category = categoryForBusiness(entry.business) || entry.product.category;
+    if (seen.has(category)) continue;
+    seen.add(category);
+    picked.push(entry);
+    if (picked.length >= limit) break;
+  }
+  if (picked.length < limit) {
+    for (const entry of entries) {
+      if (picked.includes(entry)) continue;
+      picked.push(entry);
+      if (picked.length >= limit) break;
+    }
+  }
+  return picked;
+}
+
+const marketplaceCategoryNames = businesses => {
+  const fromData = businesses.map(categoryForBusiness).filter(Boolean);
+  const preferred = MARKETPLACE_CATEGORY_NAMES.filter(name => name !== 'Otros');
+  const known = preferred.filter(name => fromData.includes(name));
+  const extra = [...new Set(fromData.filter(name => !preferred.includes(name)))];
+  return ['Todos', ...known, ...extra, ...(fromData.includes('Otros') ? ['Otros'] : [])];
+};
+
+// Convierte una foto elegida por la persona en un data URL ya optimizado. Si el
+// navegador no puede comprimirla, se usa el original bajo el mismo tope.
+async function publishImageData(file) {
+  if (!file || !file.size) return { data: '', file: null };
+  requireImageFile(file);
+  const optimized = await optimizeImage(file, { maxSide: 1024, quality: 0.82 });
+  const data = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('No pudimos leer la imagen.'));
+    reader.readAsDataURL(optimized);
+  });
+  return { data, file: optimized };
+}
+
+function requireImageFile(file) {
+  // Mismo límite de tipos que la carga conectada. El tamaño final se valida
+  // sobre el data URL, después de comprimir.
+  const types = ['image/jpeg', 'image/png', 'image/webp'];
+  if (!types.includes(file.type)) {
+    throw new CauceError('INVALID_IMAGE_TYPE', 'Se admiten imágenes JPEG, PNG o WebP.');
+  }
+  if (file.size > 12 * 1024 * 1024) {
+    throw new CauceError('IMAGE_TOO_LARGE', 'La imagen no puede superar 12 MB.');
+  }
+}
 
 async function viewHome() {
   const taxi = feature('taxi');
@@ -447,13 +628,19 @@ async function viewHome() {
     app.repository.query('myOrders'),
     taxi ? app.repository.query('myTrips') : [],
   ]);
+  const productEntries = await loadProductsFor(businesses);
+  const marketplaceEntries = sortProductEntries(visibleMarketplaceProducts(productEntries));
+  const featuredProducts = featuredProductEntries(marketplaceEntries, 8);
+  const openBusinesses = businesses.filter(business => business.open);
+  const featuredBusinesses = [...openBusinesses, ...businesses.filter(business => !business.open)].slice(0, 6);
+  const productsByBusiness = new Map();
+  for (const entry of productEntries) {
+    if (!productsByBusiness.has(entry.business.id)) productsByBusiness.set(entry.business.id, []);
+    productsByBusiness.get(entry.business.id).push(entry.product);
+  }
 
   const activeOrders = orders.filter(order => !['delivered', 'canceled'].includes(order.status));
   const activeTrip = trips.find(trip => isTaxiActive(trip.status));
-  const open = businesses.filter(business => business.open);
-  // Abiertos primero; los cerrados después, con cuándo abren.
-  const ordered = [...open, ...businesses.filter(business => !business.open)];
-
   const operation = (activeOrders.length || activeTrip) ? `
     <section class="home-block">
       ${sectionHeading('EN CURSO', activeOrders.length > 1 ? 'Tus pedidos en curso' : 'Tu pedido en curso')}
@@ -479,142 +666,532 @@ async function viewHome() {
       </div>
     </section>` : '';
 
-  const businessesBlock = businesses.length
-    ? `<div class="merchant-grid">${ordered.slice(0, 6).map(businessCard).join('')}</div>`
-    : isConnected()
-      ? `<div class="notice"><strong>Estamos sumando los primeros comercios de Aluminé.</strong>
-          Muy pronto vas a poder pedir desde acá. ¿Tenés un comercio? Sumalo en pocos pasos.</div>`
-      : '<p class="quiet">Todavía no hay comercios publicados en este entorno.</p>';
+  const productBlock = featuredProducts.length
+    ? `<div class="mifav-product-grid">${featuredProducts.map(({ product, business }) =>
+      marketplaceProductCard({ product, business, favorite: isProductFavorite(business.id, product.id) })).join('')}</div>`
+    : emptyState('Todavía no hay productos publicados',
+      'Estamos armando la primera vidriera de Neuquén capital. Si tenés un emprendimiento, podés sumarte.',
+      '#publicar', 'Publicar un producto', 'merchant');
+
+  const storesBlock = featuredBusinesses.length
+    ? `<div class="mifav-store-grid">${featuredBusinesses.map(business =>
+      marketplaceBusinessCard({ business, products: productsByBusiness.get(business.id) || [] })).join('')}</div>`
+    : `<p class="quiet">Todavía no hay tiendas publicadas en este entorno.</p>`;
+
+  const sellerBlock = `
+    <section class="mifav-seller-cta" aria-labelledby="seller-cta-title">
+      <div class="mifav-seller-copy">
+        <p class="eyebrow">VENDER EN MIFAV</p>
+        <h2 id="seller-cta-title">Tu emprendimiento, en la vidriera de la ciudad</h2>
+        <p>Publicá productos nuevos o usados, elegí retiro o envío coordinado con el vendedor y gestioná tus ventas desde el panel. Las cuentas nuevas de comercio pasan por revisión administrativa.</p>
+        <div class="mifav-seller-actions">
+          <a class="button" href="#publicar">Publicar un producto</a>
+          <a class="link-button" href="#alta-comercio">Abrir mi comercio</a>
+        </div>
+      </div>
+      <div class="mifav-seller-character" aria-hidden="true">${renderCharacter('merchant', 132)}</div>
+    </section>`;
+
+  const advantages = `
+    <ul class="mifav-advantages" aria-label="Ventajas de comprar en MiFav">
+      <li><span>${renderIcon('pin', 18)}</span><strong>Neuquén capital</strong><small>Buscá por localidad y zona.</small></li>
+      <li><span>${renderIcon('store', 18)}</span><strong>Retiro en el local</strong><small>Coordinás con el vendedor.</small></li>
+      <li><span>${renderIcon('delivery', 18)}</span><strong>Envío del vendedor</strong><small>Sin costos inventados.</small></li>
+      <li><span>${renderIcon('chat', 18)}</span><strong>Contacto directo</strong><small>Cuando el comercio lo habilita.</small></li>
+    </ul>`;
 
   return `
     ${offlineBanner()}
-    <section class="home-hero">
-      <div class="home-hero-media" aria-hidden="true">
-        <img src="assets/images/territory/alumine-hero-panoramica.webp" alt="" width="1200" height="600" fetchpriority="high">
-      </div>
-      <div class="home-hero-body">
-        <p class="eyebrow">CAUCE · ALUMINÉ</p>
-        <h1>${taxi ? 'Comprá local.<br>Movete por Aluminé.' : 'Pedí a los comercios<br>de Aluminé.'}</h1>
-        <p class="home-hero-lead">Retirá en el local o recibilo con el reparto del propio comercio. Sin crear una cuenta.</p>
-        <form class="home-search" data-form="home-search" role="search">
-          <label class="visually-hidden" for="home-search-input">Buscar comercios o productos</label>
+    <section class="mifav-hero" aria-labelledby="home-title">
+      <div class="mifav-hero-shape" aria-hidden="true"></div>
+      <div class="mifav-hero-body">
+        <p class="eyebrow">MIFAV · NEUQUÉN CAPITAL</p>
+        <h1 id="home-title">Encontrá lo que buscás.<br><span>Comprá cerca.</span></h1>
+        <p class="mifav-hero-lead">Productos nuevos y usados de emprendimientos y comercios de la ciudad. Coordiná retiro o envío con el vendedor: los costos los confirma él antes de cerrar la compra.</p>
+        <form class="mifav-search" data-form="home-search" role="search">
+          <label class="visually-hidden" for="home-search-input">Buscar productos, marcas o tiendas</label>
           <span class="search-icon" aria-hidden="true">${renderIcon('search', 18)}</span>
-          <input id="home-search-input" name="query" type="search" placeholder="Pan, pizza, almacén…"
+          <input id="home-search-input" name="query" type="search" placeholder="Producto o tienda"
             autocomplete="off" enterkeyhint="search">
           <button class="button" type="submit">Buscar</button>
         </form>
-        ${rubroChips([...new Set(businesses.map(business => business.category).filter(Boolean))])}
-        <div class="home-hero-links">
-          <a class="hero-link" href="#comercios">${renderIcon('store', 16)} Ver comercios</a>
-          ${taxi ? `<a class="hero-link" href="#taxi">${renderIcon('taxi', 16)} Pedir un taxi</a>` : ''}
+        <div class="mifav-hero-quick" role="group" aria-label="Filtros rápidos">
+          <button class="chip" type="button" data-action="set-condition" data-condition="new">Nuevos</button>
+          <button class="chip" type="button" data-action="set-condition" data-condition="used">Usados</button>
+          <button class="chip" type="button" data-action="quick-filter" data-filter="pickup">Con retiro</button>
+          <a class="chip" href="#ferias">Feria Neuquén Centro</a>
         </div>
+        <p class="mifav-hero-locality">${renderIcon('pin', 14)} Neuquén Capital
+          <span>·</span> Por ahora la búsqueda cubre la ciudad. Plottier y Centenario todavía no están habilitadas.</p>
       </div>
-      <div class="home-hero-character" aria-hidden="true">${renderCharacter('shopper', 150)}</div>
+      <div class="mifav-hero-character" aria-hidden="true">${renderCharacter('shopper', 170)}</div>
     </section>
-
-    <div class="chip-row home-filters" role="group" aria-label="Filtrar comercios">${quickFilters()}</div>
-    <ul class="trust-row" aria-label="Cómo funciona CAUCE">
-      <li>${renderIcon('user', 16)} Sin crear cuenta</li>
-      <li>${renderIcon('cash', 16)} ${paymentsOnline() ? 'Efectivo o pago online' : 'Pagás al comercio'}</li>
-      <li>${renderIcon('receipt', 16)} Seguís tu pedido</li>
-    </ul>
 
     ${operation}
 
     <section class="home-block">
-      ${sectionHeading('COMERCIOS', open.length ? 'Abiertos ahora' : 'Comercios en CAUCE',
-        businesses.length ? '<a class="link-button" href="#comercios">Ver todos</a>' : '')}
-      ${businessesBlock}
+      ${sectionHeading('CATEGORÍAS', 'Explorá por rubro', '<a class="link-button" href="#comercios">Ver todo</a>')}
+      ${categoryTiles({ active: app.search.category })}
     </section>
 
-    ${isConnected() ? `
     <section class="home-block">
-      ${sectionHeading('CÓMO FUNCIONA', 'Pedir es simple')}
-      <ol class="how-steps">
-        <li><strong>Elegí un comercio</strong><span>Mirá el catálogo con precios y qué está disponible hoy.</span></li>
-        <li><strong>Confirmá tu pedido</strong><span>Retiro en el local o envío del comercio. ${paymentsOnline()
-          ? 'Pagás en efectivo o, donde esté habilitado, online.' : 'Pagás al recibir o al retirar.'}</span></li>
-        <li><strong>Seguilo paso a paso</strong><span>Ves cuando lo aceptan, lo preparan y sale. Te damos un enlace para no perderlo.</span></li>
-      </ol>
-    </section>` : ''}
+      ${sectionHeading('DESTACADOS', 'Productos para descubrir', '<a class="link-button" href="#comercios">Ver más</a>')}
+      ${productBlock}
+    </section>
 
+    <section class="home-block">
+      ${sectionHeading('TIENDAS', 'Emprendimientos y comercios', '<a class="link-button" href="#comercios">Ver todos</a>')}
+      ${storesBlock}
+    </section>
+
+    ${feriaBanner()}
+
+    ${sellerBlock}
+
+    ${advantages}
+
+    ${taxi ? `
     <section class="home-block home-secondary">
-      <a class="secondary-access" href="#alta-comercio">
-        <span class="secondary-access-icon" aria-hidden="true">${renderIcon('store', 24)}</span>
+      <a class="secondary-access" href="#taxi">
+        <span class="secondary-access-icon" aria-hidden="true">${renderIcon('taxi', 24)}</span>
         <span>
-          <strong>Sumar mi comercio</strong>
-          <span class="quiet">Creá tu cuenta, cargá tu catálogo y empezá a recibir pedidos.</span>
+          <strong>Pedir un taxi</strong>
+          <span class="quiet">El servicio de MiFav sigue disponible como vertical aparte.</span>
         </span>
       </a>
-      ${taxi ? `
       <a class="secondary-access" href="#taxista">
         <span class="secondary-access-icon" aria-hidden="true">${renderIcon('taxi', 24)}</span>
         <span>
           <strong>Registrarme como taxista</strong>
           <span class="quiet">Completá tu alta y recibí solicitudes cuando esté aprobada.</span>
         </span>
-      </a>` : ''}
+      </a>
+    </section>` : ''}
+
+    <section class="home-block home-secondary">
       <a class="secondary-access quiet-access" href="#institucional">
         <span class="secondary-access-icon" aria-hidden="true">${renderIcon('shield-check', 26)}</span>
         <span>
-          <strong>Qué es CAUCE</strong>
+          <strong>Qué es MiFav</strong>
           <span class="quiet">${isConnected() ? 'Quiénes somos, cómo funciona y a quién consultar.' : 'Alcance, responsabilidades y propuesta de piloto.'}</span>
         </span>
       </a>
-    </section>`;
+    </section>
+
+    ${marketplaceNotice()}`;
 }
 
 async function viewBusinesses() {
   const businesses = await app.repository.query('publicBusinesses');
-  const categories = ['Todos', ...new Set(businesses.map(business => business.category).filter(Boolean))];
-  // Buscar "pizza" tiene que encontrar al comercio que vende pizza, no sólo al
-  // que se llama así: se consulta el catálogo de cada comercio publicado.
-  // En el entorno conectado es una sola consulta para todos los catálogos.
-  const catalogs = !app.search.query.trim() ? {}
-    : isConnected() ? await app.repository.query('searchCatalog', { query: app.search.query })
-    : Object.fromEntries(await Promise.all(businesses.map(async business => [
-      business.id,
-      (await app.repository.query('products', { businessId: business.id })).map(product => product.name).join(' '),
-    ])));
-  const visible = filterBusinesses(businesses, catalogs);
-  // Abiertos primero, sin perder el orden que trae la base dentro de cada grupo.
-  const ordered = [...visible.filter(business => business.open), ...visible.filter(business => !business.open)];
+  const entries = await loadProductsFor(businesses);
+  const products = sortProductEntries(visibleMarketplaceProducts(entries));
+  const shown = Math.max(PRODUCT_PAGE_SIZE, Number(app.search.shown) || PRODUCT_PAGE_SIZE);
+  const visibleProducts = products.slice(0, shown);
+  // Buscar "pizza" también tiene que encontrar al comercio que la vende, no
+  // sólo al que se llama así. En la demostración el catálogo ya está en memoria.
+  const catalogs = Object.fromEntries(businesses.map(business => [
+    business.id,
+    entries.filter(entry => entry.business.id === business.id).map(entry => entry.product.name).join(' '),
+  ]));
+  const visibleBusinesses = filterBusinesses(businesses, catalogs)
+    .sort((a, b) => Number(b.open) - Number(a.open) || a.name.localeCompare(b.name));
+  const categories = marketplaceCategoryNames(businesses);
+  const productsByBusiness = new Map();
+  for (const entry of entries) {
+    if (!productsByBusiness.has(entry.business.id)) productsByBusiness.set(entry.business.id, []);
+    productsByBusiness.get(entry.business.id).push(entry.product);
+  }
+  const resultLine = filtersActive()
+    ? `<p class="results-line quiet" role="status">${pluralize(products.length, 'producto', 'productos')} y
+        ${pluralize(visibleBusinesses.length, 'tienda', 'tiendas')}
+        <button class="link-button" type="button" data-action="clear-filters">Quitar filtros</button></p>`
+    : `<p class="results-line quiet" role="status">${pluralize(products.length, 'producto publicado', 'productos publicados')} ·
+        ${pluralize(businesses.length, 'tienda', 'tiendas')} en Neuquén Capital</p>`;
 
   return `
     ${offlineBanner()}
-    <section class="page-header">
-      <h1 class="page-title">Comercios de Aluminé</h1>
-      <p class="quiet">${isConnected()
-        ? `${pluralize(businesses.length, 'comercio publicado', 'comercios publicados')} · ${pluralize(businesses.filter(business => business.open).length, 'abierto ahora', 'abiertos ahora')}`
-        : `${pluralize(businesses.length, 'comercio publicado', 'comercios publicados')} en este entorno · contenido ficticio de demostración.`}</p>
+    <section class="page-header mifav-page-header">
+      <p class="eyebrow">EXPLORAR</p>
+      <h1 class="page-title">Lo que buscás, en la ciudad</h1>
+      <p class="quiet">Productos nuevos y usados de emprendimientos y comercios de Neuquén Capital. El retiro y el envío los coordina cada vendedor.</p>
     </section>
 
-    <form class="search-bar" data-form="search" role="search">
-      <label class="visually-hidden" for="search-input">Buscar comercios o productos</label>
-      <span class="search-icon" aria-hidden="true">${renderIcon('search', 16)}</span>
-      <input id="search-input" name="query" type="search" placeholder="Buscar comercio, rubro o producto"
+    <form class="search-bar mifav-searchbar" data-form="search" role="search">
+      <label class="visually-hidden" for="search-input">Buscar productos, tiendas o rubros</label>
+      <span class="search-icon" aria-hidden="true">${renderIcon('search', 18)}</span>
+      <input id="search-input" name="query" type="search" placeholder="Producto o tienda"
         value="${esc(app.search.query)}" autocomplete="off" enterkeyhint="search">
+      <button class="button" type="submit">Buscar</button>
     </form>
 
-    <div class="chip-row" role="group" aria-label="Filtrar comercios">${quickFilters()}</div>
-    ${rubroChips(categories)}
+    <div class="mifav-filter-panel">
+      <div class="mifav-filter-row" role="group" aria-label="Rubro">
+        <span class="mifav-filter-label">${renderIcon('grid', 15)} Rubro</span>
+        <div class="mifav-filter-scroll">
+          ${categories.map(category => `<button class="chip ${app.search.category === category ? 'is-active' : ''}"
+            type="button" data-action="set-category" data-category="${esc(category)}"
+            aria-pressed="${app.search.category === category}">${esc(category)}</button>`).join('')}
+        </div>
+      </div>
+      <div class="mifav-filter-row" role="group" aria-label="Condición">
+        <span class="mifav-filter-label">${renderIcon('tag', 15)} Estado</span>
+        <div class="mifav-filter-scroll">${conditionChips()}</div>
+      </div>
+      <div class="mifav-filter-row" role="group" aria-label="Entrega">
+        <span class="mifav-filter-label">${renderIcon('store', 15)} Entrega</span>
+        <div class="mifav-filter-scroll">${quickFilters()}
+          <button class="chip ${app.search.locality === 'neuquen-capital' ? 'is-active' : ''}" type="button"
+            data-action="set-locality" data-locality="neuquen-capital"
+            aria-pressed="${app.search.locality === 'neuquen-capital'}">${renderIcon('pin', 13)} Neuquén Capital</button>
+        </div>
+      </div>
+      <div class="mifav-filter-row" role="group" aria-label="Ordenar">
+        <span class="mifav-filter-label">${renderIcon('sliders', 15)} Orden</span>
+        <div class="mifav-filter-scroll">${sortChips()}</div>
+      </div>
+    </div>
 
-    ${businesses.length && filtersActive() ? `<p class="results-line quiet" role="status">${pluralize(visible.length, 'resultado', 'resultados')}
-      <button class="link-button" type="button" data-action="clear-filters">Quitar filtros</button></p>` : ''}
+    ${resultLine}
 
-    ${!businesses.length
-      ? emptyState('Todavía no hay comercios publicados',
-        'Estamos sumando los primeros comercios de Aluminé. Volvé pronto, o sumá el tuyo.',
-        '#alta-comercio', 'Sumar mi comercio', 'merchant')
-      : ordered.length
-      ? `<div class="merchant-grid">${ordered.map(businessCard).join('')}</div>`
+    ${products.length
+      ? `<div class="mifav-product-grid mifav-product-grid-wide">${visibleProducts.map(({ product, business }) =>
+        marketplaceProductCard({ product, business, favorite: isProductFavorite(business.id, product.id) })).join('')}</div>
+        ${products.length > visibleProducts.length ? `<div class="mifav-load-more">
+          <button class="button secondary" type="button" data-action="show-more-products">
+            Ver más productos (${products.length - visibleProducts.length})
+          </button>
+          <p class="microcopy">Mostrando ${visibleProducts.length} de ${products.length}.</p>
+        </div>` : ''}`
       : emptyState('Sin resultados',
-        'La búsqueda mira el nombre del comercio, su rubro y sus productos. Probá con otra palabra o quitá los filtros.',
-        '#comercios', 'Ver todos los comercios', 'bag')}`;
+        'La búsqueda mira el nombre, la descripción, el rubro y la tienda. Probá con otra palabra o quitá los filtros.',
+        '#comercios', 'Ver todo el catálogo', 'bag')}
+
+    ${visibleBusinesses.length ? `
+      <section class="home-block">
+        ${sectionHeading('TIENDAS', 'Quiénes venden', '<a class="link-button" href="#ferias">Ver ferias</a>')}
+        <div class="mifav-store-grid">${visibleBusinesses.slice(0, 12).map(business =>
+          marketplaceBusinessCard({ business, products: productsByBusiness.get(business.id) || [] })).join('')}</div>
+      </section>` : ''}
+
+    <p class="mifav-locality-note">${renderIcon('pin', 14)} Por ahora la búsqueda cubre Neuquén Capital.
+      Plottier y Centenario todavía no están habilitadas.</p>
+    ${marketplaceNotice()}`;
 }
 
-// Un comercio pausado, suspendido o en borrador no es público: se explica en
-// lugar de mostrar un error.
+// Ficha de producto: la decisión de compra con el contexto del vendedor.
+async function viewProduct(businessId, productId) {
+  if (!businessId || !productId) {
+    return emptyState('Producto no encontrado', 'Elegí un producto desde la vidriera.', '#comercios', 'Explorar', 'bag');
+  }
+  const business = await loadPublicBusiness(businessId);
+  if (!business) return unavailableBusiness();
+  const [products, cart] = await Promise.all([
+    app.repository.query('products', { businessId }),
+    app.repository.query('cart', { businessId }),
+  ]);
+  const product = products.find(candidate => candidate.id === productId && !candidate.archived);
+  if (!product) {
+    return emptyState('Este producto ya no está disponible',
+      'Puede haberse pausado o vendido. Mirá el resto del catálogo de la tienda.',
+      `#comercio/${businessId}`, 'Ver la tienda', 'bag');
+  }
+  const variants = Array.isArray(product.variants) ? product.variants : [];
+  const stock = Math.max(0, Number(product.stock) || 0);
+  const available = isCommerciallyPurchasable(product) && (product.trackStock === false || stock > 0);
+  const prices = variants.map(variant => product.price + (Number(variant.priceDelta) || 0)).filter(value => value > 0);
+  const lowest = prices.length ? Math.min(...prices) : product.price;
+  const favorite = isProductFavorite(business.id, product.id);
+  const condition = productCondition(product);
+  const detailCategory = product.category || categoryForBusiness(business);
+  const detailMedia = product.image
+    ? `<div class="mifav-detail-media"><img class="mifav-detail-image" src="${esc(product.image)}"
+        alt="${esc(product.name)}" width="720" height="720"></div>`
+    : `<div class="mifav-detail-media is-placeholder">
+        <div class="mifav-detail-placeholder" role="img"
+          aria-label="Sin foto cargada para ${esc(product.name)}">
+          <span class="mifav-detail-monogram" aria-hidden="true">${esc(initialsOf(product.name))}</span>
+          <span class="mifav-detail-placeholder-category">${esc(detailCategory)}</span>
+          <span class="mifav-detail-placeholder-note">El vendedor todavía no cargó una foto de este artículo.</span>
+        </div>
+      </div>`;
+  const fulfillment = [
+    business.pickupEnabled ? `Retiro en ${business.address || 'el local del vendedor'}` : '',
+    business.deliveryEnabled ? (business.deliveryFee > 0
+      ? `Envío ${money(business.deliveryFee)} coordinado con el vendedor`
+      : 'Envío coordinado con el vendedor') : '',
+  ].filter(Boolean);
+  const actionFor = variant => {
+    const line = cart.lines.find(item => item.productId === product.id
+      && (variant ? item.variantId === variant.id : !item.variantId));
+    const quantity = line?.quantity || 0;
+    if (quantity > 0) return quantityControl({ businessId, product, variant, quantity, max: stock });
+    return addButton({ businessId, product, variant });
+  };
+
+  return `
+    ${offlineBanner()}
+    ${backLink('#comercios', 'Explorar')}
+    <section class="mifav-detail" aria-labelledby="product-title">
+      ${detailMedia}
+      <div class="mifav-detail-body">
+        <div class="mifav-detail-topline">
+          <span class="mifav-product-kicker">${esc(detailCategory)}</span>
+          ${condition ? `<span class="mifav-condition ${condition === 'used' ? 'is-used' : ''}">${esc(conditionLabel(condition))}</span>` : ''}
+        </div>
+        <h1 id="product-title">${esc(product.name)}</h1>
+        <p class="mifav-detail-price">${variants.length && prices.some(value => value !== lowest) ? '<span class="quiet">desde</span> ' : ''}${money(lowest)}</p>
+        ${product.description ? `<p class="mifav-detail-description">${esc(product.description)}</p>` : ''}
+        ${available ? '' : `<p class="product-flag">${product.available === false ? 'Agotado por hoy' : 'Sin stock'}</p>`}
+
+        ${variants.length ? `<div class="mifav-variant-list">${variants.map(variant => `
+          <div class="mifav-variant">
+            <span>${esc(variant.name)}${variant.priceDelta
+              ? ` <span class="quiet">${variant.priceDelta > 0 ? '+' : '−'}${money(Math.abs(variant.priceDelta))}</span>` : ''}</span>
+            ${available ? actionFor(variant) : ''}
+          </div>`).join('')}</div>`
+          : available ? `<div class="mifav-detail-actions">${actionFor(null)}</div>` : ''}
+
+        <div class="mifav-detail-favorite">${favoriteButton({
+          businessId: business.id, productId: product.id, favorite, name: product.name,
+        })}<span>${favorite ? 'Guardado en tus favoritos' : 'Guardar para comparar'}</span></div>
+
+        <section class="mifav-seller-card" aria-labelledby="seller-title">
+          ${merchantAvatar(business, 'mifav-seller-avatar')}
+          <div class="mifav-seller-info">
+            <p class="eyebrow">VENDE</p>
+            <h2 id="seller-title"><a href="#comercio/${esc(business.id)}">${esc(business.name)}</a></h2>
+            <p class="quiet">${esc(business.subtitle || categoryForBusiness(business))} · ${esc(localityLabel(business.localityId))}</p>
+            ${business.ownerName && !/^Responsable de /.test(business.ownerName)
+          ? `<p class="microcopy">Responsable: ${esc(business.ownerName)}.</p>` : ''}
+          </div>
+          <a class="button secondary" href="#comercio/${esc(business.id)}">Ver la tienda</a>
+        </section>
+
+        <ul class="mifav-detail-facts">
+          ${fulfillment.map(text => `<li>${renderIcon('check', 15)} ${esc(text)}</li>`).join('')}
+          <li>${renderIcon('shield-check', 15)} Precio publicado por el vendedor. No incluye costos que no figuren acá.</li>
+        </ul>
+        ${isConnected() ? contactButtons(business, { compact: true })
+          : '<p class="microcopy">Los datos de contacto se comparten al confirmar el pedido. En esta demostración no se envían mensajes reales.</p>'}
+      </div>
+    </section>`;
+}
+
+// Favoritos: una preferencia local, sin cuenta y sin datos privados del vendedor.
+async function viewFavorites() {
+  const businesses = await app.repository.query('publicBusinesses');
+  const entries = await loadProductsFor(businesses);
+  const index = new Map(entries.map(entry => [`${entry.business.id}/${entry.product.id}`, entry]));
+  const saved = favoriteIds();
+  const found = saved.map(key => index.get(key)).filter(Boolean);
+  const missing = saved.length - found.length;
+
+  return `
+    ${offlineBanner()}
+    <section class="page-header mifav-page-header">
+      <p class="eyebrow">TUS FAVORITOS</p>
+      <h1 class="page-title">Para volver a encontrar</h1>
+      <p class="quiet">Se guardan en este navegador, sin crear una cuenta. Todavía no se sincronizan entre dispositivos.</p>
+    </section>
+    ${found.length
+      ? `<p class="results-line quiet" role="status">${pluralize(found.length, 'producto guardado', 'productos guardados')}
+          ${missing ? `· ${pluralize(missing, 'publicación ya no disponible', 'publicaciones ya no disponibles')}` : ''}</p>
+        <div class="mifav-product-grid">${found.map(({ product, business }) =>
+          marketplaceProductCard({ product, business, favorite: true })).join('')}</div>`
+      : emptyFavorites()}
+    ${saved.length ? `<p class="mifav-locality-note">${renderIcon('heart', 14)} Los favoritos son una lista local.
+      Si borrás los datos del navegador, se borran.</p>` : ''}`;
+}
+
+// Feria: no se inventan fotos, fechas ni ubicaciones. El espacio de imagen está
+// reservado para la fotografía real que aporte la organización.
+async function viewFerias() {
+  return `
+    ${offlineBanner()}
+    ${backLink('#inicio', 'Inicio')}
+    <section class="page-header mifav-page-header">
+      <p class="eyebrow">FERIAS DE LA CIUDAD</p>
+      <h1 class="page-title">Feria Neuquén Centro</h1>
+      <p class="quiet">Un espacio para que los productos de la feria también se encuentren en MiFav.</p>
+    </section>
+    ${feriaBanner({ showLink: false })}
+    <section class="mifav-feria-info">
+      <article>
+        <h2>Cómo va a funcionar</h2>
+        <p>La feria tendrá su propia vidriera dentro de MiFav. Cada stand va a poder publicar productos y coordinar el retiro en la feria, sin inventar horarios ni ubicaciones.</p>
+      </article>
+      <article>
+        <h2>Qué falta confirmar</h2>
+        <p>Fecha, lugar, cantidad de stands y operativo de retiro los confirma la organización. Hasta entonces no mostramos datos de evento ni imágenes que no existan.</p>
+      </article>
+      <article>
+        <h2>Para vender en la feria</h2>
+        <p>Si tenés un emprendimiento, podés crear tu cuenta y publicar productos. La participación en la feria se coordina con la organización.</p>
+        <a class="button" href="#publicar">Publicar un producto</a>
+      </article>
+    </section>
+    <p class="mifav-locality-note">${renderIcon('pin', 14)} El retiro en feria todavía no está habilitado: requiere que la organización confirme el operativo.</p>`;
+}
+
+// Publicación: primero se revisa lo cargado y recién después se guarda. Para un
+// comercio nuevo, la vidriera pública espera la aprobación administrativa.
+async function viewPublish() {
+  if (!isSignedIn()) {
+    const identities = app.repository.capabilities.demoIdentities ? await app.repository.identities() : [];
+    const seller = identities.find(identity => (identity.roles || []).includes('merchant'));
+    return `
+      ${backLink('#inicio', 'Inicio')}
+      <section class="page-header mifav-page-header">
+        <p class="eyebrow">VENDER EN MIFAV</p>
+        <h1 class="page-title">Publicá tu producto</h1>
+        <p class="quiet">Necesitás una cuenta de vendedor. Desde ahí cargás fotos, precio, condición y disponibilidad, y gestionás tus ventas.</p>
+      </section>
+      <ol class="steps-list mifav-publish-steps">
+        <li>Ingresás o creás tu cuenta.</li>
+        <li>Completás los datos de tu comercio y elegís retiro, envío o ambos.</li>
+        <li>Cargás el producto y lo revisás antes de confirmar.</li>
+        <li>Si el comercio es nuevo, administración revisa el alta antes de que sea visible.</li>
+      </ol>
+      <div class="notice"><strong>La publicación de un comercio nuevo pasa por revisión administrativa.</strong>
+        No prometemos publicación instantánea: la vidriera se activa cuando el alta está aprobada.</div>
+      ${seller ? `<button class="secondary-access" type="button" data-action="use-identity"
+        data-identity="${esc(seller.id)}" data-return="#publicar">
+        <span class="secondary-access-icon" aria-hidden="true">${renderIcon('store', 24)}</span>
+        <span><strong>Probar como comercio de ejemplo</strong><span class="quiet">${esc(seller.hint)}</span></span>
+      </button>` : ''}
+      <a class="button full" href="#cuenta">Ingresar o crear cuenta</a>
+      <p class="microcopy">Las identidades de ejemplo son ficticias y sólo existen en esta demostración.</p>`;
+  }
+
+  const businesses = await app.repository.query('myBusinesses');
+  if (!businesses.length) {
+    return `
+      ${offlineBanner()}
+      ${backLink('#panel', 'Mis comercios')}
+      <section class="page-header mifav-page-header">
+        <p class="eyebrow">VENDER EN MIFAV</p>
+        <h1 class="page-title">Primero, tu comercio</h1>
+        <p class="quiet">Para publicar necesitás un comercio asociado a tu cuenta. El alta queda en borrador hasta que la completes y solicites la revisión.</p>
+      </section>
+      <div class="notice"><strong>No hay un comercio en tu cuenta.</strong> Creá el borrador, cargá el catálogo y solicitá la publicación.</div>
+      <a class="button full" href="#alta-comercio">Crear mi comercio</a>`;
+  }
+
+  const draft = app.publishReview;
+  if (draft) {
+    const draftBusiness = businesses.find(business => business.id === draft.businessId) || businesses[0];
+    const inReview = draftBusiness.status !== 'active';
+    return `
+      ${offlineBanner()}
+      ${backLink('#publicar', 'Publicar')}
+      <section class="page-header mifav-page-header">
+        <p class="eyebrow">REVISIÓN</p>
+        <h1 class="page-title">Revisá tu publicación</h1>
+        <p class="quiet">Esto es lo que se va a guardar. Podés volver y corregir antes de confirmar.</p>
+      </section>
+      <section class="mifav-review" aria-labelledby="review-title">
+        <div class="mifav-review-photo">
+          ${draft.imageData ? `<img src="${esc(draft.imageData)}" alt="Foto elegida para ${esc(draft.name)}" width="480" height="480">`
+            : `<span class="mifav-product-fallback" aria-hidden="true">${esc(initialsOf(draft.name))}</span>`}
+        </div>
+        <div class="mifav-review-body">
+          <p class="mifav-product-kicker">${esc(draft.category)} · ${esc(conditionLabel(draft.condition))}</p>
+          <h2 id="review-title">${esc(draft.name)}</h2>
+          <p class="mifav-detail-price">${money(draft.price)}</p>
+          ${draft.description ? `<p>${esc(draft.description)}</p>` : ''}
+          <dl class="mifav-review-list">
+            <div><dt>Comercio</dt><dd>${esc(draftBusiness.name)}</dd></div>
+            <div><dt>Disponibilidad</dt><dd>${draft.available ? `Disponible · ${draft.stock} unidades` : 'No disponible por ahora'}</dd></div>
+            <div><dt>Retiro</dt><dd>${draftBusiness.pickupEnabled ? 'Habilitado' : 'No habilitado'}</dd></div>
+            <div><dt>Envío</dt><dd>${draftBusiness.deliveryEnabled
+              ? (draftBusiness.deliveryFee > 0 ? `${money(draftBusiness.deliveryFee)} · coordinado con el vendedor` : 'Coordinado con el vendedor') : 'No habilitado'}</dd></div>
+          </dl>
+          <div class="notice" role="status"><strong>${inReview ? 'Tu comercio todavía está en revisión.' : 'Tu comercio ya está aprobado.'}</strong>
+            ${inReview ? 'La publicación se guarda, pero no se muestra en la vidriera pública hasta que administración apruebe el alta.'
+              : 'La publicación queda en tu tienda. Podés pausarla o editarla desde el panel.'}</div>
+          <div class="mifav-review-actions">
+            <button class="button" type="button" data-action="publish-confirm">Confirmar publicación</button>
+            <button class="button secondary" type="button" data-action="publish-cancel">Volver a editar</button>
+          </div>
+        </div>
+      </section>`;
+  }
+
+  const businessId = route().param && businesses.some(business => business.id === route().param)
+    ? route().param : businesses[0].id;
+  const business = businesses.find(item => item.id === businessId) || businesses[0];
+  const inReview = business.status !== 'active';
+  return `
+    ${offlineBanner()}
+    ${backLink('#inicio', 'Inicio')}
+    <section class="page-header mifav-page-header">
+      <p class="eyebrow">VENDER EN MIFAV</p>
+      <h1 class="page-title">Nuevo producto</h1>
+      <p class="quiet">Cargalo, revisalo y confirmá. La foto es opcional: sin foto mostramos una marca tipográfica, no una imagen inventada.</p>
+    </section>
+    ${inReview ? `<div class="notice" role="status"><strong>Tu comercio está en revisión.</strong>
+      Podés cargar productos, pero no se verán en la vidriera hasta que administración apruebe el alta.</div>` : ''}
+    <form class="checkout-form mifav-publish-form" data-form="publish-review">
+      ${businesses.length > 1 ? `<div class="field">
+        <label for="publish-business">Comercio</label>
+        <select id="publish-business" name="business" required>
+          ${businesses.map(item => `<option value="${esc(item.id)}" ${item.id === business.id ? 'selected' : ''}>${esc(item.name)}</option>`).join('')}
+        </select>
+      </div>` : `<input type="hidden" name="business" value="${esc(business.id)}">`}
+      <div class="field">
+        <label for="publish-name">Título del producto</label>
+        <input id="publish-name" name="name" type="text" required minlength="2" maxlength="80"
+          placeholder="Ej.: Lámpara de mimbre" autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="publish-description">Descripción</label>
+        <textarea id="publish-description" name="description" rows="4" maxlength="280"
+          placeholder="Medidas, material, estado y lo que la persona necesita saber."></textarea>
+      </div>
+      <div class="mifav-form-two">
+        <div class="field">
+          <label for="publish-category">Categoría</label>
+          <select id="publish-category" name="category" required>
+            ${MARKETPLACE_CATEGORIES.map(category => `<option value="${esc(category.name)}">${esc(category.name)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field">
+          <label for="publish-price">Precio en pesos</label>
+          <input id="publish-price" name="price" type="number" inputmode="numeric" min="1" step="1" required>
+        </div>
+      </div>
+      <fieldset class="field mifav-fieldset">
+        <legend>Condición</legend>
+        <label class="mifav-radio"><input type="radio" name="condition" value="new" checked> Nuevo</label>
+        <label class="mifav-radio"><input type="radio" name="condition" value="used"> Usado</label>
+      </fieldset>
+      <div class="mifav-form-two">
+        <div class="field">
+          <label for="publish-stock">Unidades disponibles</label>
+          <input id="publish-stock" name="stock" type="number" inputmode="numeric" min="0" max="10000" step="1" value="1" required>
+        </div>
+        <div class="field mifav-check-field">
+          <label class="mifav-check"><input type="checkbox" name="available" checked> Mostrar como disponible</label>
+          <p class="microcopy">Podés pausarlo después desde el panel.</p>
+        </div>
+      </div>
+      <div class="field">
+        <label for="publish-image">Foto principal (opcional)</label>
+        <input id="publish-image" name="image" type="file" accept="image/jpeg,image/png,image/webp">
+        <p class="microcopy">JPEG, PNG o WebP. Se achica en el navegador. Una foto clara ayuda, pero no es obligatoria.</p>
+      </div>
+      <div class="mifav-publish-fulfillment">
+        <p><strong>Retiro:</strong> ${business.pickupEnabled ? `en ${esc(business.address || 'el local del vendedor')}` : 'no habilitado'}.</p>
+        <p><strong>Envío:</strong> ${business.deliveryEnabled
+          ? (business.deliveryFee > 0 ? `${money(business.deliveryFee)}, coordinado con el vendedor.` : 'coordinado con el vendedor, sin costo publicado.')
+          : 'no habilitado'}.</p>
+        <a class="link-button" href="#panel/${esc(business.id)}/configuracion">Editar retiro y envío del comercio</a>
+      </div>
+      <button class="button full" type="submit" ${app.online ? '' : 'disabled'}>Revisar publicación</button>
+      <p class="microcopy">No se publica al instante: primero ves esta revisión y después confirmás.</p>
+    </form>`;
+}
+
 async function loadPublicBusiness(businessId) {
   try {
     return await app.repository.query('business', { businessId });
@@ -625,7 +1202,7 @@ async function loadPublicBusiness(businessId) {
 }
 
 const unavailableBusiness = () => emptyState('Este comercio no está disponible',
-  'Puede estar pausado o en revisión. Mirá los otros comercios de Aluminé.', '#comercios', 'Ver comercios', 'bag');
+  'Puede estar pausado o en revisión. Mirá los otros comercios de Neuquén Capital.', '#comercios', 'Ver comercios', 'bag');
 
 async function viewBusiness(businessId) {
   if (!businessId) return emptyState('Comercio no encontrado', 'Elegí un comercio del listado.');
@@ -769,7 +1346,7 @@ async function viewCart(businessId) {
         ? 'Quitá los productos que ya no están disponibles para ver el total.'
         : 'El total aparece cuando el pedido cumple las condiciones del comercio.'}</p>`}
       ${quote ? `<p class="microcopy">${fulfillment === 'delivery' ? 'Incluye el envío del comercio.' : 'Retirás en el local, sin costo.'}
-        Al enviar, CAUCE vuelve a confirmar precios y disponibilidad.</p>` : ''}
+        Al enviar, MiFav vuelve a confirmar precios y disponibilidad.</p>` : ''}
     </section>
 
     <div class="cart-continue">
@@ -812,8 +1389,8 @@ async function viewCheckout(businessId) {
   const payNote = !isConnected()
     ? 'Los pagos en línea no están habilitados en esta entrega. El pedido y el pago son estados independientes.'
     : onlineMethod
-      ? `El comercio prepara el pedido cuando ${onlineMethod.label} aprueba el pago. CAUCE no ve ni guarda los datos de tu tarjeta.`
-      : 'Se paga directamente al comercio. CAUCE no cobra ni intermedia el pago.';
+      ? `El comercio prepara el pedido cuando ${onlineMethod.label} aprueba el pago. MiFav no ve ni guarda los datos de tu tarjeta.`
+      : 'Se paga directamente al comercio. MiFav no cobra ni intermedia el pago.';
   const delivery = fulfillment === 'delivery';
   let step = 0;
   const stepTitle = (key, text) => `<h2 class="checkout-step-title" id="paso-${key}"><span class="step-number" aria-hidden="true">${++step}</span> ${esc(text)}</h2>`;
@@ -901,7 +1478,7 @@ async function viewCheckout(businessId) {
           <textarea id="checkout-notes" name="notes" rows="2" maxlength="280" placeholder="Por ejemplo: sin cebolla, timbre azul">${esc(stored.notes || '')}</textarea>
         </div>
         <p class="microcopy">${isConnected()
-          ? 'CAUCE confirma precios y disponibilidad al enviar. Si algo cambió, te lo mostramos antes de crear el pedido.'
+          ? 'MiFav confirma precios y disponibilidad al enviar. Si algo cambió, te lo mostramos antes de crear el pedido.'
           : `El importe se recalcula ${isShared() ? 'en el servidor' : 'con el catálogo guardado'} al confirmar.`}</p>
         ${confirmNotice({ online: onlineOffered })}
         <button class="button button-confirm-order full" type="submit" data-online-label="Continuar al pago" data-cash-label="Confirmar pedido"
@@ -1129,7 +1706,7 @@ async function viewAccount() {
           ${hasRole('rider') ? access('#entregas', 'delivery', 'Mis entregas', 'Los pedidos que te asignó el comercio.') : ''}
           ${!feature('taxi') ? '' : hasRole('driver') ? access('#taxista', 'taxi', 'Panel de taxista', 'Disponibilidad y solicitudes.')
             : access('#taxista', 'taxi', 'Registrarme como taxista', 'Completá tu alta.')}
-          ${hasRole('admin') ? access('#admin', 'shield-check', 'Administración', 'Altas, comercios y el día en CAUCE.') : ''}
+          ${hasRole('admin') ? access('#admin', 'shield-check', 'Administración', 'Altas, comercios y el día en MiFav.') : ''}
           ${access('#actividad', 'receipt', 'Mis pedidos', 'Lo que pediste y su estado.')}
         </div>
         <p class="microcopy">Roles: ${esc(actor().roles.map(role => ROLE_LABELS[role] || role).join(' · '))}.</p>
@@ -1172,7 +1749,7 @@ async function viewAccount() {
     ${offlineBanner()}
     ${backLink('#inicio', 'Inicio')}
     <section class="page-header">
-      <h1 class="page-title">Ingresar a CAUCE</h1>
+      <h1 class="page-title">Ingresar a MiFav</h1>
       <p class="quiet">${feature('taxi')
         ? 'Comprar y pedir un taxi no requiere cuenta. La cuenta hace falta para comercios, taxistas y administración.'
         : 'Para comprar no hace falta cuenta. La cuenta es para comercios, su equipo y administración.'}</p>
@@ -1284,7 +1861,7 @@ async function viewRecovery() {
   return `
     <section class="page-header">
       <h1 class="page-title">${app.invited ? 'Elegí tu contraseña' : 'Elegí tu nueva contraseña'}</h1>
-      <p class="quiet">${app.invited ? 'Te invitaron a CAUCE. Con esta contraseña vas a ingresar a partir de ahora. · ' : ''}${esc(actor().email || '')}</p>
+      <p class="quiet">${app.invited ? 'Te invitaron a MiFav. Con esta contraseña vas a ingresar a partir de ahora. · ' : ''}${esc(actor().email || '')}</p>
     </section>
     <form class="checkout-form" data-form="password-recovery" novalidate>
       <div class="field">
@@ -1326,7 +1903,7 @@ async function viewBusinessSignup() {
       </section>
       <section class="brand-intro brand-intro-merchant">
         <div>${renderCharacter('merchant', 128)}</div>
-        <p><strong>Tu vidriera, dentro de CAUCE.</strong><span>Cargá tus datos, fotos y productos. La publicación se activa después de la revisión de CAUCE.</span></p>
+        <p><strong>Tu vidriera, dentro de MiFav.</strong><span>Cargá tus datos, fotos y productos. La publicación se activa después de la revisión de MiFav.</span></p>
       </section>
       <div class="notice"><strong>Primero necesitás una cuenta.</strong> Es la que después usás para gestionar tus pedidos.</div>
       <a class="button full" href="#cuenta">Ingresar o crear cuenta</a>
@@ -1339,7 +1916,7 @@ async function viewBusinessSignup() {
           <li>Solicitás la publicación.</li>
           <li>Administración revisa el alta y la aprueba o la devuelve con observaciones.</li>
         </ol>
-        <p class="microcopy">La aprobación de CAUCE habilita la publicación dentro de la plataforma. No es una habilitación municipal ni reemplaza los permisos que cada comercio necesite.</p>
+        <p class="microcopy">La aprobación de MiFav habilita la publicación dentro de la plataforma. No es una habilitación municipal ni reemplaza los permisos que cada comercio necesite.</p>
       </section>`;
   }
 
@@ -1572,11 +2149,19 @@ function productFields(prefix, product, { connected }) {
     </div>
     ${connected ? `<label class="check-label">
       <input type="checkbox" name="trackStock" ${tracked ? 'checked' : ''}>
-      <span>Controlar stock: CAUCE descuenta cada venta y deja de vender en cero. Si no lo marcás, el producto se vende mientras esté disponible y lo marcás agotado a mano.</span>
+      <span>Controlar stock: MiFav descuenta cada venta y deja de vender en cero. Si no lo marcás, el producto se vende mientras esté disponible y lo marcás agotado a mano.</span>
     </label>` : ''}
     <div class="field">
       <label for="${prefix}-category">Categoría</label>
       <input id="${prefix}-category" name="category" type="text" required maxlength="40" list="categorias" value="${esc(product?.category || 'Otros')}">
+    </div>
+    <div class="field">
+      <label for="${prefix}-condition">Condición</label>
+      <select id="${prefix}-condition" name="condition" required>
+        ${Object.entries(PRODUCT_CONDITIONS).map(([code, label]) => `<option value="${esc(code)}"
+          ${normalizeProductCondition(product?.condition) === code ? 'selected' : ''}>${esc(label)}</option>`).join('')}
+      </select>
+      <p class="microcopy">Se muestra en la ficha pública. Un artículo usado tiene que describir su estado.</p>
     </div>
     <div class="field">
       <label for="${prefix}-variants">Variantes (opcional)</label>
@@ -1777,9 +2362,9 @@ function merchantDataTab(business, missing, categories = []) {
           <input id="b-owner" name="ownerName" type="text" maxlength="80" value="${esc(business.ownerName || '')}" ${disabled}>
         </div>
         <div class="field">
-          <label for="b-phone">Teléfono de contacto con CAUCE</label>
+          <label for="b-phone">Teléfono de contacto con MiFav</label>
           <input id="b-phone" name="contactPhone" type="tel" inputmode="tel" value="${esc(business.contactPhone || '')}" ${disabled}>
-          ${connected ? '<p class="microcopy">Privado: sólo lo ve administración de CAUCE.</p>' : ''}
+          ${connected ? '<p class="microcopy">Privado: sólo lo ve administración de MiFav.</p>' : ''}
         </div>
         ${connected ? `<div class="field-row">
           <div class="field">
@@ -1819,7 +2404,7 @@ function merchantDataTab(business, missing, categories = []) {
         <div class="field">
           <label for="b-zone">Zona de envío</label>
           <input id="b-zone" name="deliveryZone" type="text" maxlength="80" value="${esc(business.deliveryZone || '')}"
-            placeholder="Casco urbano de Aluminé" ${disabled}>
+            placeholder="Neuquén Capital y zonas de reparto" ${disabled}>
         </div>
         <div class="field-row">
           <div class="field">
@@ -1855,7 +2440,7 @@ function merchantDataTab(business, missing, categories = []) {
 
     ${media ? `<section class="panel-section">
       <h2 class="checkout-section-title">Imagen del comercio</h2>
-      <p class="quiet">Las imágenes se guardan en CAUCE, dentro de la carpeta de tu comercio. Nadie más puede escribir ahí.</p>
+      <p class="quiet">Las imágenes se guardan en MiFav, dentro de la carpeta de tu comercio. Nadie más puede escribir ahí.</p>
       <form class="checkout-form" data-form="business-media" data-business="${esc(business.id)}" data-slot="logo">
         ${mediaField('biz-logo', 'Logo', business.logo, 'Cuadrada, JPEG, PNG o WebP, hasta 5 MB.')}
         <div class="modal-actions">
@@ -1887,11 +2472,11 @@ function merchantDataTab(business, missing, categories = []) {
       ${business.status === 'active' ? `
         <button class="button secondary full" type="button" data-action="business-status"
           data-business="${esc(business.id)}" data-status="paused">Pausar el comercio</button>
-        <p class="microcopy">Pausado no aparece en CAUCE ni recibe pedidos. Para un día sin atención alcanza con “Cerrar atención”.</p>` : ''}
+        <p class="microcopy">Pausado no aparece en MiFav ni recibe pedidos. Para un día sin atención alcanza con “Cerrar atención”.</p>` : ''}
       ${business.status === 'paused' ? `
         <button class="button full" type="button" data-action="business-status"
           data-business="${esc(business.id)}" data-status="active">Reactivar el comercio</button>` : ''}
-      <p class="microcopy">La aprobación de CAUCE habilita la publicación dentro de la plataforma. No constituye una habilitación municipal ni reemplaza los permisos que cada comercio deba tener.</p>
+      <p class="microcopy">La aprobación de MiFav habilita la publicación dentro de la plataforma. No constituye una habilitación municipal ni reemplaza los permisos que cada comercio deba tener.</p>
     </section>`;
 }
 
@@ -1901,8 +2486,8 @@ function merchantRidersTab(business, riders, accounts = {}) {
   return `
     <section class="panel-section">
       <h2 class="checkout-section-title">Reparto del comercio</h2>
-      <p class="quiet">Cada comercio administra su propio reparto. CAUCE no opera una flota.</p>
-      ${connected ? `<p class="microcopy">Con una cuenta de CAUCE vinculada, la persona ve en su teléfono (Mis entregas) sólo los
+      <p class="quiet">Cada comercio administra su propio reparto. MiFav no opera una flota.</p>
+      ${connected ? `<p class="microcopy">Con una cuenta de MiFav vinculada, la persona ve en su teléfono (Mis entregas) sólo los
         pedidos que le asignes: marca retiro, salida y llegada, y entrega con el código del cliente. Sin cuenta, seguís marcando
         cada paso desde acá.</p>` : ''}
       ${riders.length ? `<ul class="plain-list rider-list">${riders.map(rider => `
@@ -1919,7 +2504,7 @@ function merchantRidersTab(business, riders, accounts = {}) {
           ${connected && !rider.linked && rider.active !== false ? `<form class="inline-form rider-link" data-form="rider-link" data-rider="${esc(rider.id)}">
             <label class="visually-hidden" for="rider-link-${esc(rider.id)}">Correo de la cuenta de ${esc(rider.name)}</label>
             <input id="rider-link-${esc(rider.id)}" name="email" type="email" inputmode="email" autocomplete="off" required
-              maxlength="254" placeholder="Correo de su cuenta de CAUCE">
+              maxlength="254" placeholder="Correo de su cuenta de MiFav">
             <button class="button secondary" type="submit" ${disabled}>Vincular cuenta</button>
           </form>` : ''}</li>`).join('')}</ul>`
         : '<p class="quiet">Todavía no cargaste personas de reparto. Si repartís vos, cargate con tu nombre.</p>'}
@@ -1945,7 +2530,7 @@ async function viewRider() {
   if (!isConnected()) {
     return `${backLink('#inicio', 'Inicio')}
       <section class="page-header"><h1 class="page-title">Mis entregas</h1></section>
-      <div class="notice">Las entregas desde el teléfono funcionan con CAUCE conectado. En esta demostración el comercio
+      <div class="notice">Las entregas desde el teléfono funcionan con MiFav conectado. En esta demostración el comercio
         marca cada paso desde su panel.</div>`;
   }
   if (!isSignedIn()) {
@@ -2122,14 +2707,14 @@ async function viewTaxi() {
         <div class="field">
           <label for="taxi-origin">Desde</label>
           <input id="taxi-origin" name="origin" type="text" required minlength="3" maxlength="120"
-            placeholder="Dirección o lugar de Aluminé" value="${esc(stored.origin || '')}">
+            placeholder="Dirección o lugar de Neuquén Capital" value="${esc(stored.origin || '')}">
           <button class="link-button" type="button" data-action="use-location">Usar mi ubicación (opcional)</button>
           <p class="microcopy">Podés escribir la dirección a mano. La ubicación del teléfono es opcional y sólo se pide si la tocás.</p>
         </div>
         <div class="field">
           <label for="taxi-destination">Hasta</label>
           <input id="taxi-destination" name="destination" type="text" required minlength="3" maxlength="120"
-            placeholder="Dirección o lugar de Aluminé" value="${esc(stored.destination || '')}">
+            placeholder="Dirección o lugar de Neuquén Capital" value="${esc(stored.destination || '')}">
         </div>
         <div class="field">
           <label for="taxi-note">Referencia (opcional)</label>
@@ -2162,8 +2747,8 @@ async function viewTaxi() {
 
       <section class="checkout-section">
         <h2 class="checkout-section-title">Tarifa y tiempos</h2>
-        <p class="quiet">La tarifa y el tiempo de llegada se coordinan con el conductor. CAUCE no publica tarifas ni estimaciones de llegada:
-          todavía no hay un cuadro tarifario ni datos de operación validados en Aluminé.</p>
+        <p class="quiet">La tarifa y el tiempo de llegada se coordinan con el conductor. MiFav no publica tarifas ni estimaciones de llegada:
+          todavía no hay un cuadro tarifario ni datos de operación validados en Neuquén Capital.</p>
       </section>
 
       ${confirmNotice()}
@@ -2276,7 +2861,7 @@ async function viewDriver() {
       <section class="checkout-section">
         <h2 class="checkout-section-title">Qué falta para operar de verdad</h2>
         <p class="quiet">La activación de viajes reales queda condicionada a validar la habilitación municipal del servicio,
-          los seguros, el cuadro tarifario y las condiciones de operación. CAUCE todavía no verifica ninguno de esos requisitos.</p>
+          los seguros, el cuadro tarifario y las condiciones de operación. MiFav todavía no verifica ninguno de esos requisitos.</p>
       </section>`;
   }
 
@@ -2312,7 +2897,7 @@ async function viewDriver() {
           <label for="d-phone">Teléfono de contacto</label>
           <input id="d-phone" name="phone" type="tel" required inputmode="tel" value="${esc(driver?.phone || actor().phone || '')}">
         </div>
-        <p class="microcopy">La aprobación en CAUCE habilita el uso de la plataforma en el piloto. No acredita habilitación municipal,
+        <p class="microcopy">La aprobación en MiFav habilita el uso de la plataforma en el piloto. No acredita habilitación municipal,
           seguro ni cuadro tarifario: esos requisitos siguen pendientes de validación.</p>
         <button class="button full" type="submit" ${app.online ? '' : 'disabled'}>Enviar solicitud</button>
       </form>`;
@@ -2414,39 +2999,44 @@ async function viewInstitutionalConnected() {
   return `
     ${backLink('#inicio', 'Inicio')}
     <section class="page-header">
-      <span class="eyebrow">CAUCE · ALUMINÉ</span>
-      <h1 class="page-title">Qué es CAUCE</h1>
-      <p class="quiet">Una plataforma local para que los comercios de Aluminé reciban pedidos en línea
-        y los vecinos compren fácil, con trato directo con cada comercio.</p>
+      <span class="eyebrow">MIFAV · NEUQUÉN CAPITAL</span>
+      <h1 class="page-title">Qué es MiFav</h1>
+      <p class="quiet">El marketplace de Neuquén Capital para comprar y vender productos nuevos y usados
+        de comercios y emprendimientos locales, con trato directo con cada vendedor.</p>
     </section>
     <section class="checkout-section">
       <h2 class="checkout-section-title">Para quienes compran</h2>
       <ul class="plain-list">
-        <li>Elegís un comercio, armás tu pedido y lo confirmás sin crear una cuenta.</li>
-        <li>Retirás en el local o lo recibís con el reparto del propio comercio.</li>
-        <li>Pagás directamente al comercio, al retirar o al recibir. CAUCE no cobra nada.</li>
-        <li>Seguís el estado del pedido en vivo y guardás un enlace para verlo desde cualquier lugar.</li>
+        <li>Buscás por producto, rubro o tienda y filtrás por condición, retiro o envío.</li>
+        <li>Podés guardar favoritos en este navegador, sin crear una cuenta.</li>
+        <li>El retiro y el envío los coordina cada vendedor. MiFav no inventa costos ni tiempos.</li>
+        <li>Pagás directamente al vendedor, al retirar o al recibir. MiFav no cobra nada.</li>
+        <li>Si el comercio lo habilita, podés contactarlo por WhatsApp desde la ficha.</li>
       </ul>
     </section>
     <section class="checkout-section">
       <h2 class="checkout-section-title">Para los comercios</h2>
       <ul class="plain-list">
-        <li>Cargás tus datos, horarios y catálogo; CAUCE revisa el alta antes de publicarla.</li>
+        <li>Creás tu cuenta, completás los datos del comercio y solicitás la revisión del alta.</li>
+        <li>Cargás productos con foto, precio, condición y disponibilidad desde el panel.</li>
         <li>Recibís los pedidos en un panel que funciona en el celular, con aviso sonoro.</li>
-        <li>Sumás a tu equipo con distintos permisos y administrás tu propio reparto.</li>
+        <li>Administrás tu propio reparto y sumás a tu equipo con distintos permisos.</li>
       </ul>
-      <a class="button full" href="#alta-comercio">Sumar mi comercio</a>
+      <div class="notice"><strong>La publicación de un comercio nuevo pasa por revisión administrativa.</strong>
+        No prometemos publicación instantánea: la vidriera se activa cuando el alta está aprobada.</div>
+      <a class="button full" href="#publicar">Publicar un producto</a>
     </section>
     <section class="checkout-section">
       <h2 class="checkout-section-title">Responsabilidades</h2>
       <ul class="plain-list">
-        <li><strong>LUNA</strong> desarrolla y opera la plataforma y revisa las altas dentro de CAUCE.</li>
-        <li><strong>Cada comercio</strong> responde por sus precios, su stock, la preparación, su reparto y las habilitaciones de su actividad.</li>
-        <li>La aprobación de CAUCE habilita la publicación en la plataforma; no reemplaza permisos municipales.</li>
+        <li><strong>LUNA</strong> desarrolla y opera la plataforma y revisa las altas dentro de MiFav.</li>
+        <li><strong>Cada vendedor</strong> responde por sus precios, su stock, la preparación, su reparto y las habilitaciones de su actividad.</li>
+        <li>La aprobación de MiFav habilita la publicación en la plataforma; no es una habilitación municipal ni reemplaza los permisos que cada comercio necesite.</li>
+        <li>El servicio de taxi de MiFav sigue disponible como vertical aparte y conserva sus propias condiciones.</li>
       </ul>
     </section>
     <section class="checkout-section">
-      <h2 class="checkout-section-title">Hoy en CAUCE</h2>
+      <h2 class="checkout-section-title">Hoy en MiFav</h2>
       <dl class="metrics-grid">
         <div class="metric"><dt>Comercios publicados</dt><dd>${counts.activeBusinesses}</dd></div>
         <div class="metric"><dt>Productos disponibles</dt><dd>${counts.products}</dd></div>
@@ -2460,37 +3050,37 @@ async function viewInstitutional() {
   return `
     ${backLink('#inicio', 'Inicio')}
     <section class="page-header">
-      <span class="eyebrow">CAUCE · ALUMINÉ</span>
-      <h1 class="page-title">Qué es CAUCE y qué propone</h1>
-      <p class="quiet">Plataforma local de LUNA para comercio y movilidad en Aluminé.
+      <span class="eyebrow">MIFAV · NEUQUÉN CAPITAL</span>
+      <h1 class="page-title">Qué es MiFav y qué propone</h1>
+      <p class="quiet">Marketplace local de LUNA para comercios y emprendimientos de Neuquén Capital.
         Este documento describe una propuesta: no hay convenio firmado ni prestadores incorporados.</p>
     </section>
 
     <section class="checkout-section">
       <h2 class="checkout-section-title">Qué permite hacer hoy</h2>
       <ul class="plain-list">
+        <li>Que una persona busque productos nuevos y usados por rubro, tienda y modalidad de entrega.</li>
         <li>Que un comercio se dé de alta, cargue su catálogo y solicite la publicación.</li>
         <li>Que administración revise cada alta y la apruebe o la devuelva con observaciones.</li>
-        <li>Que una persona compre con retiro en el comercio o con envío del propio comercio.</li>
-        <li>Que el comercio gestione sus pedidos y asigne su reparto.</li>
-        <li>Que una persona solicite un taxi y un conductor habilitado lo acepte.</li>
+        <li>Que una persona compre con retiro en el comercio o con envío coordinado con el vendedor.</li>
+        <li>Que el comercio gestione sus pedidos y asigne su propio reparto.</li>
       </ul>
     </section>
 
     <section class="checkout-section">
-      <h2 class="checkout-section-title">Cómo se incorpora un prestador</h2>
+      <h2 class="checkout-section-title">Cómo se incorpora un vendedor</h2>
       <ol class="steps-list">
         <li><strong>Comercio:</strong> crea su cuenta, completa datos y modalidades de entrega, carga su catálogo y solicita la publicación. La revisión es administrativa y queda registrada.</li>
-        <li><strong>Taxista:</strong> crea su cuenta, declara vehículo y patente y envía su alta. Recibe solicitudes recién cuando es aprobado y se marca disponible.</li>
+        <li><strong>Feria:</strong> la participación y el operativo de retiro los confirma la organización. Hasta entonces no publicamos fechas, ubicaciones ni imágenes de evento.</li>
       </ol>
     </section>
 
     <section class="checkout-section">
       <h2 class="checkout-section-title">Responsabilidades</h2>
       <ul class="plain-list">
-        <li><strong>LUNA:</strong> desarrolla y opera la plataforma, revisa las altas dentro de CAUCE, y sostiene el soporte técnico del piloto.</li>
-        <li><strong>Comercios:</strong> responden por sus precios, su stock, la preparación, su reparto y las habilitaciones que su actividad requiera.</li>
-        <li><strong>Taxistas:</strong> responden por la habilitación del servicio, el seguro, el vehículo y la tarifa que acuerden con la persona pasajera.</li>
+        <li><strong>LUNA:</strong> desarrolla y opera la plataforma, revisa las altas dentro de MiFav, y sostiene el soporte técnico del piloto.</li>
+        <li><strong>Comercios y emprendimientos:</strong> responden por sus precios, su stock, la descripción del estado de cada artículo usado, su reparto y las habilitaciones que su actividad requiera.</li>
+        <li><strong>Taxistas de MiFav:</strong> responden por la habilitación, seguros y tarifa del servicio de taxi, que se mantiene como vertical aparte.</li>
         <li><strong>Municipio:</strong> el acompañamiento institucional es lo que se propone evaluar. No hay adhesión ni aval otorgado.</li>
       </ul>
     </section>
@@ -2498,16 +3088,15 @@ async function viewInstitutional() {
     <section class="checkout-section">
       <h2 class="checkout-section-title">Propuesta de piloto de 90 días</h2>
       <ol class="steps-list">
-        <li><strong>Días 1 a 30:</strong> incorporación de un grupo reducido de comercios y conductores, con acompañamiento en la carga de catálogos.</li>
+        <li><strong>Días 1 a 30:</strong> incorporación de un grupo reducido de comercios y emprendimientos, con acompañamiento en la carga de catálogos.</li>
         <li><strong>Días 31 a 60:</strong> operación abierta al público con seguimiento semanal de incidencias.</li>
         <li><strong>Días 61 a 90:</strong> evaluación, ajustes y decisión sobre la continuidad.</li>
       </ol>
       <h3 class="checkout-section-title">Qué se mediría</h3>
       <ul class="plain-list">
         <li>Comercios que completan el alta y llegan a publicar.</li>
+        <li>Productos publicados, favoritos guardados y búsquedas sin resultado.</li>
         <li>Pedidos confirmados, entregados, rechazados y cancelados, por modalidad.</li>
-        <li>Solicitudes de taxi, aceptadas, vencidas y sin disponibilidad.</li>
-        <li>Tiempo entre la solicitud y la respuesta del prestador.</li>
         <li>Incidencias reportadas por comercios y por personas usuarias.</li>
       </ul>
       <p class="microcopy">Todas esas métricas salen de operaciones efectivamente registradas en la plataforma. No se publican proyecciones de ventas.</p>
@@ -2517,10 +3106,10 @@ async function viewInstitutional() {
       <h2 class="checkout-section-title">Qué falta para un piloto real</h2>
       <ul class="plain-list">
         <li>Backend gestionado con copias de resguardo y recuperación ante fallos. Hoy el entorno compartido es un servidor local de desarrollo.</li>
-        <li>Verificación de identidad de comercios y conductores, y validación de habilitaciones, seguros y cuadro tarifario del servicio de taxis.</li>
+        <li>Verificación de identidad de comercios y validación de habilitaciones cuando la actividad lo requiera.</li>
         <li>Definición de pagos. Los cobros en línea están deshabilitados en esta entrega.</li>
-        <li>Carga de fotografías propias por parte de cada comercio.</li>
-        <li>Notificaciones a prestadores y personas usuarias.</li>
+        <li>Moderación de productos además del alta del comercio.</li>
+        <li>Notificaciones a vendedores y personas usuarias.</li>
         <li>Acuerdo escrito de roles, datos personales y soporte.</li>
       </ul>
     </section>
@@ -2531,10 +3120,9 @@ async function viewInstitutional() {
         <div class="metric"><dt>Comercios publicados</dt><dd>${counts.activeBusinesses}</dd></div>
         <div class="metric"><dt>Productos disponibles</dt><dd>${counts.products}</dd></div>
         <div class="metric"><dt>Pedidos registrados</dt><dd>${counts.orders}</dd></div>
-        <div class="metric"><dt>Viajes registrados</dt><dd>${counts.trips}</dd></div>
       </dl>
       <p class="microcopy">Son los datos de ${isShared() ? 'este entorno de pruebas' : 'este navegador'}.
-        Los comercios de ejemplo son ficticios y fueron preparados para la demostración: no representan negocios reales de Aluminé ni implican su adhesión.</p>
+        Los comercios y productos de ejemplo son ficticios y fueron preparados para la demostración: no representan negocios reales de Neuquén Capital ni implican su adhesión.</p>
     </section>`;
 }
 
@@ -2587,7 +3175,7 @@ async function withBusy(element, operation) {
     await operation();
   } catch (error) {
     if (isNetworkError(error)) {
-      toast('Sin conexión con CAUCE. No se envió nada: reintentá cuando vuelva.', 'error');
+      toast('Sin conexión con MiFav. No se envió nada: reintentá cuando vuelva.', 'error');
     } else {
       toast(userMessage(error), 'error');
       markFieldError(element.closest?.('form'), error);
@@ -2625,6 +3213,7 @@ const ACTIONS = {
   },
   'set-category'(element) {
     app.search.category = element.dataset.category;
+    app.search.shown = PRODUCT_PAGE_SIZE;
     // Los chips del inicio llevan al listado con el rubro elegido.
     if (route().page !== 'comercios') { go('#comercios'); return undefined; }
     return render();
@@ -2634,11 +3223,76 @@ const ACTIONS = {
     const key = element.dataset.filter;
     if (key === 'open') app.search.onlyOpen = !app.search.onlyOpen;
     else app.search.mode = app.search.mode === key ? '' : key;
+    app.search.shown = PRODUCT_PAGE_SIZE;
     if (route().page !== 'comercios') { go('#comercios'); return undefined; }
     return render();
   },
+  'show-more-products'() {
+    app.search.shown = Math.max(PRODUCT_PAGE_SIZE, Number(app.search.shown) || PRODUCT_PAGE_SIZE)
+      + PRODUCT_PAGE_SIZE;
+    return render();
+  },
   'clear-filters'() {
-    app.search = { query: '', category: 'Todos', onlyOpen: false, mode: '' };
+    app.search = {
+      query: '', category: 'Todos', onlyOpen: false, mode: '', condition: '',
+      locality: '', sort: 'relevance', shown: PRODUCT_PAGE_SIZE,
+    };
+    return render();
+  },
+  // Favoritos locales: se guarda el par tienda/producto, nunca datos del vendedor.
+  'toggle-favorite'(element) {
+    const { business, product } = element.dataset;
+    try {
+      const result = toggleFavorite(favoriteStorage, business, product);
+      favoriteCache = result.favorites;
+      toast(result.active ? 'Guardado en favoritos.' : 'Quitado de favoritos.');
+      return render();
+    } catch (error) {
+      toast(userMessage(error), 'error');
+      return undefined;
+    }
+  },
+  'set-condition'(element) {
+    const value = element.dataset.condition || '';
+    app.search.condition = app.search.condition === value ? '' : value;
+    app.search.shown = PRODUCT_PAGE_SIZE;
+    if (route().page !== 'comercios') { go('#comercios'); return undefined; }
+    return render();
+  },
+  'set-locality'(element) {
+    const value = element.dataset.locality || '';
+    app.search.locality = app.search.locality === value ? '' : value;
+    app.search.shown = PRODUCT_PAGE_SIZE;
+    if (route().page !== 'comercios') { go('#comercios'); return undefined; }
+    return render();
+  },
+  'sort-products'(element) {
+    app.search.sort = element.dataset.sort || 'relevance';
+    return render();
+  },
+  async 'publish-confirm'() {
+    const draft = app.publishReview;
+    if (!draft) { toast('El borrador ya no está disponible. Volvé a cargarlo.', 'error'); return render(); }
+    try {
+      const product = await runCommand('product.create', {
+        businessId: draft.businessId,
+        product: {
+          name: draft.name, description: draft.description, category: draft.category,
+          condition: draft.condition, price: draft.price, stock: draft.stock,
+          trackStock: draft.trackStock, available: draft.available,
+        },
+        image: isConnected() ? draft.file : draft.imageData,
+      });
+      app.publishReview = null;
+      toast('Publicación guardada. La ves en tu tienda.');
+      go(`#producto/${encodeURIComponent(draft.businessId)}/${encodeURIComponent(product.id)}`);
+      await render({ focus: true });
+    } catch (error) {
+      toast(userMessage(error), 'error');
+    }
+  },
+  'publish-cancel'() {
+    app.publishReview = null;
     return render();
   },
   // Retiro o envío desde el carrito: cambia el total a la vista y queda
@@ -2733,7 +3387,8 @@ const ACTIONS = {
     await app.repository.signInAsDemoIdentity(element.dataset.identity);
     app.session = await app.repository.session();
     toast(`Entraste como ${actor().name}.`);
-    go('#actividad');
+    const target = element.dataset.return || '#actividad';
+    go(target);
     await render({ focus: true });
   },
   async 'sign-out'() {
@@ -2749,17 +3404,17 @@ const ACTIONS = {
     await render();
   },
   async 'business-status'(element) {
-    // Pausar saca el comercio de CAUCE: se confirma. Reactivar, no.
+    // Pausar saca el comercio de MiFav: se confirma. Reactivar, no.
     if (element.dataset.status === 'paused') {
       const confirmed = await askConfirm({
         title: '¿Pausar el comercio?',
-        message: 'No aparece en CAUCE ni recibe pedidos hasta que lo reactives. Para un rato o un día sin atención alcanza con “Cerrar atención”.',
+        message: 'No aparece en MiFav ni recibe pedidos hasta que lo reactives. Para un rato o un día sin atención alcanza con “Cerrar atención”.',
         confirmLabel: 'Pausar', cancelLabel: 'Volver',
       });
       if (!confirmed) return;
     }
     await runCommand('business.setStatus', { businessId: element.dataset.business, status: element.dataset.status });
-    toast(element.dataset.status === 'paused' ? 'Comercio pausado: no aparece en CAUCE.' : 'Comercio activo otra vez.');
+    toast(element.dataset.status === 'paused' ? 'Comercio pausado: no aparece en MiFav.' : 'Comercio activo otra vez.');
     await render();
   },
   async 'toggle-open'(element) {
@@ -2875,7 +3530,7 @@ const ACTIONS = {
   },
   async 'share-tracking'(element) {
     try {
-      await navigator.share({ title: `Pedido ${element.dataset.code} · CAUCE`, url: element.dataset.url });
+      await navigator.share({ title: `Pedido ${element.dataset.code} · MiFav`, url: element.dataset.url });
     } catch { /* compartir cancelado */ }
   },
   async 'refresh-panel'() {
@@ -2917,7 +3572,7 @@ const ACTIONS = {
       note = await askReason({ title: `Suspender ${name}`, message: 'Deja de aparecer y de recibir pedidos. El comercio ve el motivo.',
         label: 'Motivo', confirmLabel: 'Suspender' });
       if (note === null) return;
-    } else if (!await askConfirm({ title: `Rehabilitar ${name}`, message: 'Vuelve a aparecer en CAUCE.', confirmLabel: 'Rehabilitar', danger: false })) {
+    } else if (!await askConfirm({ title: `Rehabilitar ${name}`, message: 'Vuelve a aparecer en MiFav.', confirmLabel: 'Rehabilitar', danger: false })) {
       return;
     }
     await runCommand('admin.setBusinessStatus', { businessId: business, status, note });
@@ -3017,11 +3672,36 @@ const FORMS = {
   },
   search(form) {
     app.search.query = String(new FormData(form).get('query') || '');
+    app.search.shown = PRODUCT_PAGE_SIZE;
     return render();
   },
   'home-search'(form) {
     app.search.query = String(new FormData(form).get('query') || '').trim();
+    app.search.shown = PRODUCT_PAGE_SIZE;
     go('#comercios');
+  },
+  async 'publish-review'(form) {
+    const data = Object.fromEntries(new FormData(form));
+    const file = form.querySelector('input[type="file"][name="image"]')?.files?.[0] || null;
+    let normalized;
+    try {
+      normalized = validateProductInput({
+        name: data.name, description: data.description || '', category: data.category,
+        condition: data.condition, price: Number(data.price), stock: Number(data.stock || 0),
+        available: data.available === 'on',
+      }, { partial: false });
+      const image = file && file.size ? await publishImageData(file) : { data: '', file: null };
+      app.publishReview = {
+        businessId: String(data.business || ''),
+        ...normalized,
+        trackStock: true,
+        imageData: validateImageData(image.data),
+        file: image.file,
+      };
+      await render({ focus: true });
+    } catch (error) {
+      toast(userMessage(error), 'error');
+    }
   },
 
   async 'sign-in'(form) {
@@ -3127,7 +3807,7 @@ const FORMS = {
     const connected = isConnected();
     const trackStock = connected ? data.trackStock === 'on' : true;
     const patch = { name: data.name, description: data.description || '', category: data.category,
-      price: Number(data.price), variants: parseVariants(data.variants) };
+      condition: data.condition, price: Number(data.price), variants: parseVariants(data.variants) };
     if (connected) patch.trackStock = trackStock;
     if (trackStock) patch.stock = Number(data.stock || 0);
     await runCommand('product.update', { businessId: form.dataset.business, productId: form.dataset.product, patch });
@@ -3157,7 +3837,7 @@ const FORMS = {
     await runCommand('product.create', {
       businessId: form.dataset.business,
       product: {
-        name: data.name, description: data.description, category: data.category,
+        name: data.name, description: data.description, category: data.category, condition: data.condition,
         price: Number(data.price), stock: trackStock ? Number(data.stock || 0) : 0, trackStock, available: true,
         variants: parseVariants(data.variants),
       },
@@ -3341,6 +4021,10 @@ const VIEWS = {
   inicio: viewHome,
   comercios: viewBusinesses,
   comercio: viewBusiness,
+  producto: viewProduct,
+  favoritos: viewFavorites,
+  ferias: viewFerias,
+  publicar: viewPublish,
   carrito: viewCarts,
   pedido: viewOrder,
   actividad: viewActivity,
@@ -3360,19 +4044,21 @@ const VIEWS = {
 
 // Títulos por ruta y rutas que nunca se indexan (paneles y datos personales).
 const ROUTE_TITLES = Object.freeze({
-  inicio: 'CAUCE · Aluminé', comercios: 'Comercios · CAUCE', carrito: 'Carrito · CAUCE', pedido: 'Tu pedido · CAUCE',
-  actividad: 'Mis pedidos · CAUCE', cuenta: 'Tu cuenta · CAUCE', 'alta-comercio': 'Sumar mi comercio · CAUCE',
-  panel: 'Panel del comercio · CAUCE', admin: 'Administración · CAUCE', institucional: 'Qué es CAUCE',
-  recuperar: 'Recuperar contraseña · CAUCE', seguimiento: 'Seguimiento de pedido · CAUCE',
-  entregas: 'Mis entregas · CAUCE', pago: 'Pago · CAUCE',
+  inicio: 'MiFav · Marketplace de Neuquén Capital', comercios: 'Explorar · MiFav', producto: 'Producto · MiFav',
+  favoritos: 'Favoritos · MiFav', ferias: 'Ferias · MiFav', publicar: 'Publicar · MiFav',
+  carrito: 'Carrito · MiFav', pedido: 'Tu pedido · MiFav',
+  actividad: 'Mis pedidos · MiFav', cuenta: 'Tu cuenta · MiFav', 'alta-comercio': 'Sumar mi comercio · MiFav',
+  panel: 'Panel del comercio · MiFav', admin: 'Administración · MiFav', institucional: 'Qué es MiFav',
+  recuperar: 'Recuperar contraseña · MiFav', seguimiento: 'Seguimiento de pedido · MiFav',
+  entregas: 'Mis entregas · MiFav', pago: 'Pago · MiFav', taxi: 'Taxi · MiFav',
 });
 const PRIVATE_ROUTES = new Set(['carrito', 'pedido', 'actividad', 'cuenta', 'alta-comercio', 'panel', 'admin',
-  'recuperar', 'seguimiento', 'taxista', 'viaje', 'entregas', 'pago']);
+  'recuperar', 'seguimiento', 'taxista', 'viaje', 'entregas', 'pago', 'publicar', 'favoritos']);
 const TAXI_ROUTES = new Set(['taxi', 'viaje', 'taxista']);
 
 function applyRouteMeta(page) {
   if (typeof document === 'undefined') return;
-  const title = ROUTE_TITLES[page] || 'CAUCE · Aluminé';
+  const title = ROUTE_TITLES[page] || 'MiFav · Marketplace de Neuquén Capital';
   setBaseTitle(title);
   if (!/^\(\d+\) Pedido nuevo · /.test(document.title) || page !== 'panel') document.title = title;
   let robots = /** @type {HTMLMetaElement|null} */ (document.querySelector('meta[name="robots"]'));
@@ -3500,7 +4186,7 @@ async function render({ focus = false, background = false } = {}) {
   busy.navigating = false;
   if (!app.repository) return;
   const token = ++renderToken;
-  const { page, param } = route();
+  const { page, param, extra } = route();
   // Ocupada desde el primer instante: mientras se revalida la sesión la vista
   // todavía es la anterior y está por reemplazarse.
   busy.rendering = true;
@@ -3519,10 +4205,10 @@ async function render({ focus = false, background = false } = {}) {
   applyRouteMeta(page);
   try {
     const markup = TAXI_ROUTES.has(page) && !feature('taxi')
-      ? emptyState('Sección no disponible', 'Por ahora CAUCE funciona para comercios de Aluminé. Esta sección no está habilitada.',
+      ? emptyState('Sección no disponible', 'Por ahora MiFav funciona para comercios de Neuquén Capital. Esta sección no está habilitada.',
         '#comercios', 'Ver comercios', 'bag')
       : view
-      ? await view(param)
+      ? await view(param, extra)
       : emptyState('Página no encontrada', 'Volvé al inicio para seguir navegando.', '#inicio', 'Ir al inicio');
     if (token !== renderToken) return;
     // Un refresco de fondo arranca sólo si nadie está escribiendo, pero la
@@ -3731,10 +4417,10 @@ function fatalView(title, message, { retry = true } = {}) {
 async function start() {
   main.setAttribute('aria-busy', 'true');
   // Un panel dentro de un iframe ajeno es un vector de clickjacking y GitHub
-  // Pages no permite la cabecera frame-ancestors: CAUCE no se dibuja embebido.
+  // Pages no permite la cabecera frame-ancestors: MiFav no se dibuja embebido.
   if (window.top !== window.self) {
-    main.innerHTML = `<section class="notice"><h2>Abrí CAUCE en su propia ventana</h2>
-      <p><a class="button" href="${esc(location.href)}" target="_top" rel="noopener">Abrir CAUCE</a></p></section>`;
+    main.innerHTML = `<section class="notice"><h2>Abrí MiFav en su propia ventana</h2>
+      <p><a class="button" href="${esc(location.href)}" target="_top" rel="noopener">Abrir MiFav</a></p></section>`;
     main.setAttribute('aria-busy', 'false');
     return;
   }
@@ -3761,7 +4447,7 @@ async function start() {
     });
   } catch (error) {
     app.telemetry.critical(error, { where: 'config' });
-    main.innerHTML = fatalView('CAUCE no pudo iniciar', 'La configuración de esta versión no es válida. Avisanos para revisarla.', { retry: false });
+    main.innerHTML = fatalView('MiFav no pudo iniciar', 'La configuración de esta versión no es válida. Avisanos para revisarla.', { retry: false });
     main.setAttribute('aria-busy', 'false');
     return;
   }
@@ -3774,15 +4460,15 @@ async function start() {
       status = await app.repository.query('appStatus');
     } catch (error) {
       main.innerHTML = isNetworkError(error)
-        ? fatalView('Sin conexión con CAUCE', 'Revisá tu conexión a internet y volvé a intentar.')
-        : fatalView('CAUCE está en mantenimiento', 'Estamos actualizando la plataforma. Probá de nuevo en unos minutos.');
+        ? fatalView('Sin conexión con MiFav', 'Revisá tu conexión a internet y volvé a intentar.')
+        : fatalView('MiFav está en mantenimiento', 'Estamos actualizando la plataforma. Probá de nuevo en unos minutos.');
       if (!isNetworkError(error)) app.telemetry.critical(error, { where: 'app_status' });
       main.setAttribute('aria-busy', 'false');
       return;
     }
     if (!(Number(status?.schema) >= REQUIRED_SCHEMA)) {
       app.telemetry.critical({ code: 'SCHEMA_MISMATCH', message: `Esquema ${status?.schema} < ${REQUIRED_SCHEMA}` });
-      main.innerHTML = fatalView('CAUCE está en mantenimiento', 'Estamos actualizando la plataforma. Probá de nuevo en unos minutos.');
+      main.innerHTML = fatalView('MiFav está en mantenimiento', 'Estamos actualizando la plataforma. Probá de nuevo en unos minutos.');
       main.setAttribute('aria-busy', 'false');
       return;
     }
@@ -3823,7 +4509,7 @@ async function start() {
     }
     app.session = await app.repository.session({ verify: true });
   } catch (error) {
-    main.innerHTML = fatalView(isNetworkError(error) ? 'Sin conexión con CAUCE' : 'No pudimos abrir tu sesión',
+    main.innerHTML = fatalView(isNetworkError(error) ? 'Sin conexión con MiFav' : 'No pudimos abrir tu sesión',
       userMessage(error));
     main.setAttribute('aria-busy', 'false');
     return;

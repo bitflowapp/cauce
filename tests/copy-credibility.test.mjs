@@ -158,7 +158,28 @@ test('el pago online sólo se ofrece si la base lo habilita, y nunca se da por p
 test('los datos de ejemplo se declaran ficticios', async () => {
   const app = await readFile(resolve(root, 'js/app.js'), 'utf8');
   assert.match(app, /ficticios/i, 'Debe aclararse que los comercios de ejemplo son ficticios');
-  assert.match(app, /no representan negocios reales de Aluminé/i);
+  assert.match(app, /no representan negocios reales de Neuquén Capital/i);
+});
+
+test('el shell visible usa la identidad MiFav y la paleta acordada', async () => {
+  const html = await readFile(resolve(root, 'index.html'), 'utf8');
+  assert.match(html, /<title>MiFav/);
+  assert.match(html, /id="env-chip"/);
+  assert.doesNotMatch(html, />CAUCE|CAUCE ·|Aluminé/, 'El shell no debe mostrar la marca anterior');
+  const css = await readFile(resolve(root, 'styles/mifav.css'), 'utf8');
+  for (const color of ['#F8DFEA', '#C6AEB2', '#D5D5D6', '#686A6E', '#1E1E1E']) {
+    assert.ok(css.toUpperCase().includes(color), `Falta la paleta ${color}`);
+  }
+  assert.match(html, /#F8DFEA/i, 'El color de tema del shell debe ser el rosa de MiFav');
+  assert.match(html, /styles\/mifav\.css/, 'La hoja de identidad tiene que cargarse');
+});
+
+test('el resaltado del hero no tapa el descendente de la línea anterior', async () => {
+  const css = await readFile(resolve(root, 'styles/mifav.css'), 'utf8');
+  // Con `display: inline`, el fondo del resaltado arranca en la línea base y
+  // cubre la cola de la "q" de "lo que". El bloque propio lo evita.
+  assert.match(css, /\.mifav-hero-body h1 span\s*\{[^}]*display:\s*block/);
+  assert.match(css, /\.mifav-hero-body h1 span\s*\{[^}]*margin-top:\s*0\.28em/);
 });
 
 test('no quedan pendientes marcados en las rutas comprometidas', async () => {

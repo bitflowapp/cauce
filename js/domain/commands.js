@@ -11,7 +11,7 @@ import { emptyCart, changeQuantity, quoteCart } from '../core/cart.js';
 import { requireTransition, allowedActions } from '../core/workflow-policy.js';
 import { buildDeliveryCode, createDeliveryCode } from '../core/delivery-code.js';
 import { sanitizeText, sanitizeNotes, validateCustomerName, isValidArgentinePhone } from '../core/validators.js';
-import { validateProductInput, slugify, validateImageReference } from '../core/catalog-rules.js';
+import { validateProductInput, slugify, validateImageReference, validateImageData } from '../core/catalog-rules.js';
 import {
   assertCanSubmitForReview, canTransitionBusiness, normalizeReviewNote,
 } from '../core/merchant-status.js';
@@ -297,6 +297,9 @@ const catalogCommands = {
     let suffix = 1;
     while (state.products.some(product => product.id === id)) { id = `${business.id}-${base}-${++suffix}`; }
     const now = context.now();
+    // En la demostración la foto llega como data URL ya optimizada. En el
+    // entorno conectado el archivo viaja aparte y lo sube el repositorio.
+    const imageData = validateImageData(typeof payload?.image === 'string' ? payload.image : '');
     const product = {
       id,
       businessId: business.id,
@@ -306,9 +309,9 @@ const catalogCommands = {
       badge: '',
       // Sin fotografía ni tipo declarado, la interfaz usa una marca neutra.
       dishType: '',
-      image: '',
       variants: [],
       ...fields,
+      image: imageData || fields.image || '',
       createdAt: now,
       updatedAt: now,
     };

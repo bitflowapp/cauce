@@ -337,6 +337,7 @@ export function createSupabaseRepository({ client, redirectTo, storage, onError 
     categoryPosition: row.product_categories?.position ?? null,
     price: Number(row.price_ars), stock: row.stock, trackStock: row.track_stock === true,
     available: row.available === true,
+    condition: row.condition === 'used' ? 'used' : 'new',
     archived: row.archived === true, imagePath: row.image_path || '', image: publicUrl(row.image_path),
     dishType: row.dish_type || '',
     variants: (row.product_variants || []).filter(variant => variant.active)
@@ -950,7 +951,7 @@ export function createSupabaseRepository({ client, redirectTo, storage, onError 
       const row = await read(client.from('products').insert({
         business_id: businessId, category_id: categoryId, name: input.name,
         description: input.description || '', price_ars: input.price, track_stock: trackStock,
-        stock: trackStock ? (input.stock ?? 0) : 0,
+        stock: trackStock ? (input.stock ?? 0) : 0, condition: input.condition || 'new',
         available: input.available !== false, dish_type: input.dishType || '',
       }).select('id').maybeSingle());
       requireValue(row, 'BUSINESS_FORBIDDEN', 'Tu cuenta no puede cargar productos en este comercio.');
@@ -972,6 +973,7 @@ export function createSupabaseRepository({ client, redirectTo, storage, onError 
       if ('description' in input) columns.description = input.description;
       if ('price' in input) columns.price_ars = input.price;
       if ('stock' in input) columns.stock = input.stock;
+      if ('condition' in input) columns.condition = input.condition;
       if ('trackStock' in patch) columns.track_stock = patch.trackStock === true;
       if ('archived' in input) columns.archived = input.archived;
       if ('dishType' in input) columns.dish_type = input.dishType;

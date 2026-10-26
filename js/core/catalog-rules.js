@@ -1,6 +1,7 @@
 // Validación del catálogo propio de cada comercio.
 import { requireValue } from './errors.js';
 import { sanitizeText } from './validators.js';
+import { isProductCondition, normalizeProductCondition } from './marketplace.js';
 
 export const PRODUCT_CATEGORIES_SUGGESTED = Object.freeze([
   'Platos', 'Panadería', 'Bebidas', 'Almacén', 'Postres', 'Para compartir', 'Otros',
@@ -54,6 +55,15 @@ export function validateProductInput(input, { partial = false } = {}) {
   if (!partial || has('description')) {
     output.description = sanitizeText(input?.description, { fallback: '', maxLength: 280 });
   }
+  // Nuevo o usado. Es opcional para no romper catálogos anteriores: sin dato,
+  // el artículo se muestra como nuevo.
+  if (!partial || has('condition')) {
+    if (has('condition')) {
+      requireValue(isProductCondition(input?.condition), 'INVALID_CONDITION',
+        'Elegí si el artículo es nuevo o usado.');
+    }
+    output.condition = normalizeProductCondition(input?.condition);
+  }
   if (!partial || has('category')) {
     const category = sanitizeText(input?.category, { fallback: 'Otros', maxLength: 40 });
     requireValue(category.length >= 2, 'INVALID_CATEGORY', 'Elegí o escribí una categoría.');
@@ -97,5 +107,22 @@ export function validateImageReference(value) {
   if (!raw) return '';
   requireValue(/^assets\/images\/[a-z0-9/_-]+\.(webp|png|jpg|jpeg|svg|avif)$/i.test(raw),
     'INVALID_IMAGE', 'Solo se admiten imágenes incluidas en el proyecto (assets/images/...).');
+  return raw;
+}
+
+// Foto cargada desde el teléfono en el entorno de demostración. Se guarda como
+// data URL porque ese repositorio no tiene almacenamiento de archivos. El tope
+// evita llenar localStorage con una imagen sin comprimir; el tipo se restringe
+// a los formatos que el navegador puede mostrar y que la CSP permite.
+export const MAX_IMAGE_DATA_LENGTH = 900000;
+const IMAGE_DATA = /^data:image\/(?:webp|png|jpeg);base64,[a-z0-9+/]+={0,2}$/i;
+
+export function validateImageData(value) {
+  if (value == null || value === '') return '';
+  requireValue(typeof value === 'string', 'INVALID_IMAGE', 'La foto no tiene un formato válido.');
+  const raw = value.trim();
+  requireValue(raw.length <= MAX_IMAGE_DATA_LENGTH, 'IMAGE_TOO_LARGE',
+    'La foto sigue siendo muy pesada. Probá con una imagen más chica.');
+  requireValue(IMAGE_DATA.test(raw), 'INVALID_IMAGE', 'La foto debe ser una imagen JPEG, PNG o WebP.');
   return raw;
 }

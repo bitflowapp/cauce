@@ -32,7 +32,7 @@ export function orderStatusHero(order, { times = '', place = '', courier = '' } 
   const pickup = order.fulfillment === 'pickup';
   const message = order.status === 'ready'
     ? (pickup ? 'Ya podés retirarlo por el comercio.' : 'Está listo. En breve sale con el reparto del comercio.')
-    : order.status === 'delivered' ? (pickup ? 'Retiraste tu pedido. ¡Gracias por comprar en Aluminé!' : 'Pedido entregado. ¡Gracias por comprar en Aluminé!')
+    : order.status === 'delivered' ? (pickup ? 'Retiraste tu pedido. ¡Gracias por comprar en Neuquén Capital!' : 'Pedido entregado. ¡Gracias por comprar en Neuquén Capital!')
       : moment[2];
   const open = order.status !== 'delivered';
   return `<section class="order-hero is-${esc(moment[1])}" aria-labelledby="order-hero-title">

@@ -4,7 +4,7 @@ import { once } from 'node:events';
 import { get } from 'node:http';
 import { createStaticServer } from '../scripts/server.mjs';
 async function withServer(action){const server=createStaticServer();server.listen(0,'127.0.0.1');await once(server,'listening');try{await action(`http://127.0.0.1:${server.address().port}`);}finally{await new Promise(resolve=>server.close(resolve));}}
-test('HTTP sirve la aplicación y bloquea conexiones externas por CSP',()=>withServer(async url=>{const r=await fetch(url);assert.equal(r.status,200);assert.match(await r.text(),/CAUCE/);assert.match(r.headers.get('content-security-policy'),/connect-src 'none'/);}));
+test('HTTP sirve la aplicación y bloquea conexiones externas por CSP',()=>withServer(async url=>{const r=await fetch(url);assert.equal(r.status,200);assert.match(await r.text(),/MiFav/);assert.match(r.headers.get('content-security-policy'),/connect-src 'none'/);}));
 test('HTTP no sirve documentación, scripts, tests ni .env',()=>withServer(async url=>{for(const path of ['/scripts/server.mjs','/.env','/docs/AUDIT.md','/package.json','/tests/cauce.test.mjs'])assert.equal((await fetch(url+path)).status,404);}));
 test('HTTP deniega métodos de escritura',()=>withServer(async url=>assert.equal((await fetch(url,{method:'POST'})).status,405)));
 test('HTTP rechaza host ajeno',()=>withServer(async url=>{

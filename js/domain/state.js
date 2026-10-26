@@ -27,6 +27,15 @@ export const DEMO_IDENTITIES = Object.freeze([
     hint: 'Gestiona el catálogo, los pedidos y el reparto de La Orilla.',
   }),
   Object.freeze({
+    id: 'acc-taller',
+    email: 'taller@demo.cauce.local',
+    name: 'Responsable de Taller Malva',
+    phone: '2942000005',
+    roles: Object.freeze(['customer', 'merchant']),
+    label: 'Emprendimiento de ejemplo',
+    hint: 'Gestiona Taller Malva y los demás emprendimientos del marketplace.',
+  }),
+  Object.freeze({
     id: 'acc-admin',
     email: 'administracion@demo.cauce.local',
     name: 'Administración CAUCE',
@@ -46,7 +55,16 @@ export const DEMO_IDENTITIES = Object.freeze([
   }),
 ]);
 
-const OWNER_BY_BUSINESS = Object.freeze({ orilla: 'acc-orilla' });
+const OWNER_BY_BUSINESS = Object.freeze({
+  orilla: 'acc-orilla',
+  'taller-malva': 'acc-taller',
+  'tecno-pampa': 'acc-taller',
+  'deco-patagonia': 'acc-taller',
+  'bella-neuquen': 'acc-taller',
+  'calzado-andino': 'acc-taller',
+  'mascotas-sur': 'acc-taller',
+  'artesanias-rayen': 'acc-taller',
+});
 
 export function initialState({ seedDemoIdentities = true } = {}) {
   const legacy = initialDemoState();
@@ -60,7 +78,7 @@ export function initialState({ seedDemoIdentities = true } = {}) {
     contactPhone: '2942000000',
     contactEmail: '',
     reference: '',
-    deliveryZone: business.deliveryEnabled ? 'Casco urbano de Aluminé' : '',
+    deliveryZone: business.deliveryEnabled ? 'Zona de entrega coordinada con el vendedor' : '',
     reviewNote: '',
     submittedAt: now,
     reviewedAt: now,

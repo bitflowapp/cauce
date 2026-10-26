@@ -17,25 +17,36 @@ function setupRepo() {
   return { repo, storage, values };
 }
 
-test('catálogo comercial contiene 7 comercios patagónicos ficticios y plausibles', () => {
+test('catálogo comercial contiene 14 comercios ficticios y plausibles de la ciudad', () => {
   const state = initialDemoState();
-  assert.equal(state.businesses.length, 7);
+  assert.equal(state.businesses.length, 14);
   const ids = state.businesses.map(b => b.id);
-  assert.deepEqual(ids, ['orilla', 'horno', 'pehuen', 'plaza', 'rioarriba', 'ronda', 'union']);
+  assert.deepEqual(ids, ['orilla', 'horno', 'pehuen', 'plaza', 'rioarriba', 'ronda', 'union',
+    'taller-malva', 'tecno-pampa', 'deco-patagonia', 'bella-neuquen', 'calzado-andino', 'mascotas-sur',
+    'artesanias-rayen']);
+  assert.equal(new Set(ids).size, ids.length, 'Los identificadores de comercio no pueden repetirse');
   for (const b of state.businesses) {
+    // `alumine` es el id histórico que conserva la base; la etiqueta visible es Neuquén Capital.
     assert.equal(b.localityId, 'alumine');
     assert.ok(b.name.length >= 4);
     assert.ok(b.description.length >= 10);
     assert.ok(b.address.length >= 5);
   }
+  const marketplace = state.businesses.filter(b => b.marketplaceCategory);
+  assert.ok(marketplace.length >= 7, 'El marketplace multirrubro necesita comercios de rubros no gastronómicos');
+  assert.ok(new Set(marketplace.map(b => b.marketplaceCategory)).size >= 5,
+    'Los comercios de ejemplo deben cubrir varios rubros, no uno solo');
 });
 
-test('catálogo cuenta con más de 50 productos con asignación de categoría y tipo visual', () => {
+test('catálogo cuenta con más de 50 productos con categoría, precio y tipo visual', () => {
   const state = initialDemoState();
   assert.ok(state.products.length >= 50, `Se esperaban >= 50 productos, hay ${state.products.length}`);
+  const dishTypes = ['burger', 'fries', 'pizza', 'empanadas', 'milanesa', 'pasta', 'cafe', 'medialuna', 'sandwich', 'picada', 'torta', 'beer', 'lemonade'];
   for (const p of state.products) {
     assert.ok(p.price > 0, `Precio inválido en ${p.id}`);
-    assert.ok(['burger', 'fries', 'pizza', 'empanadas', 'milanesa', 'pasta', 'cafe', 'medialuna', 'sandwich', 'picada', 'torta', 'beer', 'lemonade'].includes(p.dishType));
+    // Los platos llevan tipo visual; los artículos del marketplace, condición.
+    if (p.dishType) assert.ok(dishTypes.includes(p.dishType), `Tipo visual inválido en ${p.id}: ${p.dishType}`);
+    else assert.ok(['new', 'used'].includes(p.condition), `Condición inválida en ${p.id}: ${p.condition}`);
   }
 });
 

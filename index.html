@@ -3,15 +3,15 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#143d34">
-  <meta name="description" content="CAUCE · Aluminé. Comprá en comercios de Aluminé y pedí un taxi desde un mismo lugar.">
+  <meta name="theme-color" content="#F8DFEA">
+  <meta name="description" content="MiFav · Marketplace de Neuquén Capital. Productos nuevos y usados de emprendimientos y comercios locales, con retiro o envío coordinado con el vendedor.">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'none'; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
-  <title>CAUCE · Aluminé</title>
+  <title>MiFav · Marketplace de Neuquén Capital</title>
   <link rel="icon" href="styles/favicon.svg" type="image/svg+xml">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="assets/images/icon-192.png">
   <link rel="stylesheet" href="styles/cauce.css">
-  <link rel="preload" as="image" href="assets/images/territory/alumine-hero-panoramica.webp" fetchpriority="high">
+  <link rel="stylesheet" href="styles/mifav.css">
   <link rel="modulepreload" href="js/runtime-env.js">
   <link rel="modulepreload" href="js/domain/commands.js">
   <link rel="modulepreload" href="js/repositories/repository-factory.js">
@@ -20,49 +20,64 @@
 <body>
   <a class="skip" href="#main">Saltar al contenido</a>
 
-  <header class="header">
-    <a class="brand" href="#inicio" aria-label="CAUCE · Aluminé, inicio">
-      <svg class="brand-wave" viewBox="0 0 32 32" width="22" height="22" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <path d="M4 11C8 7 12 15 16 11C20 7 24 15 28 11"/>
-        <path d="M4 21C8 17 12 25 16 21C20 17 24 25 28 21"/>
+  <header class="header mifav-header">
+    <a class="brand mifav-brand" href="#inicio" aria-label="MiFav, marketplace de Neuquén Capital, inicio">
+      <svg class="mifav-brand-mark" viewBox="0 0 32 32" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M16 27S4.5 20.1 4.5 12.2A6.2 6.2 0 0 1 16 8.6a6.2 6.2 0 0 1 11.5 3.6C27.5 20.1 16 27 16 27z"/>
+        <path d="M11 14.5h10"/>
       </svg>
-      <span class="brand-title">CAUCE <span class="brand-sep">·</span> Aluminé</span>
+      <span class="brand-title">MiFav</span>
+      <span class="mifav-brand-place">Neuquén</span>
     </a>
+    <nav class="mifav-header-nav" aria-label="Secciones de MiFav">
+      <a href="#comercios">Explorar</a>
+      <a href="#ferias">Ferias</a>
+      <a href="#favoritos">Favoritos</a>
+      <a href="#institucional">Qué es MiFav</a>
+      <a class="mifav-nav-publish" href="#publicar">Publicar</a>
+      <a href="#taxi" class="mifav-nav-taxi">Taxi</a>
+    </nav>
     <div class="header-right">
       <span class="env-chip" id="env-chip" title="Este entorno no genera pedidos, viajes ni cobros reales">Demostración</span>
+      <a class="mifav-cart-link" id="header-cart" href="#carrito" aria-label="Ver carrito">
+        <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h14l-2 10H8L6 3z"/><circle cx="9" cy="19" r="1.5"/><circle cx="17" cy="19" r="1.5"/><path d="M2 3h4"/></svg>
+        <span class="cart-badge js-cart-badge" hidden>0</span>
+      </a>
       <a class="account-link" id="account-link" href="#cuenta">Ingresar</a>
     </div>
   </header>
 
   <main id="main" tabindex="-1" aria-busy="false"></main>
 
-  <footer class="footer">
+  <footer class="footer mifav-footer">
     <div class="footer-top">
       <div class="footer-brand">
-        <svg class="footer-wave" viewBox="0 0 32 32" width="24" height="24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M4 11C8 7 12 15 16 11C20 7 24 15 28 11"/>
-          <path d="M4 21C8 17 12 25 16 21C20 17 24 25 28 21"/>
+        <svg class="footer-heart" viewBox="0 0 32 32" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M16 27S4.5 20.1 4.5 12.2A6.2 6.2 0 0 1 16 8.6a6.2 6.2 0 0 1 11.5 3.6C27.5 20.1 16 27 16 27z"/>
         </svg>
         <div>
-          <strong class="footer-name">CAUCE · Aluminé</strong>
-          <span class="footer-sub">Comprá local. Movete por Aluminé.</span>
+          <strong class="footer-name">MiFav</strong>
+          <span class="footer-sub">Comprá cerca. Comprá en Neuquén.</span>
         </div>
       </div>
       <div class="footer-territory">
-        <span>ALUMINÉ</span><span class="sep">|</span><span>NEUQUÉN</span><span class="sep">|</span><span>PATAGONIA</span>
+        <span>NEUQUÉN CAPITAL</span><span class="sep">|</span><span>PATAGONIA</span>
       </div>
     </div>
     <div class="footer-actions">
-      <p class="footer-note" id="footer-env">Entorno de demostración · Plataforma local de LUNA. Los comercios de ejemplo son ficticios.</p>
+      <p class="footer-note" id="footer-env">Entorno de demostración · Plataforma local de LUNA. Los comercios, productos y precios de ejemplo son ficticios.</p>
       <div class="footer-links">
-        <a class="link-button" href="#institucional">Qué es CAUCE</a>
-        <a class="link-button" href="#alta-comercio">Sumar mi comercio</a>
+        <a class="link-button" href="#comercios">Explorar</a>
+        <a class="link-button" href="#ferias">Feria Neuquén Centro</a>
+        <a class="link-button" href="#publicar">Publicar un producto</a>
+        <a class="link-button" href="#institucional">Qué es MiFav</a>
+        <a class="link-button" href="#alta-comercio">Abrir mi comercio</a>
         <a class="link-button" href="#taxista">Registrarme como taxista</a>
       </div>
     </div>
   </footer>
 
-  <nav class="bottom-nav" aria-label="Navegación principal">
+  <nav class="bottom-nav mifav-bottom-nav" aria-label="Navegación principal">
     <a href="#inicio" class="bottom-nav-item" id="bnav-inicio">
       <span class="bottom-nav-icon">
         <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5V20a1.5 1.5 0 0 1-1.5 1.5H4.5A1.5 1.5 0 0 1 3 20v-9.5z"/><path d="M9 21v-7h6v7"/></svg>
@@ -71,32 +86,32 @@
     </a>
     <a href="#comercios" class="bottom-nav-item" id="bnav-comercios">
       <span class="bottom-nav-icon">
-        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
       </span>
-      <span>Comercios</span>
+      <span>Explorar</span>
     </a>
-    <a href="#taxi" class="bottom-nav-item" id="bnav-taxi">
+    <a href="#publicar" class="bottom-nav-item mifav-bnav-publish" id="bnav-publicar">
       <span class="bottom-nav-icon">
-        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9C1.5 11.2 1 12 1 13v3c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/></svg>
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
       </span>
-      <span>Taxi</span>
+      <span>Publicar</span>
     </a>
-    <a href="#actividad" class="bottom-nav-item" id="bnav-actividad">
+    <a href="#favoritos" class="bottom-nav-item" id="bnav-favoritos" aria-label="Favoritos">
       <span class="bottom-nav-icon">
-        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 2H8a2 2 0 0 0-2 2v16l3-1.5 3 1.5 3-1.5 3 1.5 3-1.5V4a2 2 0 0 0-2-2z"/><path d="M9 7h6M9 11h6M9 15h4"/></svg>
-      </span>
-      <span>Mi actividad</span>
-    </a>
-    <a href="#carrito" class="bottom-nav-item" id="bnav-carrito" hidden>
-      <span class="bottom-nav-icon">
-        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h14l-2 10H8L6 3z"/><circle cx="9" cy="19" r="1.5"/><circle cx="17" cy="19" r="1.5"/><path d="M2 3h4"/></svg>
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21S3 15.3 3 9.2A4.7 4.7 0 0 1 12 6.4a4.7 4.7 0 0 1 9 2.8C21 15.3 12 21 12 21z"/></svg>
         <span class="bnav-badge" hidden>0</span>
       </span>
-      <span>Carrito</span>
+      <span>Favoritos</span>
+    </a>
+    <a href="#cuenta" class="bottom-nav-item" id="bnav-cuenta">
+      <span class="bottom-nav-icon">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
+      </span>
+      <span>Cuenta</span>
     </a>
   </nav>
 
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
-  <noscript>CAUCE necesita JavaScript para funcionar.</noscript>
+  <noscript>MiFav necesita JavaScript para funcionar.</noscript>
 </body>
 </html>

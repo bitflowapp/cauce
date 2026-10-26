@@ -167,11 +167,16 @@ test('un rubro inhabilitado no se elige y deja de mostrarse', async () => {
 });
 
 // ───────────────── migración aditiva sobre datos existentes ─────────────────
-test('la migración corre sobre una base viva sin alterar sus datos', async () => {
+// Las dos migraciones nuevas se prueban una después de la otra sobre una base
+// viva: primero la taxonomía (20261024100000) y después la condición del
+// artículo (REQUIRED_SCHEMA). Así cada una se aplica como llegaría a producción.
+test('las migraciones nuevas corren sobre una base viva sin alterar sus datos', async () => {
+  const TAXONOMY_SCHEMA = 20261024100000;
   const step = new PGlite();
   try {
     assert.ok((await migrationFiles()).some(file => versionOf(file) === REQUIRED_SCHEMA), 'la migración nueva está en el repo');
-    const applied = await applyMigrations(step, { until: REQUIRED_SCHEMA });
+    assert.ok(REQUIRED_SCHEMA > TAXONOMY_SCHEMA, 'la migración de condición va después de la taxonomía');
+    const applied = await applyMigrations(step, { until: TAXONOMY_SCHEMA });
     assert.ok(applied.length >= 12, 'se reconstruyó el esquema anterior');
     await step.query("insert into auth.users (id, email) values ($1, 'previo@cauce.test')", [ids.vendorA]);
     await step.query("insert into auth.users (id, email) values ($1, 'previoadmin@cauce.test')", [ids.admin]);
@@ -191,8 +196,8 @@ test('la migración corre sobre una base viva sin alterar sus datos', async () =
       await tx.query("select public.submit_business_for_review((select id from public.businesses where slug = 'comercio-previo'))");
     });
     assert.equal(rows(await step.query("select status from public.businesses where slug = 'comercio-previo'"))[0].status, 'pending_review');
-    const file = (await migrationFiles()).find(name => versionOf(name) === REQUIRED_SCHEMA);
-    await applyMigration(step, file);
+    const taxonomyFile = (await migrationFiles()).find(name => versionOf(name) === TAXONOMY_SCHEMA);
+    await applyMigration(step, taxonomyFile);
     // El alta en revisión conserva su estado y gana las capacidades de su rubro.
     const migrated = rows(await step.query(`select b.status, c.slug as category, b.capabilities
       from public.businesses b join public.business_categories c on c.id = b.category_id
@@ -200,6 +205,21 @@ test('la migración corre sobre una base viva sin alterar sus datos', async () =
     assert.equal(migrated.status, 'pending_review');
     assert.equal(migrated.category, 'ferreteria');
     assert.deepEqual([...migrated.capabilities], ['products', 'services']);
+
+    // La migración de condición es aditiva: el producto previo queda 'new',
+    // conserva su stock y el estado del comercio no cambia.
+    const conditionFile = (await migrationFiles()).find(name => versionOf(name) === REQUIRED_SCHEMA);
+    await applyMigration(step, conditionFile);
+    const product = rows(await step.query(`select p.name, p.condition, p.stock, p.price_ars, b.status
+      from public.products p join public.businesses b on b.id = p.business_id
+      where b.slug = 'comercio-previo'`))[0];
+    assert.equal(product.name, 'Clavo aluminio');
+    assert.equal(product.condition, 'new');
+    assert.equal(product.stock, 25);
+    assert.equal(Number(product.price_ars), 900);
+    assert.equal(product.status, 'pending_review');
+    // La base rechaza una condición fuera del contrato.
+    await assert.rejects(step.query("update public.products set condition = 'roto' where name = 'Clavo aluminio'"));
     // El contrato nuevo es exigible después de migrada la base.
     assert.equal(Number(rows(await step.query("select (private.app_status() ->> 'schema') as s"))[0].s), REQUIRED_SCHEMA);
   } finally {

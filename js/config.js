@@ -1,5 +1,5 @@
 /**
- * Configuración de CAUCE · Aluminé.
+ * Configuración de MiFav · Neuquén Capital.
  *
  * `mode: 'demo'` con `liveOrders` y `livePayments` en false es una compuerta,
  * no un interruptor de conveniencia: ninguna entrega habilita pedidos ni pagos
@@ -8,8 +8,8 @@
  * js/runtime-env.js.
  */
 export const CONFIG = Object.freeze({
-  name: 'CAUCE',
-  edition: 'Aluminé',
+  name: 'MiFav',
+  edition: 'Neuquén Capital',
   mode: 'demo',
   liveOrders: false,
   livePayments: false,
