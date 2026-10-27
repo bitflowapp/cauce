@@ -1,0 +1,17 @@
+# MiFav: auditoría cloud y continuación
+
+Base examinada: `feat/cauce-mimo-marketplace-ux` (`05cae88`), descendiente de `feature/cauce-marketplace-multirrubro-20261024` (`ae47e25`), que a su vez suma dos commits sobre `main` (`1551b4a`). La rama `feature/cauce-marketplace-multirubro-20261024` termina en `5cf86df`, antecesor de la anterior. La rama elegida agrega tres commits de interfaz a la multirrubro; otras ramas contienen líneas divergentes de ferias, pagos y operación y no se incorporaron automáticamente.
+
+No están disponibles la rama local `audit/mifav-20261025`, los commits `4587907` y `884ced0`, ni los cambios sin commit mencionados. Sus contenidos no se conocen. Áreas a reconciliar: moderación de productos, RLS, pruebas de integración y protección de pedidos. En esta base se encontraron revisiones de comercios y estados de pagos, pero no el flujo solicitado de moderación de productos. La publicación comercial queda bloqueada hasta integrar y verificar esa protección.
+
+Para sincronizar desde la computadora que posee los cambios, revisar primero `git status` y `git diff`, guardar los cambios sin commit en un commit propio sin incluir secretos, y publicar `audit/mifav-20261025` con `git push origin audit/mifav-20261025`. Luego en la nube hacer `git fetch origin`, comparar `git log --left-right --cherry-pick` y `git diff` entre ramas, revisar migraciones y pruebas, e integrar mediante una rama de integración. No ejecutar migraciones remotas sin revisión y autorización separadas.
+
+## Alcance y riesgos
+
+La base contiene catálogo, pedidos, autenticación, comercio, taxonomía multirrubro y pruebas, además de SQL y Storage para imágenes de comercio y productos. Las políticas deben validarse con dos vendedores y sesiones reales en un entorno aislado. La existencia de código no certifica aislamiento, almacenamiento ni operación comercial. El editor Studio, sus cuatro plantillas, borrador/publicación y persistencia por tienda aún no están implementados. La protección de productos no aprobados es una dependencia crítica para conectarlo a una vidriera y pedidos reales. El catálogo de planes añadido es información orientativa en código, sin cobros, límites forzados ni interfaz administrativa; las funciones de planes son propuestas, no prestaciones certificadas.
+
+## Mercado Pago: referencia La Taba, lectura solamente
+
+En `main` de La Taba se identificaron funciones `mercadopago-connect`, `mercadopago-oauth-callback`, `mercadopago-create-preference`, `mercadopago-create-checkout-session`, `mercadopago-webhook`, `mercadopago-payment-worker`, `mercadopago-checkout-status` y `mercadopago-refund`, junto con módulos de firma de webhook, OAuth de vendedor, correlación de reembolsos y tests SQL. Esto identifica puntos para estudio, no certifica su reutilización ni copia configuraciones o datos.
+
+Adaptación propuesta: conexión OAuth por comercio con estado y verificación de titularidad; tokens cifrados exclusivamente en backend; intento de pago asociado a comercio, pedido y monto; claves idempotentes y webhook con firma validada, respuesta rápida y cola de procesamiento; consulta al proveedor para confirmar estado y monto; conciliación y reembolsos correlacionados con el pago y el vendedor. Evaluar caducidad, revocación, duplicados y notificaciones fuera de orden. Probar con proveedor simulado y dos vendedores; certificar independientemente antes de habilitar pagos reales. No usar credenciales ni datos de La Taba.
