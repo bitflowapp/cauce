@@ -110,6 +110,12 @@ export async function publishedBusiness(owner, reviewer, { name = 'Comercio', de
     { product_id: products.variants.id, business_id: id, name: 'Chica', price_delta_ars: -2000, position: 0 },
     { product_id: products.variants.id, business_id: id, name: 'Grande', price_delta_ars: 1500, position: 1 },
   ]).select(), 'variantes');
+  // El catálogo de prueba debe poder venderse: cada producto nace pendiente y
+  // lo aprueba la misma cuenta administrativa que publica el comercio.
+  for (const product of Object.values(products)) {
+    ok(await reviewer.client.rpc('review_product', { product: product.id, decision: 'approved',
+      note: 'Aprobado en prueba' }), `aprobar ${product.name}`);
+  }
   ok(await client.rpc('submit_business_for_review', { business: id }), 'solicitar publicación');
   ok(await reviewer.client.rpc('review_business', { business: id, decision: 'active', note: 'Aprobado en prueba' }), 'aprobar');
   ok(await client.rpc('set_business_presence', { business: id, is_open: true }), 'abrir');

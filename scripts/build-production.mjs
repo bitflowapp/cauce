@@ -19,12 +19,18 @@ const local = process.argv.includes('--local');
 const fail = message => { console.error(`BUILD FAIL · ${message}`); process.exit(1); };
 
 function localStack() {
-  try {
-    const raw = execFileSync(process.platform === 'win32' ? 'npx.cmd' : 'npx', ['supabase', 'status', '-o', 'json'],
-      { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
-    const status = JSON.parse(raw.slice(raw.indexOf('{')));
-    return { url: status.API_URL, publishableKey: status.PUBLISHABLE_KEY };
-  } catch { return fail('No hay stack Supabase local. Ejecutá `npm run db:start`.'); }
+  // Node ≥24 en Windows se niega a lanzar .cmd sin shell (`EINVAL`): se intenta
+  // el ejecutable real `supabase` y, como respaldo, npx con shell.
+  for (const [command, options] of [['supabase', {}], ['npx', { shell: true }]]) {
+    try {
+      const args = [...command === 'npx' ? ['supabase'] : [], 'status', '-o', 'json'];
+      const raw = execFileSync(process.platform === 'win32' && command === 'npx' ? 'npx.cmd' : command,
+        args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], ...options });
+      const status = JSON.parse(raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1));
+      return { url: status.API_URL, publishableKey: status.PUBLISHABLE_KEY };
+    } catch { /* se prueba el próximo lanzador */ }
+  }
+  return fail('No hay stack Supabase local. Ejecutá `npm run db:start`.');
 }
 
 const project = JSON.parse(await readFile(resolve(root, 'supabase/project.json'), 'utf8'));

@@ -6709,14 +6709,15 @@ main {
 }
 .team-member-main { display: grid; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
 .team-member-actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 4px 16px; }
-.team-member-actions .link-button, .rider-list .link-button, .admin-business-list .link-button {
+.team-member-actions .link-button, .rider-list .link-button,
+.admin-business-list .link-button, .admin-product-list .link-button {
   min-height: 40px;
 }
 .role-legend { display: grid; gap: 6px; margin: 14px 0 0; font-size: 13px; }
 .role-legend div { display: grid; grid-template-columns: 110px 1fr; gap: 8px; }
 .role-legend dt { font-weight: 700; }
 .role-legend dd { margin: 0; color: var(--muted); }
-.rider-list li, .admin-business-list li {
+.rider-list li, .admin-business-list li, .admin-product-list li {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -7557,7 +7558,7 @@ input[type="radio"], input[type="checkbox"] { accent-color: var(--forest); }
 .admin-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .admin-header .page-title { margin-bottom: 0; }
 .admin-header .button { flex: none; min-height: 44px; }
-.admin-business-list li {
+.admin-business-list li, .admin-product-list li {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;

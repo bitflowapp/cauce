@@ -48,7 +48,8 @@ import {
   esc, money, shortDate, timeOnly, relativeMinutes, orderStatusLabel, orderStatusTone,
   fulfillmentLabel, businessStatusLabel, tripStatusLabel, pluralize, initialsOf,
 } from './ui/format.js';
-import { BUSINESS_STATUS_HINTS, missingPublicationRequirements } from './core/merchant-status.js';
+import { BUSINESS_STATUS_HINTS, PRODUCT_STATUS_LABELS, PRODUCT_STATUS_HINTS,
+  canResubmitProduct, missingPublicationRequirements } from './core/merchant-status.js';
 import { PRODUCT_CATEGORIES_SUGGESTED, validateProductInput, validateImageData } from './core/catalog-rules.js';
 import {
   MARKETPLACE_CATEGORIES, MARKETPLACE_CATEGORY_NAMES, PRODUCT_CONDITIONS, conditionLabel,
@@ -2004,7 +2005,7 @@ async function viewMerchantPanel(businessId) {
 
   const [orders, products, riders, categories, team, serverRequirements, productCategories, riderAccounts] = await Promise.all([
     app.repository.query('businessOrders', { businessId }),
-    app.repository.query('products', { businessId }),
+    app.repository.query('products', { businessId, includeAll: true }),
     ['inicio', 'pedidos', 'reparto'].includes(section) ? app.repository.query('riders', { businessId }) : [],
     canManage && section === 'configuracion' && app.repository.capabilities.media ? app.repository.query('businessCategories') : [],
     section === 'equipo' ? app.repository.query('team', { businessId }) : [],
@@ -2245,12 +2246,18 @@ function merchantCatalogTab(business, products, { canManage = true, categories =
           <strong>${esc(product.name)}</strong>
           <span class="quiet">${money(product.price)} · ${esc(stockLabel(product))}</span>
           ${(product.variants || []).length ? `<span class="quiet">Variantes: ${esc(variantsText(product))}</span>` : ''}
+          ${connected && product.status !== 'approved' ? `<span class="status-chip ${product.status === 'pending' ? 'ready' : 'cancelled'}">${esc(PRODUCT_STATUS_LABELS[product.status] || product.status)}</span>` : ''}
+          ${connected && product.status !== 'approved' ? `<span class="microcopy">${esc(PRODUCT_STATUS_HINTS[product.status] || '')}</span>` : ''}
+          ${connected && product.reviewNote && canResubmitProduct(product.status) ? `<span class="microcopy">Observación: ${esc(product.reviewNote)}</span>` : ''}
           ${product.archived ? '<span class="status-chip cancelled">Desactivado</span>'
             : product.available === false ? '<span class="status-chip received">No disponible</span>'
               : connected && product.trackStock && product.stock <= 0 ? '<span class="status-chip received">Sin stock</span>' : ''}
         </div>
       </div>
       <div class="catalog-row-actions">
+        ${canManage && !product.archived && canResubmitProduct(product.status) ? `<button class="button secondary" type="button"
+          data-action="product-resubmit" data-business="${bid}" data-product="${esc(product.id)}" data-name="${esc(product.name)}" ${disabled}>
+          Reenviar a revisión</button>` : ''}
         ${product.archived ? '' : `<button class="link-button" type="button" data-action="product-toggle" data-business="${bid}"
           data-product="${esc(product.id)}" data-field="available" data-value="${product.available ? 'false' : 'true'}" ${disabled}>
           ${product.available ? 'Marcar agotado' : 'Marcar disponible'}</button>`}
@@ -2607,8 +2614,34 @@ async function viewAdmin() {
       </form>
     </article>`;
 
+  const productReviewCard = (item, { reject = true } = {}) => `
+    <article class="review-card">
+      <header class="order-panel-head">
+        <div>
+          <strong>${esc(item.name)}</strong>
+          <span class="quiet"> · ${esc(item.businessName || 'Comercio')}</span>
+        </div>
+        <span class="status-chip ${item.status === 'pending' ? 'ready' : 'cancelled'}">${esc(PRODUCT_STATUS_LABELS[item.status] || item.status)}</span>
+      </header>
+      <ul class="plain-list">
+        <li>Precio: ${money(item.price)} · ${esc(item.category)} · ${item.condition === 'used' ? 'usado' : 'nuevo'}</li>
+        ${item.reviewNote ? `<li>Observación anterior: ${esc(item.reviewNote)}</li>` : ''}
+        ${item.reviewedAt ? `<li>Última revisión: ${esc(shortDate(item.reviewedAt))}</li>` : ''}
+      </ul>
+      <form class="checkout-form" data-form="review-product" data-product="${esc(item.id)}">
+        <div class="field">
+          <label for="product-note-${esc(item.id)}">Observaciones (obligatorias para rechazar o suspender)</label>
+          <textarea id="product-note-${esc(item.id)}" name="note" rows="2" maxlength="400"></textarea>
+        </div>
+        <div class="order-panel-actions">
+          <button class="button" type="submit" name="decision" value="approve">Aprobar y publicar</button>
+          ${reject ? '<button class="button danger" type="submit" name="decision" value="reject">Rechazar con observaciones</button>' : ''}
+        </div>
+      </form>
+    </article>`;
+
   const counter = (label, value) => `<div class="metric"><dt>${esc(label)}</dt><dd>${value}</dd></div>`;
-  const pendingCount = queue.businesses.length + (feature('taxi') ? queue.drivers.length : 0);
+  const pendingCount = queue.businesses.length + queue.products.length + (feature('taxi') ? queue.drivers.length : 0);
 
   // Primero lo que espera una decisión, después lo que necesita atención y
   // recién ahí los números. Lo histórico y los errores, plegados.
@@ -2631,11 +2664,24 @@ async function viewAdmin() {
         : '<p class="quiet">No hay comercios esperando revisión.</p>'}
     </section>
 
+    <section class="panel-section">
+      <h2 class="checkout-section-title">Productos pendientes (${queue.products.length})</h2>
+      <p class="microcopy">Una aprobación publica el producto en la vidriera; un rechazo vuelve al comercio con la observación.</p>
+      ${queue.products.length ? `<div class="stack">${queue.products.map(item => productReviewCard(item)).join('')}</div>`
+        : '<p class="quiet">No hay productos esperando revisión.</p>'}
+    </section>
+
     ${feature('taxi') ? `<section class="panel-section">
       <h2 class="checkout-section-title">Taxistas pendientes (${queue.drivers.length})</h2>
       ${queue.drivers.length ? `<div class="stack">${queue.drivers.map(item => reviewCard(item, 'driver')).join('')}</div>`
         : '<p class="quiet">No hay altas de conductores esperando revisión.</p>'}
     </section>` : ''}
+
+    ${queue.productHistory.length ? `<details class="panel-section admin-fold">
+      <summary><span class="checkout-section-title">Productos rechazados o suspendidos (${queue.productHistory.length})</span></summary>
+      <p class="microcopy">El comercio ya recibió la observación. Aprobar vuelve a publicar el producto.</p>
+      <div class="stack">${queue.productHistory.map(item => productReviewCard(item, { reject: false })).join('')}</div>
+    </details>` : ''}
 
     ${pilot ? `${pilotIncidents(pilot.stuck, pilot.stuckTotal)}${pilotToday(pilot)}` : isConnected()
       ? '<div class="notice error" role="alert">No se pudieron leer los números de hoy. Actualizá en un momento.</div>' : ''}
@@ -2656,6 +2702,15 @@ async function viewAdmin() {
         <li><span class="admin-business-main"><strong>${esc(item.name)}</strong>${item.reviewNote ? ` <span class="quiet">${esc(item.reviewNote)}</span>` : ''}</span>
           <button class="link-button admin-business-action" type="button" data-action="admin-business-status" data-business="${esc(item.id)}"
             data-status="active" data-name="${esc(item.name)}">Rehabilitar</button></li>`).join('')}</ul>` : ''}
+      ${queue.approvedProducts.length ? `<details class="admin-fold">
+        <summary><span class="checkout-section-title">Productos publicados (${queue.approvedProducts.length})</span></summary>
+        <p class="microcopy">Suspender un producto lo retira de la vidriera sin alterar pedidos ya hechos.</p>
+        <ul class="plain-list admin-product-list">${queue.approvedProducts.map(item => `
+          <li><span class="admin-business-main"><strong>${esc(item.name)}</strong>
+            <span class="quiet">${esc(item.businessName)} · ${money(item.price)}</span></span>
+            <button class="link-button danger admin-business-action" type="button" data-action="admin-product-status"
+              data-product="${esc(item.id)}" data-decision="suspend" data-name="${esc(item.name)}">Suspender</button></li>`).join('')}</ul>
+      </details>` : ''}
     </section>` : ''}
 
     ${isConnected() ? `<details class="panel-section admin-fold">
@@ -3428,6 +3483,14 @@ const ACTIONS = {
     await runCommand('product.update', { businessId: business, productId: product, patch: { [field]: value === 'true' } });
     await render();
   },
+  async 'product-resubmit'(element) {
+    const { product, name } = element.dataset;
+    if (!await askConfirm({ title: `¿Reenviar ${name} a revisión?`, message: 'Vuelve a la cola administrativa. Mientras tanto no se muestra en la vidriera.',
+      confirmLabel: 'Reenviar', danger: false })) return;
+    await runCommand('product.submit', { productId: product });
+    toast('Producto reenviado a revisión.');
+    await render();
+  },
   async 'category-toggle'(element) {
     const active = element.dataset.active === 'true';
     await runCommand('productCategory.update', { businessId: element.dataset.business, categoryId: element.dataset.category,
@@ -3577,6 +3640,21 @@ const ACTIONS = {
     }
     await runCommand('admin.setBusinessStatus', { businessId: business, status, note });
     toast(status === 'suspended' ? 'Comercio suspendido.' : 'Comercio rehabilitado.');
+    await render();
+  },
+  async 'admin-product-status'(element) {
+    const { product, decision, name } = element.dataset;
+    let note = '';
+    if (decision === 'suspend') {
+      note = await askReason({ title: `Suspender ${name}`, message: 'El producto deja de mostrarse y de poder pedirse. El comercio ve el motivo.',
+        label: 'Motivo', confirmLabel: 'Suspender' });
+      if (note === null) return;
+    } else if (!await askConfirm({ title: `Aprobar ${name}`, message: 'Vuelve a la vidriera y se puede pedir.',
+      confirmLabel: 'Aprobar', danger: false })) {
+      return;
+    }
+    await runCommand('admin.reviewProduct', { productId: product, decision, note });
+    toast(decision === 'suspend' ? 'Producto suspendido.' : 'Producto aprobado y publicado.');
     await render();
   },
   async 'rider-toggle'(element) {
@@ -3833,7 +3911,8 @@ const FORMS = {
   async 'product-create'(form) {
     const data = Object.fromEntries(new FormData(form));
     const image = form.querySelector('input[type="file"][name="image"]')?.files?.[0] || null;
-    const trackStock = isConnected() ? data.trackStock === 'on' : true;
+    const connected = isConnected();
+    const trackStock = connected ? data.trackStock === 'on' : true;
     await runCommand('product.create', {
       businessId: form.dataset.business,
       product: {
@@ -3846,7 +3925,11 @@ const FORMS = {
     form.reset();
     // El formulario queda abierto para cargar el siguiente.
     app.openDetails.add('catalog-new');
-    toast(image && image.size ? 'Producto y foto agregados al catálogo.' : 'Producto agregado al catálogo.');
+    toast(connected
+      ? (image && image.size
+        ? 'Producto y foto agregados. Queda pendiente de revisión antes de publicarse.'
+        : 'Producto agregado. Queda pendiente de revisión antes de publicarse.')
+      : (image && image.size ? 'Producto y foto agregados al catálogo.' : 'Producto agregado al catálogo.'));
     await render();
   },
 
@@ -3917,6 +4000,14 @@ const FORMS = {
       : { driverId: form.dataset.id, decision, note: data.note };
     await runCommand(command, payload);
     toast(decision === 'approve' ? 'Alta aprobada.' : 'Alta devuelta con observaciones.');
+    await render();
+  },
+
+  async 'review-product'(form, submitter) {
+    const data = Object.fromEntries(new FormData(form));
+    const decision = submitter?.value || 'approve';
+    await runCommand('admin.reviewProduct', { productId: form.dataset.product, decision, note: data.note });
+    toast(decision === 'approve' ? 'Producto aprobado y publicado.' : 'Producto rechazado con observaciones.');
     await render();
   },
 

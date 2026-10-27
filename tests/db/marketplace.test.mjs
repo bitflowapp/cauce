@@ -166,16 +166,21 @@ test('un rubro inhabilitado no se elige y deja de mostrarse', async () => {
   assert.equal(rows(await as('anon', 'select slug from public.business_categories')).some(row => row.slug === 'telefonia'), true);
 });
 
-// ───────────────── migración aditiva sobre datos existentes ─────────────────
-// Las dos migraciones nuevas se prueban una después de la otra sobre una base
-// viva: primero la taxonomía (20261024100000) y después la condición del
-// artículo (REQUIRED_SCHEMA). Así cada una se aplica como llegaría a producción.
+// ───────────────── migraciones aditivas sobre datos existentes ─────────────────
+// Las tres migraciones nuevas se prueban una después de la otra sobre una base
+// viva: primero la taxonomía (20261024100000), después la condición del
+// artículo (20261026120000) y por último la moderación de productos
+// (REQUIRED_SCHEMA). Así cada una se aplica como llegaría a producción.
 test('las migraciones nuevas corren sobre una base viva sin alterar sus datos', async () => {
   const TAXONOMY_SCHEMA = 20261024100000;
+  const CONDITION_SCHEMA = 20261025120000;
+  const CONDITION_GRANTS_SCHEMA = 20261026120000;
   const step = new PGlite();
   try {
     assert.ok((await migrationFiles()).some(file => versionOf(file) === REQUIRED_SCHEMA), 'la migración nueva está en el repo');
-    assert.ok(REQUIRED_SCHEMA > TAXONOMY_SCHEMA, 'la migración de condición va después de la taxonomía');
+    assert.ok(REQUIRED_SCHEMA > CONDITION_GRANTS_SCHEMA, 'la moderación va después de los permisos de condición');
+    assert.ok(CONDITION_GRANTS_SCHEMA > CONDITION_SCHEMA, 'los permisos van después de la columna condición');
+    assert.ok(CONDITION_SCHEMA > TAXONOMY_SCHEMA, 'la condición va después de la taxonomía');
     const applied = await applyMigrations(step, { until: TAXONOMY_SCHEMA });
     assert.ok(applied.length >= 12, 'se reconstruyó el esquema anterior');
     await step.query("insert into auth.users (id, email) values ($1, 'previo@cauce.test')", [ids.vendorA]);
@@ -208,7 +213,7 @@ test('las migraciones nuevas corren sobre una base viva sin alterar sus datos', 
 
     // La migración de condición es aditiva: el producto previo queda 'new',
     // conserva su stock y el estado del comercio no cambia.
-    const conditionFile = (await migrationFiles()).find(name => versionOf(name) === REQUIRED_SCHEMA);
+    const conditionFile = (await migrationFiles()).find(name => versionOf(name) === CONDITION_SCHEMA);
     await applyMigration(step, conditionFile);
     const product = rows(await step.query(`select p.name, p.condition, p.stock, p.price_ars, b.status
       from public.products p join public.businesses b on b.id = p.business_id
@@ -220,6 +225,34 @@ test('las migraciones nuevas corren sobre una base viva sin alterar sus datos', 
     assert.equal(product.status, 'pending_review');
     // La base rechaza una condición fuera del contrato.
     await assert.rejects(step.query("update public.products set condition = 'roto' where name = 'Clavo aluminio'"));
+
+    // Los permisos por columna completan el alta desde el cliente: sin ellos
+    // PostgREST rechaza el insert aunque RLS permita la fila.
+    const grantsFile = (await migrationFiles()).find(name => versionOf(name) === CONDITION_GRANTS_SCHEMA);
+    await applyMigration(step, grantsFile);
+    const canCondition = rows(await step.query(`select
+      has_column_privilege('authenticated', 'public.products', 'condition', 'INSERT') as can_insert,
+      has_column_privilege('authenticated', 'public.products', 'condition', 'UPDATE') as can_update`))[0];
+    assert.deepEqual({ ...canCondition }, { can_insert: true, can_update: true });
+
+    // La moderación es aditiva con lo ya publicado: el producto existente queda
+    // aprobado y conserva sus datos; las altas nuevas nacen pendientes.
+    const moderationFile = (await migrationFiles()).find(name => versionOf(name) === REQUIRED_SCHEMA);
+    await applyMigration(step, moderationFile);
+    const moderated = rows(await step.query(`select p.name, p.condition, p.status, p.review_note, p.reviewed_at,
+      p.stock, p.price_ars, b.status as business_status
+      from public.products p join public.businesses b on b.id = p.business_id
+      where b.slug = 'comercio-previo'`))[0];
+    assert.equal(moderated.status, 'approved');
+    assert.equal(moderated.review_note, '');
+    assert.equal(moderated.reviewed_at, null);
+    assert.equal(moderated.condition, 'new');
+    assert.equal(moderated.stock, 25);
+    assert.equal(moderated.business_status, 'pending_review');
+    const fresh = rows(await step.query(`insert into public.products (business_id, name, price_ars)
+      values ((select id from public.businesses where slug = 'comercio-previo'), 'Tornillo nuevo', 150)
+      returning status`))[0];
+    assert.equal(fresh.status, 'pending');
     // El contrato nuevo es exigible después de migrada la base.
     assert.equal(Number(rows(await step.query("select (private.app_status() ->> 'schema') as s"))[0].s), REQUIRED_SCHEMA);
   } finally {

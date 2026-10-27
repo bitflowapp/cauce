@@ -21,6 +21,27 @@ export const BUSINESS_STATUS_HINTS = Object.freeze({
   paused: 'El comercio no aparece en el listado público. Podés reactivarlo cuando quieras.',
 });
 
+// Moderación del catálogo. Un producto nuevo nace pendiente; sólo
+// administración lo aprueba, lo rechaza o lo suspende. El comercio puede
+// corregirlo y reenviarlo, nunca aprobarlo.
+export const PRODUCT_STATUSES = Object.freeze(['pending', 'approved', 'rejected', 'suspended']);
+
+export const PRODUCT_STATUS_LABELS = Object.freeze({
+  pending: 'Pendiente de revisión',
+  approved: 'Publicado',
+  rejected: 'Rechazado',
+  suspended: 'Suspendido',
+});
+
+export const PRODUCT_STATUS_HINTS = Object.freeze({
+  pending: 'Administración está revisando este producto. Todavía no aparece en la vidriera.',
+  approved: 'El producto está visible en la vidriera y se puede pedir.',
+  rejected: 'Revisá la observación, corregí el producto y reenvialo a revisión.',
+  suspended: 'El producto no se muestra ni se puede pedir. Corregilo y reenvialo si corresponde.',
+});
+
+export const canResubmitProduct = status => status === 'rejected' || status === 'suspended';
+
 // Cada transición declara quién puede ejecutarla. La revisión es siempre administrativa.
 const TRANSITIONS = Object.freeze({
   draft: Object.freeze({ pending_review: 'merchant' }),

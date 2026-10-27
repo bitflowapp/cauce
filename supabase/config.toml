@@ -441,9 +441,12 @@ enabled = true
 # autenticidad la dan la firma x-signature y el `state` de un solo uso.
 [functions.payments-webhook]
 verify_jwt = false
+entrypoint = "./functions/payments-webhook/index.js"
 
 [functions.payments-oauth]
 verify_jwt = false
+entrypoint = "./functions/payments-oauth/index.js"
 
 [functions.payments-checkout]
 verify_jwt = true
+entrypoint = "./functions/payments-checkout/index.js"

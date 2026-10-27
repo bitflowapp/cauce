@@ -77,10 +77,12 @@ test('el titular completa datos y catálogo y la revisión administrativa aprueb
   pan = await repo.sellerA.command('product.create', { businessId: A.id,
     product: { name: 'Pan de campo', price: 4500, trackStock: true, stock: 10 } });
   assert.equal(pan.stock, 10);
+  assert.equal(pan.status, 'pending', 'el alta nace pendiente de revisión');
   await repo.sellerA.command('business.submit', { businessId: A.id });
   await repo.admin.command('admin.reviewBusiness', { businessId: A.id, decision: 'approve', note: 'Aprobado en prueba' });
   const approved = (await sql`select status from public.businesses where id = ${A.id}`)[0];
   assert.equal(approved.status, 'active');
+  await repo.admin.command('admin.reviewProduct', { productId: pan.id, decision: 'approve', note: 'Aprobado en prueba' });
   await repo.sellerA.command('business.setOpen', { businessId: A.id, open: true });
   assert.equal((await sql`select "open" from public.businesses where id = ${A.id}`)[0].open, true);
 });

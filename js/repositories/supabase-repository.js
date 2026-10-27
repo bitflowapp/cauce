@@ -329,6 +329,15 @@ export function createSupabaseRepository({ client, redirectTo, storage, onError 
     };
   };
   const productColumns = '*,product_categories(name,position),product_variants(id,name,price_delta_ars,position,active)';
+  const adminProductColumns = 'id,business_id,name,price_ars,status,condition,archived,review_note,reviewed_at,'
+    + 'product_categories(name),businesses(name)';
+  const mapQueueProduct = row => ({
+    id: row.id, businessId: row.business_id, businessName: row.businesses?.name || '',
+    name: row.name, price: Number(row.price_ars), status: row.status,
+    condition: row.condition === 'used' ? 'used' : 'new', archived: row.archived === true,
+    category: row.product_categories?.name || 'Otros',
+    reviewNote: row.review_note || '', reviewedAt: row.reviewed_at || '',
+  });
   const mapProduct = row => ({
     id: row.id, businessId: row.business_id, localityId: LOCALITY,
     name: row.name, description: row.description || '',
@@ -338,6 +347,8 @@ export function createSupabaseRepository({ client, redirectTo, storage, onError 
     price: Number(row.price_ars), stock: row.stock, trackStock: row.track_stock === true,
     available: row.available === true,
     condition: row.condition === 'used' ? 'used' : 'new',
+    status: ['pending', 'approved', 'rejected', 'suspended'].includes(row.status) ? row.status : 'approved',
+    reviewNote: row.review_note || '', reviewedAt: row.reviewed_at || '',
     archived: row.archived === true, imagePath: row.image_path || '', image: publicUrl(row.image_path),
     dishType: row.dish_type || '',
     variants: (row.product_variants || []).filter(variant => variant.active)
@@ -460,7 +471,10 @@ export function createSupabaseRepository({ client, redirectTo, storage, onError 
   async function businessAndProducts(businessId) {
     const [business, products] = await Promise.all([
       read(client.from('businesses').select(publicBusinessColumns).eq('id', businessId).maybeSingle()),
-      read(client.from('products').select(productColumns).eq('business_id', businessId).order('position').order('name')),
+      // La vidriera y el carrito sólo ven lo aprobado. El panel del comercio
+      // usa la consulta `products`, que conserva todas las filas propias.
+      read(client.from('products').select(productColumns).eq('business_id', businessId)
+        .eq('status', 'approved').order('position').order('name')),
     ]);
     requireValue(business, 'BUSINESS_NOT_FOUND', 'Este comercio no está disponible por el momento.');
     return { business: mapBusiness(business), products: (products || []).map(mapProduct) };
@@ -513,8 +527,10 @@ export function createSupabaseRepository({ client, redirectTo, storage, onError 
     async searchCatalog(payload) {
       const term = likeTerm(payload?.query);
       if (term.length < 2) return {};
+      // Un vendedor con sesión también busca en la vidriera: nunca deben
+      // aparecer sus propios productos pendientes como si estuvieran publicados.
       const rows = await read(client.from('products').select('business_id,name')
-        .eq('archived', false).ilike('name', `%${term}%`).limit(300));
+        .eq('status', 'approved').eq('archived', false).ilike('name', `%${term}%`).limit(300));
       const byBusiness = {};
       for (const row of rows) byBusiness[row.business_id] = `${byBusiness[row.business_id] || ''} ${row.name}`;
       return byBusiness;
@@ -525,8 +541,11 @@ export function createSupabaseRepository({ client, redirectTo, storage, onError 
       return mapBusiness(row);
     },
     async products(payload) {
-      const rows = await read(client.from('products').select(productColumns)
-        .eq('business_id', payload?.businessId).order('position').order('name'));
+      let query = client.from('products').select(productColumns).eq('business_id', payload?.businessId);
+      // La lectura por defecto es la de vidriera. El panel del comercio pide
+      // `includeAll` y recibe también pendientes, rechazados y suspendidos.
+      if (payload?.includeAll !== true) query = query.eq('status', 'approved');
+      const rows = await read(query.order('position').order('name'));
       return rows.map(mapProduct);
     },
     async productCategories(payload) {
@@ -710,15 +729,20 @@ export function createSupabaseRepository({ client, redirectTo, storage, onError 
     async adminQueue() {
       const access = await read(client.rpc('my_access'));
       requireValue(access, 'ROLE_REQUIRED', 'Sección exclusiva de administración.');
-      const [businesses, drivers] = await Promise.all([
+      const [businesses, drivers, products] = await Promise.all([
         read(client.from('businesses').select(memberBusinessColumns).order('created_at')),
         read(client.rpc('admin_drivers')),
+        read(client.from('products').select(adminProductColumns).order('created_at', { ascending: false }).limit(500)),
       ]);
       const allBusinesses = businesses.map(mapBusiness);
       const allDrivers = (drivers || []).map(mapDriver);
+      const allProducts = (products || []).map(mapQueueProduct);
       return {
         businesses: allBusinesses.filter(item => item.status === 'pending_review'),
         drivers: allDrivers.filter(item => item.status === 'pending_review'),
+        products: allProducts.filter(item => item.status === 'pending'),
+        productHistory: allProducts.filter(item => ['rejected', 'suspended'].includes(item.status)),
+        approvedProducts: allProducts.filter(item => item.status === 'approved' && !item.archived),
         allBusinesses, allDrivers,
       };
     },
@@ -751,7 +775,8 @@ export function createSupabaseRepository({ client, redirectTo, storage, onError 
     async snapshotCounts() {
       const [businesses, products] = await Promise.all([
         client.from('businesses').select('id', { count: 'exact', head: true }).eq('status', 'active'),
-        client.from('products').select('id', { count: 'exact', head: true }).eq('archived', false),
+        client.from('products').select('id', { count: 'exact', head: true })
+          .eq('status', 'approved').eq('archived', false),
       ]);
       fail(businesses.error); fail(products.error);
       return { businesses: businesses.count || 0, activeBusinesses: businesses.count || 0,
@@ -908,6 +933,17 @@ export function createSupabaseRepository({ client, redirectTo, storage, onError 
         decision: payload?.decision === 'approve' ? 'active' : 'returned', note: text(payload?.note, 400) }));
       return true;
     },
+    // La decisión administrativa sobre un producto es explícita: aprobar,
+    // rechazar (devuelve al comercio) o suspender lo ya publicado.
+    async 'admin.reviewProduct'(payload) {
+      const decision = { approve: 'approved', reject: 'rejected', suspend: 'suspended' }[payload?.decision];
+      requireValue(decision, 'INVALID_DECISION', 'Elegí aprobar, rechazar o suspender el producto.');
+      const note = text(payload?.note, 400);
+      requireValue(!['rejected', 'suspended'].includes(decision) || note.length >= 3,
+        'REVIEW_NOTE_REQUIRED', 'Escribí el motivo para rechazar o suspender.');
+      await read(client.rpc('review_product', { product: payload?.productId, decision, note }));
+      return true;
+    },
     async 'productCategory.create'(payload) {
       const name = text(payload?.name, 40);
       requireValue(name.length >= 2, 'INVALID_CATEGORY', 'Elegí o escribí una categoría.');
@@ -1000,6 +1036,12 @@ export function createSupabaseRepository({ client, redirectTo, storage, onError 
         }
       }
       return mapProduct(await read(client.from('products').select(productColumns).eq('id', payload?.productId).single()));
+    },
+    // Reenvío del comercio tras una devolución o suspensión. Nunca aprueba:
+    // deja el producto en `pending` para la revisión administrativa.
+    async 'product.submit'(payload) {
+      return read(client.rpc('submit_product_for_review', { product: payload?.productId,
+        note: text(payload?.note, 400) }));
     },
     async 'product.setImage'(payload) {
       const productId = payload?.productId;

@@ -127,11 +127,15 @@ let categoryA, productA, productB;
 
 test('owner builds a catalog; the neighbouring business cannot read or touch it', async () => {
   categoryA = rows(await as('merchantA', "insert into public.product_categories(business_id,name) values ($1,'Panificados') returning id", [businessA]))[0].id;
+  // El alta normal nace pendiente: los productos que deben venderse se
+  // aprueban por la vía administrativa, igual que en la operación real.
   productA = rows(await as('merchantA',
     "insert into public.products(business_id,category_id,name,price_ars,stock,track_stock) values ($1,$2,'Pan casero',1800,10,true) returning id",
     [businessA, categoryA]))[0].id;
+  await as('admin', "select public.review_product($1,'approved','Fixture')", [productA]);
   productB = rows(await as('merchantB',
     "insert into public.products(business_id,name,price_ars,stock) values ($1,'Producto B',2500,5) returning id", [businessB]))[0].id;
+  await as('admin', "select public.review_product($1,'approved','Fixture')", [productB]);
   // La localidad la deriva el servidor desde el comercio, no el cliente.
   const scope = rows(await as('merchantA', 'select locality_id from public.products where id=$1', [productA]))[0];
   assert.equal(scope.locality_id, rows(await db.query('select locality_id from public.businesses where id=$1', [businessA]))[0].locality_id);
@@ -230,6 +234,7 @@ test('the public catalog shows a published business and hides drafts and archive
   await denied(as('merchantA', "insert into public.products(business_id,name,price_ars,archived) values ($1,'Producto de baja',900,true)", [businessA]));
   const hidden = rows(await as('merchantA',
     "insert into public.products(business_id,name,price_ars) values ($1,'Producto de baja',900) returning id", [businessA]))[0].id;
+  await as('admin', "select public.review_product($1,'approved','Fixture')", [hidden]);
   await as('merchantA', 'update public.products set archived=true where id=$1', [hidden]);
   assert.deepEqual(rows(await as('anon', 'select id from public.products order by name')).map(row => row.id), [productA]);
   assert.deepEqual(rows(await as('customerA', 'select id from public.products')).map(row => row.id), [productA]);
@@ -285,6 +290,24 @@ test('the server prices the order, the client only chooses products', async () =
   assert.equal(items.length, 1);
   assert.equal(items[0].product_name, 'Pan casero');
   assert.equal(Number(items[0].unit_price_ars), 2000);
+});
+
+test('a product pending review cannot enter an order, even outside checkout', async () => {
+  const pendingProduct = rows(await as('merchantA',
+    "insert into public.products(business_id,name,price_ars) values ($1,'Producto pendiente',700) returning id",
+    [businessA]))[0].id;
+  const scope = rows(await db.query('select business_id, customer_id from public.orders where id=$1', [orderA]))[0];
+  // Inserción directa como propietario de la base: la defensa no depende de
+  // que la función de checkout recuerde mirar el estado.
+  await assert.rejects(db.query(`insert into public.order_items
+    (order_id, business_id, customer_id, product_id, product_name, unit_price_ars, quantity, total_ars)
+    values ($1,$2,$3,$4,'Producto pendiente',700,1,700)`,
+  [orderA, scope.business_id, scope.customer_id, pendingProduct]), error => error.code === '23514');
+  // El estado y el historial no se escriben desde el cliente.
+  await denied(as('merchantA', "update public.products set status='suspended' where id=$1", [pendingProduct]));
+  await denied(as('merchantA', `insert into public.product_review_events
+    (product_id,business_id,from_status,to_status,actor_role) values ($1,$2,'pending','approved','merchant')`,
+  [pendingProduct, businessA]));
 });
 
 test('the same attempt never creates a second order and a changed attempt is refused', async () => {

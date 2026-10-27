@@ -32,6 +32,7 @@ async function publishedShop(owner, label) {
     minimum_order_ars=1000, category_id=(select id from public.business_categories where slug='gastronomia') where id=$1`, [id]);
   await as(owner, "insert into public.business_contacts(business_id,owner_name,phone) values ($1,'Titular','2942555001')", [id]);
   const product = (await one(owner, "insert into public.products(business_id,name,price_ars) values ($1,'Empanada',1500) returning id", [id])).id;
+  await as('admin', "select public.review_product($1,'approved','Fixture')", [product]);
   await as(owner, 'select public.submit_business_for_review($1)', [id]);
   await as('admin', "select public.review_business($1,'active','Aprobado')", [id]);
   await as(owner, 'select public.set_business_presence($1,null,true)', [id]);

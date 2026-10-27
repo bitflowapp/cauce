@@ -5,7 +5,7 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   account, makeAdmin, closeAll, run,
-  startPreview, stopPreview, browsersToRun, launch, person, open, ready, signIn, expectToast, shot, layoutIssues,
+  startPreview, stopPreview, browsersToRun, launch, person, open, go, ready, signIn, expectToast, shot, layoutIssues,
 } from './harness.mjs';
 
 const people = {};
@@ -67,12 +67,16 @@ for (const engine of browsersToRun) {
       await shop.page.getByRole('button', { name: 'Guardar horarios' }).click();
       await expectToast(shop.page, 'Horarios guardados.');
 
-      // 4. Catálogo: un producto sin control de stock.
+      // 4. Catálogo: un producto sin control de stock. Nace pendiente: la
+      // aprobación del comercio no publica su catálogo.
       await tab(shop.page, 'catalogo');
       await shop.page.fill('#prod-name', 'Yerba 1 kg');
       await shop.page.fill('#prod-price', '4200');
       await shop.page.getByRole('button', { name: 'Agregar al catálogo' }).click();
-      await expectToast(shop.page, 'Producto agregado al catálogo.');
+      await expectToast(shop.page, 'Producto agregado. Queda pendiente de revisión antes de publicarse.');
+      const shopProduct = shop.page.locator('article[aria-label="Producto Yerba 1 kg"]');
+      await shopProduct.waitFor();
+      assert.ok(await shopProduct.getByText('Pendiente de revisión').isVisible(), 'el comercio ve que falta revisión');
 
       // 5. Solicitud de publicación.
       await tab(shop.page, 'configuracion');
@@ -83,13 +87,16 @@ for (const engine of browsersToRun) {
       await open(visitor.page, '#comercios');
       assert.equal(await visitor.page.locator('.catalog-merchant-card', { hasText: name }).count(), 0);
 
-      // 6. Administración aprueba.
+      // 6. Administración aprueba el comercio. El catálogo sigue pendiente:
+      // publicar el comercio no publica sus productos.
       await signIn(office.page, people.admin);
       await open(office.page, '#admin');
-      const card = office.page.locator('article.review-card', { hasText: name });
-      await card.waitFor();
-      assert.ok((await card.textContent()).includes('Titular Real'));
-      await card.getByRole('button', { name: 'Aprobar' }).click();
+      const businessCard = office.page.locator('article.review-card')
+        .filter({ has: office.page.locator('form[data-form="review"]') })
+        .filter({ hasText: name });
+      await businessCard.waitFor();
+      assert.ok((await businessCard.textContent()).includes('Titular Real'));
+      await businessCard.getByRole('button', { name: 'Aprobar' }).click();
       await expectToast(office.page, 'Alta aprobada.');
       // En escritorio, mientras el aviso está visible, un clic sobre él llega a
       // lo que hay debajo (antes se perdía durante 5 segundos).
@@ -105,14 +112,41 @@ for (const engine of browsersToRun) {
       await ready(shop.page);
       await shop.page.getByRole('button', { name: 'Cerrar atención' }).waitFor();
 
-      // 8. El público lo encuentra abierto, con contacto y horarios, y puede comprar.
+      // 8. El público encuentra el comercio abierto buscándolo, pero todavía no
+      // el producto: sin aprobación no aparece en la vidriera ni se puede pedir.
       // (La visita ya estaba en el listado: recarga como lo haría una persona.)
       await visitor.page.reload();
-      await ready(visitor.page);
-      const listed = visitor.page.locator('.catalog-merchant-card', { hasText: name });
-      await listed.waitFor();
-      assert.equal((await listed.locator('.availability').textContent()).trim(), 'Abierto');
+      await ready(visitor.page, 60000);
+      await visitor.page.fill('#search-input', name);
+      await visitor.page.locator('form[data-form="search"] button[type="submit"]').click();
+      await ready(visitor.page, 60000);
+      const listed = visitor.page.locator('.mifav-store-card', { hasText: name });
+      await listed.waitFor({ timeout: 60000 });
       await listed.click();
+      await visitor.page.waitForFunction(id => location.hash === `#comercio/${id}`, businessId);
+      await ready(visitor.page);
+      assert.equal(await visitor.page.locator('article.product-card', { hasText: 'Yerba 1 kg' }).count(), 0,
+        'un producto pendiente no se publica junto con el comercio');
+      await shot(visitor.page, `${engine}-onboarding-producto-pendiente`);
+
+      // 9. Administración revisa y aprueba el producto.
+      await go(office.page, '#admin');
+      const productCard = office.page.locator('article.review-card')
+        .filter({ has: office.page.locator('form[data-form="review-product"]') })
+        .filter({ hasText: name });
+      await productCard.waitFor();
+      assert.match(await productCard.textContent(), /Yerba 1 kg/);
+      await productCard.getByRole('button', { name: 'Aprobar y publicar' }).click();
+      await expectToast(office.page, 'Producto aprobado y publicado.');
+
+      // 10. Ahora sí: el público vuelve a explorar, busca y compra.
+      await open(visitor.page, '#comercios', 60000);
+      await visitor.page.fill('#search-input', name);
+      await visitor.page.locator('form[data-form="search"] button[type="submit"]').click();
+      await ready(visitor.page, 60000);
+      const reopened = visitor.page.locator('.mifav-store-card', { hasText: name });
+      await reopened.waitFor({ timeout: 60000 });
+      await reopened.click();
       await visitor.page.waitForFunction(id => location.hash === `#comercio/${id}`, businessId);
       await ready(visitor.page);
       // Contacto directo con el comercio desde su página.

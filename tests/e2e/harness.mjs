@@ -4,7 +4,7 @@
 import { mkdir, writeFile, stat } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { chromium, webkit } from 'playwright';
+import { chromium, firefox, webkit } from 'playwright';
 import { createStaticServer } from '../../scripts/server.mjs';
 
 export * from '../integration/harness.mjs';
@@ -12,8 +12,8 @@ export * from '../integration/harness.mjs';
 const root = fileURLToPath(new URL('../../', import.meta.url));
 export const BASE = 'http://127.0.0.1:4174';
 export const EVIDENCE = resolve(root, 'evidence/e2e-produccion');
-const ENGINES = { chromium, webkit };
-export const browsersToRun = (process.env.CAUCE_E2E_BROWSERS || 'chromium,webkit')
+const ENGINES = { chromium, firefox, webkit };
+export const browsersToRun = (process.env.CAUCE_E2E_BROWSERS || 'chromium,webkit,firefox')
   .split(',').map(name => name.trim()).filter(name => ENGINES[name]);
 
 let server = null;
@@ -68,15 +68,15 @@ export async function ready(page, timeout = 20000) {
     null, { timeout });
 }
 
-export async function open(page, hash) {
+export async function open(page, hash, timeout = 20000) {
   await page.goto(`${BASE}/index.html${hash}`);
-  await ready(page);
+  await ready(page, timeout);
 }
 
-export async function go(page, hash) {
+export async function go(page, hash, timeout = 20000) {
   await page.evaluate(target => { location.hash = target; }, hash);
   await page.waitForFunction(target => location.hash === target, hash);
-  await ready(page);
+  await ready(page, timeout);
 }
 
 export async function signIn(page, user) {
